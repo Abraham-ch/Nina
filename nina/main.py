@@ -12,12 +12,14 @@ from typing import Literal
 import httpx
 import ssl
 import truststore
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel,Field
 from .config import ROOT, DATA, RAW, FIRMS, SOURCES
+from .auth import Login, Register, attach, clear_session, detach, require
+from .auth import login as login_user, register as register_user
 from .store import initialize,database,rows,boundaries,status,now,code_revision,atomic_read
 from .analytics import Selection,analyze,get_analysis,points_for_analysis,selected_rows,iter_selected_rows,month_dates
 from .ingest import ingest_file
@@ -73,6 +75,23 @@ def submit(kind,function,with_progress=False):
             set_job(identifier,'failed',1,message)
     POOL.submit(work)
     return {'id':identifier,'status':'queued'}
+
+@app.post('/api/auth/register')
+def register(payload:Register,response:Response):
+    """T1: registro. El primer usuario queda siempre como `admin`."""
+    user,token=register_user(payload);attach(response,token);return user
+
+@app.post('/api/auth/login')
+def login(payload:Login,response:Response):
+    user,token=login_user(payload);attach(response,token);return user
+
+@app.post('/api/auth/logout')
+def logout(request:Request,response:Response):
+    clear_session(request);detach(response);return {'status':'ok'}
+
+@app.get('/api/auth/me')
+def me(user:dict=Depends(require())):
+    return user
 
 @app.get('/api/health')
 def health(): return {'status':'ok','version':'0.3.0','scope':'world','firms_key_configured':bool(os.getenv('FIRMS_MAP_KEY')),'earthdata_configured':bool(os.getenv('EARTHDATA_USERNAME')),'llm_configured':bool(os.getenv('NINA_LLM_BASE_URL') and os.getenv('NINA_LLM_API_KEY') and os.getenv('NINA_LLM_MODEL'))}
@@ -147,7 +166,7 @@ def csv_output(data):
 
 @app.get('/api/analyses/{identifier}/exports/{kind}')
 @atomic_read
-def export(identifier:str,kind:Literal['series','detections','manifest','report']):
+def export(identifier:str,kind:Literal['series','detections','manifest','report'],user:dict=Depends(require('analista','admin'))):
     result=existing(identifier);s=Selection(**result['selection'])
     if kind=='series':
         columns=list(result['months'][0]);payload=csv_output([columns]+[[r[k] for k in columns] for r in result['months']]);mime='text/csv';suffix='csv'
@@ -187,7 +206,7 @@ def models():
     return json.loads(path.read_text()) if path.exists() else {'models':{},'scientific_harmonization_status':'pending_L2_opportunities'}
 
 @app.post('/api/models/train')
-def train_model(): return submit('exploratory_model',train)
+def train_model(user:dict=Depends(require('admin'))): return submit('exploratory_model',train)
 
 @app.get('/api/jobs')
 def jobs():
@@ -200,7 +219,7 @@ def job(identifier:str):
     return found[0]
 
 @app.post('/api/import')
-async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','viirs-jpss1','viirs-jpss2']=Form(...),coverage_start:date|None=Form(None),coverage_end:date|None=Form(None),spatial_scope:Literal['PER','world','custom']=Form('PER'),spatial_geometry:str|None=Form(None)):
+async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','viirs-jpss1','viirs-jpss2']=Form(...),coverage_start:date|None=Form(None),coverage_end:date|None=Form(None),spatial_scope:Literal['PER','world','custom']=Form('PER'),spatial_geometry:str|None=Form(None),user:dict=Depends(require('admin'))):
     if coverage_start and coverage_end and coverage_start>coverage_end: raise HTTPException(422,'Rango de cobertura inválido')
     try:
         geometry=json.loads(spatial_geometry) if spatial_geometry else None
@@ -224,7 +243,7 @@ class Sync(BaseModel):
     days:int=Field(default=1,ge=1,le=5)
 
 @app.post('/api/sync')
-def sync(body:Sync):
+def sync(body:Sync,user:dict=Depends(require('admin'))):
     key=os.getenv('FIRMS_MAP_KEY')
     if not key: raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor para activar datos recientes.')
     return submit('sync_nrt',lambda:acquire([body.source],body.start,body.days,'PER'))
@@ -237,7 +256,7 @@ class Acquisition(BaseModel):
     geometry:dict|None=None
 
 @app.post('/api/acquisitions')
-def acquisition(body:Acquisition):
+def acquisition(body:Acquisition,user:dict=Depends(require('admin'))):
     if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
     try: Selection(scope=body.scope,geometry=body.geometry)
     except ValueError as error: raise HTTPException(422,'Geometría o ámbito inválidos')
@@ -256,7 +275,7 @@ class ArchiveMonth(BaseModel):
     geometry:dict|None=None
 
 @app.post('/api/acquisitions/month')
-def archive_month(body:ArchiveMonth):
+def archive_month(body:ArchiveMonth,user:dict=Depends(require('admin'))):
     if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
     try: Selection(scope=body.scope,geometry=body.geometry)
     except ValueError: raise HTTPException(422,'Geometría o ámbito inválidos')

@@ -210,7 +210,7 @@ def analyze(s):
             *(['Modelo experimental ajustado a conteos mensuales, sin corrección de exposición. No es una armonización científica validada.'] if s.metric=='experimental' else [])],
         'references':['https://firms.modaps.eosdis.nasa.gov/country/' if s.scope=='PER' else 'https://firms.modaps.eosdis.nasa.gov/api/area/','https://www.earthdata.nasa.gov/data/tools/firms/faq']}
     with database() as c:
-        c.execute('INSERT OR IGNORE INTO analyses VALUES (?,?,?,?)',[analysis_id,json.dumps(s.model_dump()),json.dumps(result),now()])
+        c.execute('INSERT OR IGNORE INTO analyses(id,selection,result,created_at) VALUES (?,?,?,?)',[analysis_id,json.dumps(s.model_dump()),json.dumps(result),now()])
     return result
 
 def get_analysis(identifier):

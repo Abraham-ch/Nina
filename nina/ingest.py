@@ -116,7 +116,9 @@ def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=No
             if processing=='SP':
                 c.execute("UPDATE observations SET version=i.version,processing=i.processing,batch_id=i.batch_id,frp=i.frp,confidence=i.confidence,fire_type=i.fire_type,daynight=i.daynight,scan=i.scan,track=i.track,department=i.department FROM incoming i WHERE observations.id=i.id AND observations.processing<>'SP'")
             loaded=c.execute('SELECT count(*) FROM observations').fetchone()[0]-before
-            c.execute('INSERT INTO batches VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[identifier,path.name,source,digest,path.stat().st_size,loaded,rejected,len(values)-loaded,url,now(),coverage_start,coverage_end,coverage_basis,processing,spatial_scope,json.dumps(spatial_geometry) if spatial_geometry else None])
+            c.execute('''INSERT INTO batches(id,filename,source,sha256,bytes,rows_loaded,rejected,duplicates,url,imported_at,
+                coverage_start,coverage_end,coverage_basis,processing,spatial_scope,spatial_geometry)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',[identifier,path.name,source,digest,path.stat().st_size,loaded,rejected,len(values)-loaded,url,now(),coverage_start,coverage_end,coverage_basis,processing,spatial_scope,json.dumps(spatial_geometry) if spatial_geometry else None])
             c.execute('COMMIT')
         except Exception:
             c.execute('ROLLBACK');raise
