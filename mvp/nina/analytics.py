@@ -43,6 +43,14 @@ class Selection(BaseModel):
 def filters(s, start=None, end=None, source=None, platform=None):
     clauses=['source=?'];args=[source or s.source]
     if s.scope=='PER': clauses.append("(department IS NOT NULL OR batch_id IN (SELECT id FROM batches WHERE spatial_scope='PER'))")
+    if s.scope=='world':
+        # Si existen archivos mundiales, no completar sus meses anteriores o sus
+        # huecos con el archivo regional peruano. Las filas globales sin fechas
+        # declaradas siguen siendo observaciones válidas del lote importado.
+        clauses.append("""(NOT EXISTS(SELECT 1 FROM batches wb WHERE wb.spatial_scope='world' AND wb.source=observations.source)
+            OR batch_id IN (SELECT id FROM batches wb WHERE wb.spatial_scope='world' AND wb.source=observations.source)
+            OR EXISTS(SELECT 1 FROM batches wb WHERE wb.spatial_scope='world' AND wb.source=observations.source
+                AND observations.acquired::DATE BETWEEN wb.coverage_start AND wb.coverage_end))""")
     plat=platform if platform is not None else s.platform
     if (source or s.source)=='modis' and plat!='all': clauses.append('platform=?');args.append(plat)
     if s.department!='all': clauses.append('department=?');args.append(s.department)

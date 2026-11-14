@@ -99,3 +99,16 @@ def test_observed_dates_do_not_claim_complete_month_or_empty_area_zero(isolated_
     empty=analytics.Selection(**{**selection().model_dump(),'scope':'custom',
         'geometry':{'type':'Polygon','coordinates':[[[30,30],[31,30],[31,31],[30,31],[30,30]]]}})
     assert analytics.analyze(empty)['selected']['value'] is None
+
+
+def test_global_calendar_does_not_fill_earlier_months_with_peru_only(isolated_database):
+    add_rows([(-70,-10)],month=1)
+    add_rows([(140,-30)],month=9)
+    with store.database() as connection:
+        connection.execute('''INSERT INTO batches
+            (id,source,coverage_start,coverage_end,coverage_basis,spatial_scope)
+            VALUES ('world-later','modis','2026-09-01','2026-09-30','observed_dates_only','world')''')
+    result=analytics.analyze(selection())
+    assert result['selected']['value']==1
+    january=next(month for month in result['months'] if month['month']==1)
+    assert january['value'] is None and january['status']=='unavailable'

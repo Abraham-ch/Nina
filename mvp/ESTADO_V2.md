@@ -1,5 +1,7 @@
 # NINA 0.2 · Atlas mundial y laboratorio visual
 
+Estado histórico de la entrega 0.2. La ingesta mundial posterior está documentada en [ESTADO_MUNDIAL.md](ESTADO_MUNDIAL.md).
+
 [Arranque y uso](README.md). Esta entrega implementa la dirección visual acordada y amplía la adquisición al mundo. La versión anterior se conserva documentada en [ESTADO_V1.md](ESTADO_V1.md).
 
 ## Disponible

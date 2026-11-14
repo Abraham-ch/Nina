@@ -1,5 +1,7 @@
 # Repositorio local en nasa_app
 
+El traslado descrito aquí ya se completó. La posterior ingesta mundial está documentada en [el estado actual del MVP](../mvp/ESTADO_MUNDIAL.md).
+
 La raíz de trabajo es `C:\Users\david\vscode_projects\nasa_app`. Contiene `.git`, está conectada a `https://github.com/Abraham-ch/Nina.git` y utiliza la rama local `mvp`, con seguimiento de `origin/mvp`.
 
 ## Organización

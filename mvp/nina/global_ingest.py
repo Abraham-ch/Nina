@@ -148,17 +148,23 @@ def import_global_file(path, year_start=2025, year_end=2026, progress=print):
                 assign_departments(c)
                 if processing == 'SP':
                     # A full-world standard export takes precedence on observed platform/days.
+                    c.execute('''CREATE OR REPLACE TEMP TABLE bulk_days AS
+                        SELECT DISTINCT source,platform,acquired::DATE AS day FROM bulk_incoming''')
                     removed += c.execute('''SELECT count(*) FROM observations o WHERE processing<>'SP'
-                        AND EXISTS(SELECT 1 FROM bulk_incoming i WHERE i.source=o.source
-                        AND i.platform=o.platform AND i.acquired::DATE=o.acquired::DATE)''').fetchone()[0]
+                        AND EXISTS(SELECT 1 FROM bulk_days i WHERE i.source=o.source
+                        AND i.platform=o.platform AND i.day=o.acquired::DATE)''').fetchone()[0]
                     c.execute('''DELETE FROM observations o WHERE processing<>'SP' AND EXISTS(
-                        SELECT 1 FROM bulk_incoming i WHERE i.source=o.source
-                        AND i.platform=o.platform AND i.acquired::DATE=o.acquired::DATE)''')
+                        SELECT 1 FROM bulk_days i WHERE i.source=o.source
+                        AND i.platform=o.platform AND i.day=o.acquired::DATE)''')
                 else:
                     # Worldwide SP files apply globally; regional SP applies only within its footprint.
                     c.execute('''DELETE FROM bulk_incoming i WHERE EXISTS(SELECT 1 FROM batches b
                         WHERE b.source=i.source AND b.processing='SP' AND i.acquired::DATE BETWEEN b.coverage_start AND b.coverage_end
-                        AND (b.spatial_scope='world' OR (b.spatial_scope='PER' AND i.department IS NOT NULL)
+                        AND ((b.spatial_scope='world' AND (b.coverage_basis<>'observed_dates_only'
+                            OR EXISTS(SELECT 1 FROM observations sp WHERE sp.batch_id=b.id
+                                AND sp.processing='SP' AND sp.platform=i.platform
+                                AND sp.acquired::DATE=i.acquired::DATE)))
+                        OR (b.spatial_scope='PER' AND i.department IS NOT NULL)
                         OR (b.spatial_scope='custom' AND i.longitude BETWEEN
                             try_cast(json_extract(b.spatial_geometry,'$.bbox[0]') AS DOUBLE) AND try_cast(json_extract(b.spatial_geometry,'$.bbox[2]') AS DOUBLE)
                             AND i.latitude BETWEEN try_cast(json_extract(b.spatial_geometry,'$.bbox[1]') AS DOUBLE) AND try_cast(json_extract(b.spatial_geometry,'$.bbox[3]') AS DOUBLE))))''')
@@ -216,7 +222,7 @@ def run(folder, year_start=2025, year_end=2026):
     if not 2000<=year_start<=year_end<=2100: raise ValueError('Rango inválido')
     prepare_bulk_table()
     paths = sorted([*Path(folder).glob('*.json'),*Path(folder).glob('*.csv')],key=lambda p:('archive' not in p.name,p.name))
-    report={'created_at':now(),'range_years':[year_start,year_end],'files':[],'excluded_files':[],
+    report={'created_at':now(),'status':'running','range_years':[year_start,year_end],'files':[],'excluded_files':[],
             'scientific_status':'observed_not_harmonized','synthetic':False}
     destination=DATA/'global-import.json'
     for path in paths:
@@ -228,6 +234,7 @@ def run(folder, year_start=2025, year_end=2026):
     with database() as c:
         report['observations']=c.execute('SELECT count(*) FROM observations').fetchone()[0]
         report['by_source']=rows(c,'SELECT source,platform,count(*) AS observations,min(acquired)::DATE AS first_date,max(acquired)::DATE AS last_date FROM observations GROUP BY source,platform ORDER BY source,platform')
+    report['status']='complete';report['completed_at']=now()
     destination.write_text(json.dumps(report,indent=2,ensure_ascii=False,default=str),encoding='utf-8')
     print(json.dumps({'event':'complete','observations':report['observations']}),flush=True)
     return report

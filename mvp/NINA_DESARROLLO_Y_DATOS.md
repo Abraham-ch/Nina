@@ -1,5 +1,7 @@
 # NINA 0.2: qué se desarrolló y cómo se procesan los datos
 
+Las cifras de este documento corresponden a la entrega 0.2. La versión actual incorpora el archivo mundial: [estado 0.3](ESTADO_MUNDIAL.md) y [período y método de ingesta](ALCANCE_MUNDIAL.md).
+
 Documento del estado implementado, revisado el **14 de noviembre de 2026** contra el código, los informes de verificación y la API local. Describe la aplicación que se abre en `http://127.0.0.1:8000`; el archivo `nina-demo.html` corresponde al prototipo anterior con datos simulados.
 
 ## 1. Respuesta directa: ¿son datos crudos o procesados?

@@ -1,6 +1,6 @@
-# NINA · versión 0.2 · La memoria del fuego
+# NINA · versión 0.3 · La memoria del fuego
 
-Atlas mundial con CesiumJS, interfaz React/TypeScript, API FastAPI y consultas DuckDB. Usa datos NASA FIRMS reales y cartografía NASA GIBS. La selección de territorio y período conecta el visor, el calendario, la comparación y la evidencia. [Estado y verificación de 0.2](ESTADO_V2.md).
+Atlas mundial con CesiumJS, interfaz React/TypeScript, API FastAPI y consultas DuckDB. Usa datos NASA FIRMS reales y cartografía NASA GIBS. La selección de territorio y período conecta el visor, el calendario, la comparación y la evidencia. [Estado mundial de 0.3](ESTADO_MUNDIAL.md), [alcance y procesamiento](ALCANCE_MUNDIAL.md).
 
 ## Abrir la aplicación
 
@@ -12,7 +12,7 @@ La raíz del repositorio es `C:\Users\david\vscode_projects\nasa_app`, y esta ap
 
 Abrir **http://127.0.0.1:8000**. Documentación interactiva de la API: **http://127.0.0.1:8000/docs**. Detener con Ctrl+C. Los lanzadores dentro de `mvp/` también delegan al de la raíz. Usar un solo proceso de servidor para esta versión local, porque la base DuckDB se escribe desde ese proceso.
 
-`.env`, `data/` y `data_abraham/` permanecen en la raíz. El entorno Python del MVP está en `mvp/.venv/`, separado del entorno del monorepo. `NINA_DATA_DIR` se resuelve respecto de la raíz, incluso al iniciar desde `mvp/`; una ruta absoluta conserva su significado. Las cifras de esta documentación corresponden a la entrega 0.2. Los cambios locales para importar el conjunto mundial se conservaron durante el traslado y aún no representan una importación mundial terminada.
+`.env`, `data/` y `data_abraham/` permanecen en la raíz. El entorno Python del MVP está en `mvp/.venv/`, separado del entorno del monorepo. `NINA_DATA_DIR` se resuelve respecto de la raíz, incluso al iniciar desde `mvp/`; una ruta absoluta conserva su significado. La ingesta mundial ya está completada y verificada; las cifras de la entrega anterior se conservan más abajo como referencia.
 
 Las dependencias y la compilación ya se prepararon en este workspace. En otra instalación con Python 3.14 y Node 22:
 
@@ -56,7 +56,13 @@ El descargador usa el índice real publicado por FIRMS, comprueba tamaño y SHA-
 - Importación de CSV FIRMS por ámbito geográfico y reconciliación espacial de productos estándar/provisionales. Las lecturas y exportaciones conservan una revisión consistente durante la ingesta local.
 - Recorrido guiado para presentar el problema, comparar observadores y revisar un experimento real; enlaces compartibles con configuración del análisis.
 
-## Datos incorporados en esta entrega
+## Archivo mundial actual
+
+La base activa tiene **59.440.077 observaciones**, después de incorporar nueve archivos mundiales del equipo. El período elegido es **2025–2026**: los nuevos originales contienen datos desde el 5 de noviembre de 2025 hasta el 13 de noviembre de 2026 según producto, y se conserva la instantánea mundial del 14 de noviembre previamente descargada. [Cifras por fuente y consultas verificadas](ESTADO_MUNDIAL.md).
+
+El procesamiento no se limita a Perú. El mapa, el calendario, la comparación y las exportaciones consultan esta base mundial. El histórico peruano anterior sigue disponible como conjunto regional. Los originales, la base y Parquet permanecen fuera de Git.
+
+## Datos incorporados en la entrega anterior 0.2
 
 La versión 0.2 contiene **2.108.030 detecciones únicas**, procedentes de **57 archivos incorporados** y **169.096.847 bytes de CSV**:
 
@@ -122,12 +128,14 @@ Con el servicio detenido, el siguiente comando comprueba los hashes de todos los
 .\mvp\.venv\Scripts\python.exe mvp/scripts/verify_v2.py --refresh-parquet
 ```
 
-El resultado se guarda en `data/release-v0.2.json`. La API consulta DuckDB; el snapshot Parquet se actualiza explícitamente después de nuevas adquisiciones. La cartografía de países ya está preparada en `web/public/assets/`; para regenerarla desde el atlas fuente, ejecutar `web/scripts/prepare-geography.mjs` desde `web/` y luego `scripts/validate_geography.py` desde la raíz, antes de compilar.
+Ese verificador corresponde a la entrega 0.2 y sus originales CSV. Para la base mundial actual, usar `mvp/scripts/verify_world.py`, según [las instrucciones mundiales](ALCANCE_MUNDIAL.md); el resultado está en `data/release-world-v0.3.json`. La API consulta DuckDB; el snapshot Parquet se actualiza explícitamente después de nuevas adquisiciones. La cartografía de países ya está preparada en `mvp/web/public/assets/`; para regenerarla desde el atlas fuente, ejecutar `prepare-geography.mjs` desde `mvp/web/` y luego `mvp/scripts/validate_geography.py` desde la raíz, antes de compilar.
 
 `Dockerfile` y `compose.yaml` permiten construir un contenedor con el mismo frontend y API, con volumen `./data`. Su ejecución con Docker depende de tener el motor disponible; no se ha desplegado infraestructura AWS. La versión local usa DuckDB y trabajos en un solo proceso; PostgreSQL/S3/cola administrada quedan como evolución del despliegue descrito en la arquitectura.
 
 ## Documentación
 
+- [Estado mundial actual 0.3](ESTADO_MUNDIAL.md).
+- [Período elegido y procesamiento mundial](ALCANCE_MUNDIAL.md).
 - [Qué se desarrolló y cómo se procesan los datos](NINA_DESARROLLO_Y_DATOS.md).
 - [Estado de la entrega](ESTADO_V1.md).
 - [Estado actual mundial y rediseño](ESTADO_V2.md).

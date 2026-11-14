@@ -26,7 +26,9 @@ git branch
 .\start-nina.ps1
 ```
 
-El MVP conserva observaciones por instrumento y calibraciones exploratorias. Se preservó el trabajo local de ingesta mundial, todavía en preparación; trasladar el repositorio no completa esa importación. La armonización científica descrita a continuación sigue siendo el objetivo del monorepo.
+El MVP ya procesa un archivo mundial para **2025–2026**: la base contiene **59.440.077 observaciones**, incluyendo **57.332.047 registros nuevos** de los archivos del equipo. Se verificaron consultas en Brasil, Australia, Indonesia, Estados Unidos y R. D. del Congo. [Estado mundial y resultados](mvp/ESTADO_MUNDIAL.md), [decisión del período](mvp/ALCANCE_MUNDIAL.md).
+
+El MVP conserva observaciones por instrumento y calibraciones exploratorias. La armonización científica descrita a continuación sigue siendo el objetivo del monorepo.
 
 ---
 
