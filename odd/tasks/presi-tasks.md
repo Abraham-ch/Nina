@@ -86,7 +86,7 @@
 
 | ID | Spec | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1 (+ A1, A2) | inline | **"Terminado cuando" cumplido** (visitante no importa ni exporta · analista ve su historial · admin ve la auditoría); pendiente `MAX_EXPORT_ROWS` y los advisories de L13/L19 | `a0438d5`, `e374477`, `b9681da`, `4c791e9` |
+| T1 | S1 (+ A1, A2) | inline | **"Terminado cuando" cumplido** (visitante no importa ni exporta · analista ve su historial · admin ve la auditoría); pendiente `MAX_EXPORT_ROWS` y los advisories de L13/L19 | `c6721fc`, `d879306`, `003a86a` |
 | T2 | S2 (+ A1, A2) | inline | pendiente | — |
 | T3 | S3 (+ A1, A2) | inline | pendiente | — |
 
@@ -162,7 +162,7 @@
   un `500` sin capturar (leer el valor con respaldo a valor por defecto); (3) `openapi.json` no documenta
   `401`/`403` en ninguna ruta — estilo previo, no regresión; (4) `MAX_EXPORT_ROWS` sigue sin implementarse;
   (5) `manifest`/`report` registran `rows=0` en `downloads`.
-- **L20** · **Celda C (web)** en `b9681da` + `4c791e9`. Un solo diálogo `web/src/Account.tsx` con tres vistas:
+- **L20** · **Celda C (web)** en `003a86a`. Un solo diálogo `web/src/Account.tsx` con tres vistas:
   **formulario** (login/registro con rol `visitante`/`analista`), **perfil** y **"Mis descargas"**; más una cuarta
   vista **Auditoría** reservada a `admin`. `App.tsx` carga `/api/auth/me` al arrancar y es la única dueña del
   estado de sesión que comparten `Dialog` y `DataPanel`. Estados sin permiso: la lista de exportaciones se
@@ -171,10 +171,27 @@
   (`✓ built in 4.03s`) y suite de Python **`56 passed`** (el backend no se tocó).
 - **L21** · **El criterio de aceptación de T1 queda cubierto**: "un visitante no puede importar ni exportar" (servidor
   + interfaz), "un analista ve su historial" (vista "Mis descargas"), "un admin ve la auditoría" (vista "Auditoría",
-  añadida en `4c791e9` porque solo existía el endpoint y faltaba la pantalla).
+  añadida en `003a86a` porque solo existía el endpoint y faltaba la pantalla).
 - **L22** · **PR #1 abierto hacia `mvp-abraham`** (<https://github.com/Abraham-ch/Nina/pull/1>) con los 6 primeros
   commits. **Advertido en el cuerpo del PR**: 819 líneas autorizadas contra el tope de 400 de §8, con la oferta de
-  partirlo en dos PRs apilados (`a0438d5` y `e374477` ya vienen separados) sin tocar el contenido.
+  partirlo en dos PRs apilados (`c6721fc` y `d879306` vienen separados) sin tocar el contenido.
 - **L23** · `Risk: item 6` para la entrega de la interfaz — **`web/` no tiene ningún test**; la única red es
   `tsc -b && vite build` (§15 del `AGENTS.md` raíz lo admite como verificación mínima del área). Corresponde
   verificador independiente.
+- **L24** · **Conflicto con `mvp-abraham` resuelto por rebase** (decisión del usuario: "resolvell"). El PR #1
+  salía `CONFLICTING`/`DIRTY` porque `mvp-abraham` avanzó 3 commits mientras trabajaba: `e12d7d0`
+  (*bilingual UI, oxfmt formatting*) reescribió `App.tsx` (+1.253 líneas), `Dialog.tsx` (476) y
+  `DataPanel.tsx` (445), añadió `web/src/i18n.ts` (**inglés por defecto**, `tr(en, es)`), `oxfmt`
+  (2 espacios, comillas simples, sin punto y coma) y `landing/`, `LangSwitch.tsx`, `Tour.tsx`; más
+  `a7a562c` (documentación al inglés) y `19c80a6` (tour e indicadores).
+- **L25** · **Resolución**: los 5 archivos en conflicto eran todos `web/src/`; **el backend no tuvo ningún
+  conflicto**. Estrategia: tomar la base de Abraham en `App`/`Dialog`/`DataPanel`/`style.css` y **reaplicar**
+  encima la celda C, ahora con `tr(en, es)` en cada cadena visible y `locale()` en fechas; `types.ts` =
+  base + mis 6 tipos + `Batch.created_by`. `oxfmt` aplicado, `--check` limpio.
+- **L26** · **`4c791e9` quedó absorbido** en `003a86a`: la vista "Auditoría" ya venía dentro de `Account.tsx`
+  reescrito, el replay quedó vacío y se descartó. **Todos los hashes cambiaron** tras el rebase:
+  `fb8ff88→54f718a` · `a0438d5→c6721fc` · `81987ea→0600e65` · `e374477→d879306` · `cd5b826→325f335` ·
+  `b215fbc→78dc774` · `ddb6be4→665906e` · `b9681da+4c791e9→003a86a` · `e6a0726→f7a2a8c`.
+- **L27** · **Verificación tras el rebase**: `oxfmt --check` limpio · `tsc -b && vite build` → `✓ built in
+  3.95s` · `pytest` → **`56 passed`**. Rama de seguridad `backup/anthony-tasks-pre-rebase` (`e6a0726`).
+  **Pendiente**: el `push --force-with-lease` lo tiene que correr la persona, el sandbox del agente lo bloquea.
