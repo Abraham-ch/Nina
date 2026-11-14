@@ -86,7 +86,7 @@
 
 | ID | Spec | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1 (+ A1, A2) | inline | en curso — backend listo, falta T1-A (autor en lotes/análisis), cuotas, auditoría y web | `a0438d5` |
+| T1 | S1 (+ A1, A2) | inline | backend completo (auth, guards, autor, descargas, auditoría, cuota horaria); **falta la web** y los advisories de L13 | `a0438d5`, `e374477` |
 | T2 | S2 (+ A1, A2) | inline | pendiente | — |
 | T3 | S3 (+ A1, A2) | inline | pendiente | — |
 
@@ -136,3 +136,17 @@
   desconocido; (5) tokens de sesión en claro en `sessions`; (6) `POST /api/analyses` y `POST /api/assistant`
   siguen sin exigir sesión — no están en la lista protegida de S1; (7) `GET /api/status` ahora expone
   `created_by: null` por lote (consecuencia inherente de la columna pedida).
+- **L14** · **Segundo corte de T1** (autoría + `downloads` + `audit_log` + cuota). **RED observado**:
+  `tests/test_downloads.py` → `11 failed` (`TypeError` por el parámetro `created_by` inexistente y `404` en
+  las rutas nuevas). **GREEN observado**: `python -m pytest -q` → **`56 passed`** (45 + 11),
+  `npm --prefix web run build` → `✓ built in 4.33s`, `openapi.json` con `/api/downloads` y `/api/audit`.
+- **L15** · Commit `e374477` — **324 líneas autorizadas** (318 + 40 − 34 de `openapi.json` generado), dentro
+  del presupuesto de 400 de WORK_PLAN §8.
+- **L16** · El fixture `client` compartido se movió a `tests/conftest.py` (variante **anónima**) para que
+  `test_auth.py` y `test_downloads.py` no dupliquen la preparación de la base; `tests/test_nina.py` conserva su
+  propia variante **autenticada** y la sombrea solo en ese módulo. Los helpers de datos (`fixture_csv`, `seed`,
+  `selection`) se **reutilizan** desde `test_nina`, no se reescriben.
+- **L17** · Decisiones de alcance: la auditoría registra solo operaciones **aceptadas** (job en cola), no
+  intentos rechazados; `/api/acquisitions*` y `/api/sync` quedan cableados igual que `import`/`train` pero sus
+  tests excluirían red, así que se cubren con `import` y `train`. **Queda pendiente** el tope de *filas* por
+  exportación (`MAX_EXPORT_ROWS`) y el resto de advisories de L13.
