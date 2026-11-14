@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { api, post, fmt, bytes } from './api'
 import { tr, locale } from './i18n'
-import type { Analysis, Catalog, Health, Job, Selection, Status } from './types'
+import type { Analysis, Catalog, Health, Job, Selection, Status, User } from './types'
 type Props = {
   status: Status | null
   catalog: Catalog | null
@@ -11,6 +11,7 @@ type Props = {
   jobs: Job[]
   selection: Selection
   analysis: Analysis | null
+  user: User | null
   onRefresh: () => void
   onNotice: (text: string) => void
   onError: (text: string) => void
@@ -22,6 +23,7 @@ export default function DataPanel({
   jobs,
   selection,
   analysis,
+  user,
   onRefresh,
   onNotice,
   onError,
@@ -41,6 +43,7 @@ export default function DataPanel({
     eligible[0]
   const chosen = eligible.some((p) => p.product === product) ? product : preferred?.product || ''
   const active = jobs.some((j) => ['queued', 'running'].includes(j.status))
+  const puedeAdministrar = !!user && user.role === 'admin'
   const worldFiles = status?.batches.filter((b) => b.spatial_scope === 'world') || []
   const worldStart = worldFiles
     .map((b) => b.coverage_start)
@@ -204,9 +207,22 @@ export default function DataPanel({
               </select>
             </label>
           </div>
+          {!puedeAdministrar && (
+            <p className="permission-state" role="status">
+              {tr(
+                'Adding data, syncing FIRMS and training models requires an administrator account.',
+                'Incorporar datos, sincronizar FIRMS y entrenar modelos pide una cuenta administradora.',
+              )}{' '}
+              {user
+                ? tr('Your current role can only view.', 'Tu rol actual solo consulta.')
+                : tr('You have not signed in yet.', 'Todavía no has iniciado sesión.')}
+            </p>
+          )}
           <button
             className="button dark"
-            disabled={!health?.firms_key_configured || !chosen || busy || active}
+            disabled={
+              !health?.firms_key_configured || !chosen || busy || active || !puedeAdministrar
+            }
             onClick={acquireMonth}
           >
             <CloudDownload size={17} />
@@ -239,7 +255,7 @@ export default function DataPanel({
             </div>
             <button
               className="button outline"
-              disabled={!health?.firms_key_configured || busy || active}
+              disabled={!health?.firms_key_configured || busy || active || !puedeAdministrar}
               onClick={recent}
             >
               <RefreshCw size={16} />
@@ -334,7 +350,7 @@ export default function DataPanel({
             {tr('CSV · up to 200 MB', 'CSV · hasta 200 MB')}
             <input ref={file} type="file" accept=".csv,text/csv" />
           </label>
-          <button className="button outline" disabled={busy} onClick={upload}>
+          <button className="button outline" disabled={busy || !puedeAdministrar} onClick={upload}>
             <Upload size={16} />
             {scope === 'world'
               ? tr('Import for the planet', 'Importar para el planeta')

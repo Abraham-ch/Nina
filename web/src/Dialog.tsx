@@ -5,6 +5,7 @@ import {
   FileJson,
   Send,
   Share2,
+  ShieldAlert,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -14,7 +15,7 @@ import { fmt, months, post, sourceName } from './api'
 import type { Modal } from './App'
 import { seasonSVG } from './export'
 import { tr } from './i18n'
-import type { Analysis, Geometry, Health, Reply, Selection } from './types'
+import type { Analysis, Geometry, Health, Reply, Selection, User } from './types'
 type Props = {
   modal: Modal
   onModal: (m: Modal) => void
@@ -22,6 +23,8 @@ type Props = {
   analysis: Analysis | null
   selection: Selection
   health: Health | null
+  user: User | null
+  onAccount: () => void
   onGeometry: (g: Geometry) => void
   onDraw: () => void
   onShare: () => void
@@ -41,6 +44,8 @@ export default function Dialog({
   analysis,
   selection,
   health,
+  user,
+  onAccount,
   onGeometry,
   onDraw,
   onShare,
@@ -118,6 +123,7 @@ export default function Dialog({
   }
   const selected = analysis?.selected,
     MONTHS = months()
+  const puedeExportar = !!user && user.role !== 'visitante'
   const titles = {
     evidence: tr('The analysis record', 'El expediente del análisis'),
     export: tr('Share the investigation', 'Comparte la investigación'),
@@ -214,66 +220,96 @@ export default function Dialog({
             {MONTHS[selection.selected_month - 1]} {selection.selected_year} ·{' '}
             {analysis?.metric_label}
           </p>
-          <div className="export-list">
-            {[
-              [
-                'series',
-                tr('Monthly calendar', 'Calendario mensual'),
-                tr(
-                  'CSV · values, median and archive status',
-                  'CSV · valores, mediana y estado del archivo',
-                ),
-              ],
-              [
-                'detections',
-                tr('Original observations', 'Observaciones originales'),
-                tr(
-                  'CSV · every row for the area and month',
-                  'CSV · todas las filas del área y mes',
-                ),
-              ],
-              [
-                'manifest',
-                tr('Evidence and provenance', 'Evidencia y procedencia'),
-                tr(
-                  'JSON · selection, revisions, hashes and limits',
-                  'JSON · selección, revisiones, hashes y límites',
-                ),
-              ],
-              [
-                'report',
-                tr('Analysis report', 'Informe del análisis'),
-                tr('TXT · verified figures and sources', 'TXT · cifras verificadas y fuentes'),
-              ],
-            ].map(([id, title, detail]) => (
-              <a key={id} href={`/api/analyses/${analysis?.id}/exports/${id}`}>
-                <Download size={19} />
-                <span>
-                  <strong>{title}</strong>
-                  <small>{detail}</small>
-                </span>
-                <ArrowUpRight size={16} />
-              </a>
-            ))}
-            {analysis && (
-              <a
-                href={'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(seasonSVG(analysis))}
-                download={'NINA_' + analysis.id + tr('_season.svg', '_temporada.svg')}
-              >
-                <Download size={19} />
-                <span>
-                  <strong>{tr('Season profile', 'Perfil de temporada')}</strong>
-                  <small>
-                    {tr(
-                      'SVG · series, median and analysis context',
-                      'SVG · serie, mediana y contexto del análisis',
-                    )}
-                  </small>
-                </span>
-                <ArrowUpRight size={16} />
-              </a>
-            )}
-          </div>
+          {!puedeExportar ? (
+            <div className="permission-state" role="alert">
+              <ShieldAlert size={17} />
+              <div>
+                <strong>
+                  {tr(
+                    'Downloads need a signed-in account.',
+                    'Las descargas requieren una cuenta con sesión.',
+                  )}
+                </strong>
+                <p>
+                  {user
+                    ? tr(
+                        'Your role can only view. Ask for an analyst or administrator account to export this analysis.',
+                        'Tu rol solo consulta. Pide una cuenta de analista o administrador para exportar este análisis.',
+                      )
+                    : tr(
+                        'Sign in with an analyst or admin account to download the calendar, the observations and the evidence file.',
+                        'Entra con una cuenta de analista o admin para descargar el calendario, las observaciones y el expediente.',
+                      )}
+                </p>
+                <button className="button dark" onClick={onAccount}>
+                  {tr('Sign in or create an account', 'Entrar o crear cuenta')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="export-list">
+              {[
+                [
+                  'series',
+                  tr('Monthly calendar', 'Calendario mensual'),
+                  tr(
+                    'CSV · values, median and archive status',
+                    'CSV · valores, mediana y estado del archivo',
+                  ),
+                ],
+                [
+                  'detections',
+                  tr('Original observations', 'Observaciones originales'),
+                  tr(
+                    'CSV · every row for the area and month',
+                    'CSV · todas las filas del área y mes',
+                  ),
+                ],
+                [
+                  'manifest',
+                  tr('Evidence and provenance', 'Evidencia y procedencia'),
+                  tr(
+                    'JSON · selection, revisions, hashes and limits',
+                    'JSON · selección, revisiones, hashes y límites',
+                  ),
+                ],
+                [
+                  'report',
+                  tr('Analysis report', 'Informe del análisis'),
+                  tr('TXT · verified figures and sources', 'TXT · cifras verificadas y fuentes'),
+                ],
+              ].map(([id, title, detail]) => (
+                <a key={id} href={`/api/analyses/${analysis?.id}/exports/${id}`}>
+                  <Download size={19} />
+                  <span>
+                    <strong>{title}</strong>
+                    <small>{detail}</small>
+                  </span>
+                  <ArrowUpRight size={16} />
+                </a>
+              ))}
+              {analysis && (
+                <a
+                  href={
+                    'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(seasonSVG(analysis))
+                  }
+                  download={'NINA_' + analysis.id + tr('_season.svg', '_temporada.svg')}
+                >
+                  <Download size={19} />
+                  <span>
+                    <strong>{tr('Season profile', 'Perfil de temporada')}</strong>
+                    <small>
+                      {tr(
+                        'SVG · series, median and analysis context',
+                        'SVG · serie, mediana y contexto del análisis',
+                      )}
+                    </small>
+                  </span>
+                  <ArrowUpRight size={16} />
+                </a>
+              )}
+            </div>
+          )}
           <button className="button outline" onClick={onShare}>
             <Share2 size={16} />
             {tr('Copy the investigation link', 'Copiar enlace de la investigación')}
