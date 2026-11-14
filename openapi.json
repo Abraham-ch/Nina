@@ -713,6 +713,270 @@
           }
         }
       }
+    },
+    "/api/harmonization": {
+      "get": {
+        "tags": [
+          "Harmonized activity"
+        ],
+        "summary": "Readiness",
+        "operationId": "readiness_api_harmonization_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/harmonized/analyses": {
+      "post": {
+        "tags": [
+          "Harmonized activity"
+        ],
+        "summary": "Create Analysis",
+        "operationId": "create_analysis_api_harmonized_analyses_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarmonizedSelection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarmonizedAnalysis"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/harmonized/analyses/{identifier}": {
+      "get": {
+        "tags": [
+          "Harmonized activity"
+        ],
+        "summary": "Get Analysis",
+        "operationId": "get_analysis_api_harmonized_analyses__identifier__get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarmonizedAnalysis"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/harmonized/analyses/{identifier}/points": {
+      "get": {
+        "tags": [
+          "Harmonized activity"
+        ],
+        "summary": "Points",
+        "operationId": "points_api_harmonized_analyses__identifier__points_get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 5000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PointsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/harmonized/analyses/{identifier}/exports/{kind}": {
+      "get": {
+        "tags": [
+          "Harmonized activity"
+        ],
+        "summary": "Export",
+        "operationId": "export_api_harmonized_analyses__identifier__exports__kind__get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "series",
+                "manifest",
+                "package"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarmonizedAnalysis"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/harmonized/assistant": {
+      "post": {
+        "tags": [
+          "Harmonized activity"
+        ],
+        "summary": "Assistant",
+        "operationId": "assistant_api_harmonized_assistant_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarmonizedQuestion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -845,6 +1109,53 @@
         ],
         "title": "ArchiveMonth"
       },
+      "AssistantResponse": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "analysis_id": {
+            "type": "string",
+            "title": "Analysis Id"
+          },
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "facts": {
+            "$ref": "#/components/schemas/CalendarMonth"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "mode": {
+            "type": "string",
+            "const": "deterministic_grounded",
+            "title": "Mode"
+          },
+          "external_llm_used": {
+            "type": "boolean",
+            "const": false,
+            "title": "External Llm Used"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "analysis_id",
+          "dataset_id",
+          "facts",
+          "references",
+          "mode",
+          "external_llm_used"
+        ],
+        "title": "AssistantResponse"
+      },
       "Body_upload_api_import_post": {
         "properties": {
           "file": {
@@ -915,6 +1226,135 @@
         ],
         "title": "Body_upload_api_import_post"
       },
+      "CalendarMonth": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "month": {
+            "type": "integer",
+            "title": "Month"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "observed_activity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Activity"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_available",
+              "unvalidated_domain",
+              "incomplete_coverage",
+              "partial_archive",
+              "provisional",
+              "complete"
+            ],
+            "title": "Status"
+          },
+          "data_gap": {
+            "type": "boolean",
+            "title": "Data Gap"
+          },
+          "partial_coverage": {
+            "type": "boolean",
+            "title": "Partial Coverage"
+          },
+          "is_provisional": {
+            "type": "boolean",
+            "title": "Is Provisional"
+          },
+          "expected_region_days": {
+            "type": "integer",
+            "title": "Expected Region Days"
+          },
+          "valid_region_days": {
+            "type": "integer",
+            "title": "Valid Region Days"
+          },
+          "calendar_days": {
+            "type": "integer",
+            "title": "Calendar Days"
+          },
+          "unvalidated_cell_days": {
+            "type": "integer",
+            "title": "Unvalidated Cell Days"
+          },
+          "eligible_for_climatology": {
+            "type": "boolean",
+            "title": "Eligible For Climatology"
+          },
+          "historical_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Historical Median"
+          },
+          "historical_n": {
+            "type": "integer",
+            "title": "Historical N"
+          },
+          "anomaly_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anomaly Percent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "value",
+          "observed_activity",
+          "unit",
+          "status",
+          "data_gap",
+          "partial_coverage",
+          "is_provisional",
+          "expected_region_days",
+          "valid_region_days",
+          "calendar_days",
+          "unvalidated_cell_days",
+          "eligible_for_climatology",
+          "historical_median",
+          "historical_n",
+          "anomaly_percent"
+        ],
+        "title": "CalendarMonth"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -927,6 +1367,275 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HarmonizedAnalysis": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/HarmonizedSelection"
+          },
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "analysis_version": {
+            "type": "string",
+            "title": "Analysis Version"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarMonth"
+            },
+            "type": "array",
+            "title": "Months"
+          },
+          "selected": {
+            "$ref": "#/components/schemas/CalendarMonth"
+          },
+          "harmonized": {
+            "type": "boolean",
+            "const": true,
+            "title": "Harmonized"
+          },
+          "synthetic": {
+            "type": "boolean",
+            "const": false,
+            "title": "Synthetic"
+          },
+          "grid_resolution": {
+            "type": "integer",
+            "title": "Grid Resolution"
+          },
+          "local_cloud_opportunities": {
+            "type": "string",
+            "title": "Local Cloud Opportunities"
+          },
+          "method_version": {
+            "type": "string",
+            "title": "Method Version"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "legal": {
+            "type": "string",
+            "title": "Legal"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Provenance"
+          },
+          "scientifically_validated": {
+            "type": "boolean",
+            "title": "Scientifically Validated"
+          },
+          "validation_status": {
+            "type": "string",
+            "enum": [
+              "validated",
+              "experimental"
+            ],
+            "title": "Validation Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "selection",
+          "dataset_id",
+          "analysis_version",
+          "unit",
+          "months",
+          "selected",
+          "harmonized",
+          "synthetic",
+          "grid_resolution",
+          "local_cloud_opportunities",
+          "method_version",
+          "references",
+          "legal",
+          "limitations",
+          "provenance",
+          "scientifically_validated",
+          "validation_status"
+        ],
+        "title": "HarmonizedAnalysis"
+      },
+      "HarmonizedQuestion": {
+        "properties": {
+          "analysis_id": {
+            "type": "string",
+            "maxLength": 24,
+            "minLength": 24,
+            "title": "Analysis Id"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis_id",
+          "question"
+        ],
+        "title": "HarmonizedQuestion"
+      },
+      "HarmonizedSelection": {
+        "properties": {
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Country",
+            "default": "world"
+          },
+          "year_start": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Year Start",
+            "default": 2001
+          },
+          "year_end": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Year End",
+            "default": 2026
+          },
+          "selected_year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Selected Year",
+            "default": 2026
+          },
+          "selected_month": {
+            "type": "integer",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Selected Month",
+            "default": 7
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geometry"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "HarmonizedSelection"
+      },
+      "PointsResponse": {
+        "properties": {
+          "analysis_id": {
+            "type": "string",
+            "title": "Analysis Id"
+          },
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "validation_status": {
+            "type": "string",
+            "enum": [
+              "validated",
+              "experimental"
+            ],
+            "title": "Validation Status"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "type": {
+            "type": "string",
+            "const": "FeatureCollection",
+            "title": "Type"
+          },
+          "representation": {
+            "type": "string",
+            "const": "H3_cell_centers",
+            "title": "Representation"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "shown": {
+            "type": "integer",
+            "title": "Shown"
+          },
+          "sampled": {
+            "type": "boolean",
+            "title": "Sampled"
+          },
+          "synthetic": {
+            "type": "boolean",
+            "const": false,
+            "title": "Synthetic"
+          },
+          "features": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis_id",
+          "dataset_id",
+          "validation_status",
+          "references",
+          "type",
+          "representation",
+          "unit",
+          "total",
+          "shown",
+          "sampled",
+          "synthetic",
+          "features"
+        ],
+        "title": "PointsResponse"
       },
       "Question": {
         "properties": {
@@ -957,6 +1666,54 @@
           "question"
         ],
         "title": "Question"
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "method_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method Version"
+          },
+          "gates": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Gates"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "available",
+          "status"
+        ],
+        "title": "ReadinessResponse"
       },
       "Selection": {
         "properties": {

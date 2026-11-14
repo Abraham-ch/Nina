@@ -262,5 +262,8 @@ def archive_month(body:ArchiveMonth):
     except ValueError: raise HTTPException(422,'Geometría o ámbito inválidos')
     return submit('archive_month',lambda progress:acquire_month(body.product,body.year,body.month,body.scope,body.geometry,progress),with_progress=True)
 
+from .harmonized import router as harmonized_router
+app.include_router(harmonized_router)
+
 dist=ROOT/'web'/'dist'
 if dist.exists(): app.mount('/',StaticFiles(directory=str(dist),html=True),name='web')

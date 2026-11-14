@@ -8,7 +8,7 @@
 | File | Owner |
 |---|---|
 | `ingest.py`, `global_ingest.py`, `remote.py`, `science.py`, `store.py` | **A** (changes to `store.py` are reviewed by B) |
-| `main.py`, `analytics.py`, `assistant.py`, `config.py` | **B** (changes to `config.py` are reviewed by A) |
+| `main.py`, `analytics.py`, `assistant.py`, `config.py`, `harmonized.py` | **B** (changes to `config.py` are reviewed by A) |
 
 Outside `nina/`: A also writes `scripts/` (except `export_openapi.py`), `data/boundaries/`, `docs/reference/`,
 `notebooks/`, `tests/test_global_ingest.py`. B also writes `openapi.json`, `scripts/export_openapi.py`, the rest of

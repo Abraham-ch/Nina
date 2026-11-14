@@ -19,7 +19,7 @@ def respond(analysis, question, role='gestion'):
     if any(w in q for w in ['mañana','predic','evacua','brigada','provocado','causa del']):
         text='Las detecciones históricas no permiten confirmar causas ni predecir propagación o prescribir una respuesta de emergencia. Este análisis describe el archivo observado.'
     elif any(w in q for w in ['sensor','satél','satel','viirs','modis','armoniz']):
-        text='MODIS y VIIRS tienen resolución, sensibilidad y pasadas diferentes. Sus conteos brutos deben mantenerse separados. El laboratorio ofrece una calibración exploratoria; la armonización con control de observación está pendiente de máscaras L2.'
+        text='MODIS y VIIRS tienen resolución, sensibilidad y pasadas diferentes. Sus conteos brutos deben mantenerse separados. El laboratorio ofrece una calibración exploratoria; el producto armonizado tiene una evaluación y puertas de publicación independientes. Las oportunidades locales de observación L2 aún no están reconstruidas.'
     elif any(w in q for w in ['cobertura','nube','calidad','confian','fiab','suficien']):
         text='No se dispone todavía del denominador de oportunidades válidas para esta selección. El calendario puede describir detecciones del archivo, pero no determinar si una ausencia se debe a cielo nublado, falta de pasada o ausencia de señal.'
     elif s['value'] is None:
