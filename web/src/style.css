@@ -10,3 +10,78 @@
 
 .role-guidance{margin-top:16px;padding-left:12px;border-left:2px solid #aac09f}
 @media(max-width:600px){.imagery-credit{bottom:26px;max-width:calc(100% - 32px)}}
+/* Tema nocturno del atlas, alineado con la portada: negro casi puro, fuego rojo, contorno verde. */
+:root{--ocean:#050708;--viirs:#ff4a2a;--modis:#ffae3c}
+.site-header{background:#050708;border-bottom-color:rgba(238,243,244,.1)}
+.selection-bar{background:#0a0d0f;border-bottom-color:rgba(238,243,244,.1);color:#e6ecee}
+.territory-field{color:#eef3f4;border-right-color:rgba(238,243,244,.14)}
+.sensor-field>span,.selection-meta{color:#8d9ca1}
+.sensor-field select,.coordinates-button,.filter-button{color:#e6ecee}
+.filter-button{border-left-color:rgba(238,243,244,.14)}
+.status-dot{background:#4fe08a}
+.selection-bar select option,.selection-bar optgroup,.advanced-filters select option{background:#0a0d0f;color:#e6ecee}
+.advanced-filters{background:#080b0c;border-bottom-color:rgba(238,243,244,.1);color:#d5dde0}
+.advanced-filters select{background:#0f1416;border-color:rgba(238,243,244,.2);color:#e6ecee}
+.advanced-filters>span{color:#8d9ca1}
+.atlas-stage{background:#050708}
+.time-dock{background:#07090a;border-top-color:rgba(238,243,244,.1)}
+.month-axis>button>i{background:#5a2a20}
+.month-axis>button>i.empty{background:repeating-linear-gradient(90deg,#2a3236 0 3px,transparent 3px 6px)}
+.month-axis>button[aria-pressed=true]{color:#ffd2bf}
+.month-axis>button[aria-pressed=true]>i{background:var(--viirs)}
+.atlas-caption{background:#0a0d0f;color:#8d9ca1}
+.atlas-caption button{color:#e6ecee}
+/* Portada del atlas: el globo ocupa todo el ancho y un degradado (no un bloque) da legibilidad al texto. */
+.has-intro .earth-canvas{left:0;width:100%}
+.atlas-stage.has-intro::before{content:'';position:absolute;inset:0 auto 0 0;width:min(620px,55%);background:linear-gradient(90deg,#050708 35%,rgba(5,7,8,0));z-index:2;pointer-events:none}
+.has-intro .map-data-note{display:none}
+.atlas-intro h1 em{color:#ff6a3d}
+.header-actions .tour-start{color:#e6ecee}
+/* Guía de la plataforma */
+.tour{position:fixed;inset:0;z-index:120}
+.tour-veil{position:fixed;inset:0;background:rgba(5,7,8,.72)}
+.tour-spot{position:fixed;border:1px solid #4fe08a;border-radius:3px;box-shadow:0 0 0 9999px rgba(5,7,8,.72),0 0 24px rgba(79,224,138,.35);transition:all .25s ease;pointer-events:none}
+.tour-card{position:fixed;width:min(380px,calc(100vw - 32px));background:#0a0d0f;border:1px solid rgba(238,243,244,.18);border-top:2px solid #ff6a3d;color:#e6ecee;padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.6);outline:none;transition:top .25s ease,left .25s ease}
+.tour-top{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#8d9ca1;margin-bottom:10px}
+.tour-top button{color:#e6ecee;padding:4px}
+.tour-card h2{font-size:26px;color:#f3f6f7;margin-bottom:10px}
+.tour-card p{font-size:13.5px;line-height:1.7;color:#c4ced1}
+.tour-progress{display:flex;gap:4px;margin:18px 0 16px}
+.tour-progress i{flex:1;height:2px;background:#26302f}
+.tour-progress i.on{background:#ff6a3d}
+.tour-actions{display:flex;justify-content:space-between;gap:12px}
+.tour-actions button{display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:9px 0;color:#c4ced1}
+.tour-actions .tour-next{background:#eef3f4;color:#050708;padding:9px 16px;font-weight:600;border-radius:2px}
+@media (prefers-reduced-motion:reduce){.tour-spot,.tour-card{transition:none}}
+.territory-field>select{color:#eef3f4}
+.atlas-intro{top:7%}
+.atlas-intro h1{font-size:clamp(44px,4.1vw,68px)}
+.atlas-intro p{margin:18px 0 18px}
+.intro-secondary{margin-top:10px}
+/* Superposiciones del mapa en el tema nocturno. */
+.map-tools>button,.map-evidence,.comparison-controls{background:rgba(10,13,15,.88);border-color:rgba(238,243,244,.18);color:#e6ecee}
+.map-tools>button:hover,.map-evidence:hover{border-color:rgba(238,243,244,.45)}
+.map-tools>button[aria-pressed=true]{color:#4fe08a;border-color:#4fe08a}
+.map-brief,.map-brief[class]{background:rgba(10,13,15,.9)!important;border-left-color:#ff6a3d}
+.observed-number{color:#ff8a5c}
+.brief-actions>button{border-bottom-color:rgba(238,243,244,.3);color:#e6ecee}
+.point-inspector{background:#0a0d0f;border-top-color:#ff6a3d}
+.sensor-tag{background:rgba(10,13,15,.9);color:#ffd2bf}
+.draw-help{background:#0a0d0f;color:#e6ecee;border:1px solid #4fe08a}
+.site-footer{background:#050708;border-top-color:rgba(238,243,244,.1);color:#8d9ca1}
+.site-footer>span{color:#e6ecee}
+.site-footer>span>span{color:#8d9ca1}
+.site-footer button{color:#c4ced1}
+/* Capa de calor aditiva sobre el globo */
+.heat-layer{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+/* Cargadores del mapa */
+.globe-loader{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:14px;background:#050708;color:#c4ced1;font-size:13px}
+.globe-busy{position:absolute;left:50%;top:22px;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(10,13,15,.9);border:1px solid rgba(238,243,244,.18);color:#e6ecee;font-size:12px}
+.spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,106,61,.25);border-top-color:#ff6a3d;animation:nina-spin .8s linear infinite;flex-shrink:0}
+@keyframes nina-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}}
+.globe-loading{background:#050708;color:#c4ced1}
+/* Divisor de comparación: alto completo del mapa y su ícono se arrastra */
+.comparison-seam,.comparison-seam[style]{top:0!important;bottom:0!important;z-index:4;background:rgba(238,243,244,.6)}
+.comparison-seam>button{width:38px;height:38px;display:grid;place-content:center;border-radius:50%;background:#eef3f4;color:#050708;position:absolute;top:50%;left:-19px;transform:translateY(-50%);pointer-events:auto;cursor:ew-resize;touch-action:none;box-shadow:0 0 0 4px rgba(5,7,8,.45)}
+.comparison-seam>button:hover,.comparison-seam>button:focus-visible{background:#fff;box-shadow:0 0 0 4px rgba(255,106,61,.5)}
