@@ -1,0 +1,22 @@
+[project]
+name = "fire-calendar-workspace"
+version = "0.0.0"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = ["packages/nina", "apps/api"]
+
+[dependency-groups]
+dev = ["ruff>=0.6", "mypy>=1.11", "pandera>=0.20", "types-PyYAML"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "PL"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+

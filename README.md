@@ -32,10 +32,10 @@ Data gaps are shown as gaps, never as "no fire activity".
 | Path | Contents |
 |---|---|
 | `AGENTS.md` | Full technical spec: data contract, QA rules, harmonization method, API, frontend |
-| `ACCEPTANCE_CRITERIA.md` | What "done" means |
-| `DATA_SOURCES.md` | Data sources used |
+| `packages/nina/ACCEPTANCE_CRITERIA.md` | What "done" means |
+| `docs/DATA_SOURCES.md` | Data sources used |
 | `docs/` | Architecture diagram, methodology, ADRs |
-| `source/` | Source data / code |
+| `source/` | All data (gitignored): raw FIRMS `fire_archive_*` / `fire_nrt_*` JSON + CSV, and derived outputs |
 
 ## Disclaimer
 

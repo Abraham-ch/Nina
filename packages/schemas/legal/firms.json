@@ -1,0 +1,13 @@
+{
+    "url": "https://www.earthdata.nasa.gov/data/tools/firms",
+    "es": {
+        "citation": "Reconocemos el uso de datos e imágenes del Fire Information for Resource Management System (FIRMS) de la NASA (https://www.earthdata.nasa.gov/data/tools/firms), parte del Earth Science Data and Information System (ESDIS) de la NASA.",
+        "warning": "Por su resolución espacial, FIRMS no recomienda usar estos datos para decisiones tácticas o a escala local. Este calendario es una herramienta de contexto histórico.",
+        "disclaimer_label": "Descargo de responsabilidad de FIRMS"
+    },
+    "en": {
+        "citation": "We acknowledge the use of data and imagery from NASA's Fire Information for Resource Management System (FIRMS) (https://www.earthdata.nasa.gov/data/tools/firms), part of NASA's Earth Science Data and Information System (ESDIS).",
+        "warning": "Because of their spatial resolution, FIRMS does not recommend these data for tactical or local-scale decisions. This calendar is a tool for historical context.",
+        "disclaimer_label": "FIRMS disclaimer"
+    }
+}
