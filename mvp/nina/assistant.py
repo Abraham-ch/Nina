@@ -6,6 +6,9 @@ from .analytics import get_analysis
 
 def respond(analysis, question, role='gestion'):
     q=question.lower();s=analysis['selected'];sel=analysis['selection']
+    guidance={'gestion':'Para el seguimiento territorial, compara el mismo mes y comprueba si el archivo es parcial antes de priorizar una revisión.',
+              'ciencia':'Para evaluar el resultado, revisa la procedencia, la referencia instrumental y la separación de entrenamiento y prueba.',
+              'comunicacion':'Al comunicar el resultado, incluye territorio, período y fuente, y conserva el término detecciones para describir los píxeles del archivo.'}.get(role,'Revisa la evidencia y la procedencia del análisis.')
     role={'gestion':'gestión territorial','ciencia':'investigación','comunicacion':'comunicación pública'}.get(role,'gestión territorial')
     evidence=[{'id':'E1','label':'Análisis seleccionado','value':f"{analysis['area_name']} · {sel['selected_year']}-{sel['selected_month']:02d}"},
               {'id':'E2','label':'Detecciones / estimación','value':s['value']},
@@ -42,5 +45,5 @@ def respond(analysis, question, role='gestion'):
             if isinstance(candidate,str) and 5<len(candidate)<250 and not re.search(r'\d|evac|brigad|incendio provoc|pron[oó]st',candidate,re.I):
                 framing=candidate;engine='llm_with_verified_facts'
         except Exception: pass
-    return {'analysis_id':analysis['id'],'engine':engine,'role':role,'answer':text,'framing':framing,
+    return {'analysis_id':analysis['id'],'engine':engine,'role':role,'answer':text,'framing':framing,'guidance':guidance,
             'evidence':evidence,'references':analysis['references'],'synthetic':False}

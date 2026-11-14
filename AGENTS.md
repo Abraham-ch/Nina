@@ -890,6 +890,8 @@ FIRMS pide replicar o enlazar su descargo de responsabilidad y su cita al redist
 ---
 
 ## 12. API (`apps/api`)
+r
+> Detalle de endpoints, parámetros, errores y esquema `serving`: **`apps/api/API_CONTRACT.md`** (prevalece si difiere de esta sección).
 
 Base: `/api/v1`. Todas las consultas reciben `region` (uno de: `region_id`, `bbox=minx,miny,maxx,maxy`
 o `geometry` GeoJSON en POST) y `start`, `end` (`YYYY-MM-DD`, inclusivos).

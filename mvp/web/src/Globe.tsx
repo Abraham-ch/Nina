@@ -8,7 +8,7 @@ import {fmt} from './api';
 const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const emptyGeometry={type:'FeatureCollection',features:[]};
 function coordinates(geometry:Geometry){const result:number[][]=[];function walk(value:unknown){if(Array.isArray(value)){if(typeof value[0]==='number')result.push(value as number[]);else value.forEach(walk)}}walk(geometry.coordinates);return result;}
-function bounds(geometry:Geometry){const points=coordinates(geometry);return Rectangle.fromDegrees(Math.min(...points.map(p=>p[0])),Math.min(...points.map(p=>p[1])),Math.max(...points.map(p=>p[0])),Math.max(...points.map(p=>p[1])));}
+function bounds(geometry:Geometry){const points=coordinates(geometry),longitudes=[...new Set(points.map(p=>(p[0]+360)%360))].sort((a,b)=>a-b);let gap=-1,start=0,end=0;for(let i=0;i<longitudes.length;i++){const next=longitudes[(i+1)%longitudes.length]+(i===longitudes.length-1?360:0);if(next-longitudes[i]>gap){gap=next-longitudes[i];start=next%360;end=longitudes[i]}}const full=360-gap>350;return Rectangle.fromDegrees(full?-180:start>180?start-360:start,Math.min(...points.map(p=>p[1])),full?180:end>180?end-360:end,Math.max(...points.map(p=>p[1])));}
 function glyph(square:boolean){const canvas=document.createElement('canvas');canvas.width=canvas.height=20;const ctx=canvas.getContext('2d')!;ctx.fillStyle=square?'#f3b968':'#80d2df';if(square)ctx.fillRect(3,3,14,14);else{ctx.beginPath();ctx.arc(10,10,7,0,Math.PI*2);ctx.fill()}return canvas.toDataURL();}
 
 type Props={selection:Selection;layers:Layer[];compare:boolean;split:number;place:Place|null;drawing:boolean;onDrawing:(value:boolean)=>void;onGeometry:(geometry:Geometry)=>void;onInspect:(point:Point|null)=>void;flat:boolean;onFlat:(value:boolean)=>void};

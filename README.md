@@ -54,6 +54,8 @@ Data gaps are shown as gaps, never as "no fire activity".
 | Path | Contents |
 |---|---|
 | `AGENTS.md` | Full technical spec: data contract, QA rules, harmonization method, API, frontend |
+| `WORK_PLAN.md` | 3-person work plan: roles, folder ownership, phases |
+| `apps/api/API_CONTRACT.md` | API and database contract between the three areas |
 | `packages/nina/ACCEPTANCE_CRITERIA.md` | What "done" means |
 | `docs/DATA_SOURCES.md` | Data sources used |
 | `docs/` | Architecture diagram, methodology, ADRs |

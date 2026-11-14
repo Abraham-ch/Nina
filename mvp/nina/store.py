@@ -4,11 +4,18 @@ import hashlib
 from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from functools import lru_cache
+from functools import lru_cache,wraps
 import duckdb
 from .config import DATA
 
 LOCK = threading.RLock()
+
+def atomic_read(function):
+    """Keep an analysis/revision/export consistent with local ingestion commits."""
+    @wraps(function)
+    def wrapped(*args,**kwargs):
+        with LOCK: return function(*args,**kwargs)
+    return wrapped
 def now(): return datetime.now(timezone.utc).isoformat()
 
 @lru_cache(maxsize=1)

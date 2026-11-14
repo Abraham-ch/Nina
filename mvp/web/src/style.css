@@ -7,3 +7,6 @@
 @media(max-width:370px){.brand>span{display:none}.site-header nav{gap:24px}.header-actions{gap:20px}.atlas-intro h1{font-size:40px}.atlas-intro h1 em{font-size:42px}.atlas-stage{height:620px;min-height:620px}.has-intro .earth-canvas{top:170px;height:calc(100% - 170px)}.atlas-intro{left:19px}.map-brief{padding:16px}.map-brief h1{font-size:25px}.observed-number{font-size:34px}.comparison-controls{gap:10px;padding:12px}.comparison-controls select{max-width:115px;padding-left:8px}.experiment-intro h2{font-size:30px}.experiment-method{gap:8px}.calendar-controls{gap:10px}.calendar-controls .text-link{font-size:11px}.calendar-context{gap:20px 15px}}
 @media(pointer:coarse){button:not(.cesium-button){min-height:44px}.map-tools>button{width:40px;height:44px}.header-actions>button{min-width:34px}.question-list button{min-height:44px}.filter-button,.coordinates-button{min-width:36px}.calendar-table button{min-height:40px}.month-axis>button{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+.role-guidance{margin-top:16px;padding-left:12px;border-left:2px solid #aac09f}
+@media(max-width:600px){.imagery-credit{bottom:26px;max-width:calc(100% - 32px)}}

@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
 from .config import ROOT, DATA, FIRMS, SOURCES
-from .store import initialize,database,rows,boundaries,status,now,code_revision
+from .store import initialize,database,rows,boundaries,status,now,code_revision,atomic_read
 from .analytics import Selection,analyze,get_analysis,points_for_analysis,selected_rows,month_dates
 from .ingest import ingest_file
 from .assistant import respond
@@ -113,9 +113,11 @@ def create_analysis(selection:Selection): return analyze(selection)
 def analysis(identifier:str): return existing(identifier)
 
 @app.get('/api/analyses/{identifier}/points')
+@atomic_read
 def points(identifier:str): return points_for_analysis(existing(identifier))
 
 @app.get('/api/analyses/{identifier}/comparison')
+@atomic_read
 def comparison(identifier:str,viirs:Literal['viirs-snpp','viirs-jpss1','viirs-jpss2']='viirs-snpp'):
     result=existing(identifier);selection=Selection(**result['selection'])
     layers=[]
@@ -128,6 +130,7 @@ def comparison(identifier:str,viirs:Literal['viirs-snpp','viirs-jpss1','viirs-jp
             'note':'Conteos brutos del mismo período y área. Las pasadas no son simultáneas; sus diferencias no prueban un cambio real del fuego.'}
 
 @app.get('/api/analyses/{identifier}/evidence')
+@atomic_read
 def evidence(identifier:str):
     result=existing(identifier)
     with database() as c: batches=rows(c,'SELECT filename,source,sha256,bytes,rows_loaded,rejected,url,imported_at,coverage_start,coverage_end,coverage_basis,processing,spatial_scope,spatial_geometry FROM batches ORDER BY source,coverage_start')
@@ -142,6 +145,7 @@ def csv_output(data):
     return '\ufeff'+out.getvalue()
 
 @app.get('/api/analyses/{identifier}/exports/{kind}')
+@atomic_read
 def export(identifier:str,kind:Literal['series','detections','manifest','report']):
     result=existing(identifier);s=Selection(**result['selection'])
     if kind=='series':
