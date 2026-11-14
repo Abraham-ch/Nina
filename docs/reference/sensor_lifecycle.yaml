@@ -1,7 +1,7 @@
-# Inicio y fin de misión por satélite (AGENTS.md §5.3). El fin de misión no cuenta como hueco.
-# Solo referencia: la cobertura real la calcula el pipeline (tabla coverage).
+# Mission start and end per satellite (AGENTS.md §5.3). The end of mission does not count as a gap.
+# Reference only: the real coverage is computed by the pipeline (coverage table).
 terra: {first_date: 2000-11-01, last_date: null}
 aqua: {first_date: 2002-07-04, last_date: null}
-snpp: {first_date: 2012-01-20, last_date: 2026-11-02, note: "Sin datos nuevos desde 2026-11-02 13:00 UTC"}
+snpp: {first_date: 2012-01-20, last_date: 2026-11-02, note: "No new data since 2026-11-02 13:00 UTC"}
 noaa20: {first_date: 2018-04-01, last_date: null}
 noaa21: {first_date: 2024-01-17, last_date: null}

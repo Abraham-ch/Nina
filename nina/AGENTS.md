@@ -1,39 +1,39 @@
-# AGENTS.md · `nina/` — Roles A (procesamiento) y B (API)
+# AGENTS.md · `nina/` — Roles A (processing) and B (API)
 
-> Prevalece sobre el `AGENTS.md` raíz para los archivos de esta carpeta. Reparto completo en `WORK_PLAN.md` §2.
-> `nina/` es un solo paquete: **la propiedad es por archivo**.
+> Takes precedence over the root `AGENTS.md` for files in this folder. Full split of responsibilities in `WORK_PLAN.md` §2.
+> `nina/` is a single package: **ownership is per file**.
 
-## Quién escribe qué
+## Who writes what
 
-| Archivo | Dueño |
+| File | Owner |
 |---|---|
-| `ingest.py`, `global_ingest.py`, `remote.py`, `science.py`, `store.py` | **A** (cambios en `store.py` los revisa B) |
-| `main.py`, `analytics.py`, `assistant.py`, `config.py` | **B** (cambios en `config.py` los revisa A) |
+| `ingest.py`, `global_ingest.py`, `remote.py`, `science.py`, `store.py` | **A** (changes to `store.py` are reviewed by B) |
+| `main.py`, `analytics.py`, `assistant.py`, `config.py` | **B** (changes to `config.py` are reviewed by A) |
 
-Fuera de `nina/`: A también escribe `scripts/` (salvo `export_openapi.py`), `data/boundaries/`, `docs/reference/`,
-`notebooks/`, `tests/test_global_ingest.py`. B también escribe `openapi.json`, `scripts/export_openapi.py`, el resto de
-`tests/`, dependencias, Docker, lanzadores y `.github/`. Nadie de A/B escribe `web/**`. Si necesitas algo de otro dueño:
-`docs/requests/<rol>-<slug>.md`.
+Outside `nina/`: A also writes `scripts/` (except `export_openapi.py`), `data/boundaries/`, `docs/reference/`,
+`notebooks/`, `tests/test_global_ingest.py`. B also writes `openapi.json`, `scripts/export_openapi.py`, the rest of
+`tests/`, dependencies, Docker, launchers and `.github/`. Neither A nor B writes `web/**`. If you need something from another
+owner: `docs/requests/<role>-<slug>.md`.
 
-## Reglas del paquete
+## Package rules
 
-- La lógica específica de sensor (origen, normalización, precedencia SP/NRT, exclusión de Landsat) solo en los
-  módulos de A. `analytics.py` y `main.py` consumen la base, no reinterpretan los originales.
-- Acceso a DuckDB solo con `store.database()` / `atomic_read`. Columnas nuevas: `ALTER TABLE … ADD COLUMN IF NOT EXISTS`
-  en `initialize()`, nunca romper bases existentes.
-- Un solo proceso escribe la base: las importaciones de consola usan `--data-dir data/<staging>` o el servidor detenido.
-- Rutas solo en `main.py`; la lógica, en `analytics.py`. Al cambiar rutas o modelos: `scripts/export_openapi.py` y avisar a C.
-- Toda fila descartada se cuenta (`rejected`, `duplicates`, `excluded_files`).
-- Hueco ≠ parcial ≠ cero en todo resultado.
-- Originales en `source/`: estáticos del equipo en la raíz (entrada de `scripts/import_global.py`, ámbito mundial) y todo lo
-  descargado o subido en `config.RAW` (`source/downloads/`). Nunca guardes descargas en la raíz de `source/` ni en `data/`.
-  Los derivados van en `config.DATA` (`data/`).
+- Sensor-specific logic (origin, normalization, SP/NRT precedence, Landsat exclusion) lives only in A's
+  modules. `analytics.py` and `main.py` consume the database; they do not reinterpret the original files.
+- DuckDB access only through `store.database()` / `atomic_read`. New columns: `ALTER TABLE … ADD COLUMN IF NOT EXISTS`
+  in `initialize()`; never break existing databases.
+- A single process writes the database: console imports use `--data-dir data/<staging>` or a stopped server.
+- Routes only in `main.py`; logic in `analytics.py`. When routes or models change: `scripts/export_openapi.py` and notify C.
+- Every discarded row is counted (`rejected`, `duplicates`, `excluded_files`).
+- Gap ≠ partial ≠ zero in every result.
+- Originals in `source/`: the team's static files at the root (input of `scripts/import_global.py`, global scope) and everything
+  downloaded or uploaded in `config.RAW` (`source/downloads/`). Never store downloads at the root of `source/` or in `data/`.
+  Derived files go in `config.DATA` (`data/`).
 
-## Verificación
+## Verification
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe scripts/export_openapi.py   # si cambió la API; commitear openapi.json
+.\.venv\Scripts\python.exe scripts/export_openapi.py   # if the API changed; commit openapi.json
 ```
 
-Commits: `feat(nina): …` (A), `feat(api): …` / `fix(api): …` (B) · Ramas: `nina/<slug>`, `api/<slug>`.
+Commits: `feat(nina): …` (A), `feat(api): …` / `fix(api): …` (B) · Branches: `nina/<slug>`, `api/<slug>`.

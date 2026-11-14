@@ -1,207 +1,207 @@
-# NINA · Fuentes de datos y estado de preparación
+# NINA · Data sources and readiness
 
-**Estado vigente 0.2:** [ESTADO_V2.md](ESTADO_V2.md). El archivo reúne 2.108.030 observaciones únicas en 57 archivos incorporados: 48 nacionales peruanos, 3 mundiales NRT del 14-nov-2026 y 6 ventanas MODIS SP del rectángulo australiano para septiembre de 2025. Se verificó realmente la disponibilidad FIRMS con MAP_KEY y se ejecutó la adquisición mensual desde la interfaz. El catálogo filtrado, sin credenciales, está en `data/catalog/firms-availability.json`. La cartografía de referencia usa NASA GIBS y Natural Earth 110m. Las credenciales Earthdata están configuradas localmente; la descarga/lectura científica L2 sigue pendiente. Las revisiones 0.1 siguientes conservan el contexto anterior.
+**Current status 0.2:** [STATUS_V2.md](STATUS_V2.md). The archive gathers 2,108,030 unique observations in 57 loaded files: 48 Peruvian national files, 3 global NRT files from 14 Nov 2026 and 6 MODIS SP windows for the Australian rectangle in September 2025. FIRMS availability was actually verified with a MAP_KEY and the monthly acquisition was run from the interface. The filtered catalog, without credentials, is in `data/catalog/firms-availability.json`. Reference cartography uses NASA GIBS and Natural Earth 110m. Earthdata credentials are configured locally; scientific L2 download/reading is still pending. The 0.1 reviews below keep the earlier context.
 
-**Actualización tras implementar 0.1:** se verificó el índice público `/data/country/yearly_summary_files.txt` utilizado por la página FIRMS, se descargaron sus 48 archivos nacionales y se importaron 2.034.899 detecciones. Los CSV ocupan exactamente 163.067.831 bytes. [Uso de la aplicación](../README.md), [estado actualizado](ESTADO_V1.md) y `data/inventory.json` documentan esta ejecución. Las secciones de revisión documental siguientes conservan el estado anterior donde no hubo una comprobación nueva; el estado vigente de implementación está en `ESTADO_V1.md`.
+**Update after implementing 0.1:** the public index `/data/country/yearly_summary_files.txt` used by the FIRMS page was verified, its 48 national files were downloaded and 2,034,899 detections were imported. The CSVs take exactly 163,067,831 bytes. [Application usage](../README.md), [updated status](STATUS_V1.md) and `data/inventory.json` document this run. The documentary review sections below keep the earlier state where there was no new check; the current implementation state is in `STATUS_V1.md`.
 
-**Alcance vigente: mundial, con adquisición por área/período y disponibilidad explícita.** El orden de ejecución está en [PLAN_IMPLEMENTACION.md](PLAN_IMPLEMENTACION.md). El histórico mundial completo y la validación científica global no se declaran completados.
+**Current scope: global, with per-area/period acquisition and explicit availability.** The execution order is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). The full global history and global scientific validation are not declared complete.
 
-> Ubicación actual: `DATA_SOURCES.md`, en la raíz del workspace. El pipeline de observaciones está implementado en `nina/` y `scripts/`. `docs/DATA_SOURCES.md` y `data/sources.yaml` no son rutas utilizadas por la versión 0.1.
-> Revisión documental inicial: 13-nov-2026. Posteriormente se descargó e importó el archivo público nacional y se consultaron muestras de metadatos CMR. Las credenciales y descargas autenticadas L2 siguen pendientes.
-> ⚠️ indica una ruta o condición pendiente de comprobación. Una URL documentada no equivale a un archivo descargado, leído y validado. Los identificadores ING/HAR/GAP/AUX del borrador son referencias de planificación; no acreditan tareas implementadas.
+> Current location: `DATA_SOURCES.md`, at the workspace root. The observation pipeline is implemented in `nina/` and `scripts/`. `docs/DATA_SOURCES.md` and `data/sources.yaml` are not paths used by version 0.1.
+> Initial documentary review: 13 Nov 2026. Later the national public archive was downloaded and imported and samples of CMR metadata were queried. Credentials and authenticated L2 downloads remain pending.
+> ⚠️ marks a path or condition pending verification. A documented URL is not the same as a downloaded, read and validated file. The ING/HAR/GAP/AUX identifiers of the draft are planning references; they do not certify implemented tasks.
 
-## Resultado de la revisión
+## Review result
 
-**La versión 0.1 ya tiene un conjunto nacional preparado de detecciones observadas; la armonización científica con oportunidades válidas sigue pendiente.** El recurso de la hackathon facilitado por el equipo enlaza a [NASA FIRMS](https://www.earthdata.nasa.gov/data/tools/firms); es un portal de productos y servicios, no un paquete de entrenamiento o una serie ya armonizada.
+**Version 0.1 already has a prepared national set of observed detections; scientific harmonization with valid opportunities remains pending.** The hackathon resource provided by the team links to [NASA FIRMS](https://www.earthdata.nasa.gov/data/tools/firms); it is a portal of products and services, not a training package or an already harmonized series.
 
-El texto de Resources recibido confirma esa fuente central. No establece que todos los auxiliares de este documento sean obligatorios. El acceso automático a la página del reto falló durante la revisión, por lo que no se certifica que el extracto compartido agote todas sus pestañas o futuras incorporaciones.
+The Resources text received confirms that central source. It does not establish that all the auxiliaries in this document are mandatory. Automatic access to the challenge page failed during the review, so it is not certified that the shared excerpt covers all its tabs or future additions.
 
-Correcciones principales: NOAA-21 dispone de fuente estándar en `area` y `data_availability`; el archivo FIRMS de NOAA-21 empieza el 1-mar-2023; las API `area` y `country` documentan límites distintos; se incorporan productos L2 para oportunidades de observación y se aclara qué falta validar. Véanse las secciones 4–6.
+Main corrections: NOAA-21 has a standard source in `area` and `data_availability`; the NOAA-21 FIRMS archive starts on 1 Mar 2023; the `area` and `country` APIs document different limits; L2 products for observation opportunities are added and what remains to be validated is clarified. See sections 4–6.
 
-## 0. Credenciales necesarias
+## 0. Required credentials
 
-| Variable de entorno | Para qué | Cómo se obtiene |
+| Environment variable | What for | How to obtain it |
 |---|---|---|
-| `FIRMS_MAP_KEY` | API de FIRMS (32 caracteres hexadecimales) | https://firms.modaps.eosdis.nasa.gov/api/map_key/ |
-| Earthdata Login mediante el mecanismo que admita el servicio (p. ej., `EARTHDATA_USERNAME` / `EARTHDATA_PASSWORD` o `~/.netrc`) | Descargas protegidas y productos científicos L2/auxiliares. Confirmar autenticación por servicio; una MAP_KEY no sustituye Earthdata Login | https://urs.earthdata.nasa.gov/ |
-| — | SFTP de la Universidad de Maryland (credenciales públicas, publicadas en la guía MODIS §4.3) | servidor `fuoco.geog.umd.edu`, usuario `fire`, contraseña `burnt` |
+| `FIRMS_MAP_KEY` | FIRMS API (32 hexadecimal characters) | https://firms.modaps.eosdis.nasa.gov/api/map_key/ |
+| Earthdata Login through the mechanism the service supports (e.g. `EARTHDATA_USERNAME` / `EARTHDATA_PASSWORD` or `~/.netrc`) | Protected downloads and scientific L2/auxiliary products. Confirm authentication per service; a MAP_KEY does not replace Earthdata Login | https://urs.earthdata.nasa.gov/ |
+| — | University of Maryland SFTP (public credentials, published in the MODIS guide §4.3) | server `fuoco.geog.umd.edu`, user `fire`, password `burnt` |
 
-Nunca se commitean credenciales. Se leen de las variables de entorno o de `~/.netrc`.
+Credentials are never committed. They are read from environment variables or from `~/.netrc`.
 
 ---
 
-## 1. Focos de calor · NASA FIRMS
+## 1. Hotspots · NASA FIRMS
 
-### 1.1 Estado de los sensores (al 13-nov-2026)
+### 1.1 Sensor status (as of 13 Nov 2026)
 
-| Sensor | Fuente en la API (NRT / estándar) | Cobertura | Estado |
+| Sensor | API source (NRT / standard) | Coverage | Status |
 |---|---|---|---|
-| MODIS C6.1 (Terra + Aqua) | `MODIS_NRT` / `MODIS_SP` | 1-nov-2000 → hoy | Activo. NASA recomienda migrar a otras fuentes; Terra es el único paso de la mañana |
-| VIIRS S-NPP | `VIIRS_SNPP_NRT` / `VIIRS_SNPP_SP` | 20-ene-2012 → **2-nov-2026** | ⛔ **Sin datos nuevos desde el 2-nov-2026**. El histórico sigue disponible |
-| VIIRS NOAA-20 | `VIIRS_NOAA20_NRT` / `VIIRS_NOAA20_SP` | 1-abr-2018 → hoy | Activo. **Ya existe la fuente estándar (`_SP`) en la API** |
-| VIIRS NOAA-21 | `VIIRS_NOAA21_NRT` / `VIIRS_NOAA21_SP` | **1-mar-2023 → presente, en el archivo FIRMS** | Ambas fuentes documentadas en `area` y `data_availability`. Consultar fechas efectivas antes de descargar; la página `country` aún no enumera `_SP` |
-| Landsat | `LANDSAT_NRT` | 20-jun-2022 → hoy | Excluido del proyecto (solo EE. UU./Canadá) |
+| MODIS C6.1 (Terra + Aqua) | `MODIS_NRT` / `MODIS_SP` | 1 Nov 2000 → today | Active. NASA recommends migrating to other sources; Terra is the only morning overpass |
+| VIIRS S-NPP | `VIIRS_SNPP_NRT` / `VIIRS_SNPP_SP` | 20 Jan 2012 → **2 Nov 2026** | ⛔ **No new data since 2 Nov 2026**. The history remains available |
+| VIIRS NOAA-20 | `VIIRS_NOAA20_NRT` / `VIIRS_NOAA20_SP` | 1 Apr 2018 → today | Active. **The standard source (`_SP`) already exists in the API** |
+| VIIRS NOAA-21 | `VIIRS_NOAA21_NRT` / `VIIRS_NOAA21_SP` | **1 Mar 2023 → present, in the FIRMS archive** | Both sources documented in `area` and `data_availability`. Check effective dates before downloading; the `country` page does not list `_SP` yet |
+| Landsat | `LANDSAT_NRT` | 20 Jun 2022 → today | Excluded from the project (US/Canada only) |
 
-Fuentes: [archivo FIRMS](https://firms.modaps.eosdis.nasa.gov/download/), [Area API](https://firms.modaps.eosdis.nasa.gov/api/area/), [disponibilidad](https://firms.modaps.eosdis.nasa.gov/api/data_availability/) y [transición de S-NPP](https://www.earthdata.nasa.gov/news/blog/transitioning-from-suomi-npp-viirs-omps-what-firms-users-need-know). Las fechas de esta tabla corresponden al archivo de puntos FIRMS, no necesariamente al comienzo de cada producto L2 ni a todas las variantes NRT/SP.
+Sources: [FIRMS archive](https://firms.modaps.eosdis.nasa.gov/download/), [Area API](https://firms.modaps.eosdis.nasa.gov/api/area/), [availability](https://firms.modaps.eosdis.nasa.gov/api/data_availability/) and [S-NPP transition](https://www.earthdata.nasa.gov/news/blog/transitioning-from-suomi-npp-viirs-omps-what-firms-users-need-know). The dates in this table correspond to the FIRMS point archive, not necessarily to the start of each L2 product or every NRT/SP variant.
 
-**Decisión para NINA:** conservar S-NPP para el historial y los experimentos de solapamiento; usar NOAA-20 y NOAA-21 para continuidad reciente, evaluando cada plataforma. El aviso de fin de entrega no elimina el histórico de S-NPP. «Presente» en un catálogo no certifica la disponibilidad del último día.
+**Decision for NINA:** keep S-NPP for the history and the overlap experiments; use NOAA-20 and NOAA-21 for recent continuity, evaluating each platform. The end-of-delivery notice does not remove the S-NPP history. "Present" in a catalog does not certify availability of the last day.
 
-### 1.2 API REST (requiere `FIRMS_MAP_KEY`)
+### 1.2 REST API (requires `FIRMS_MAP_KEY`)
 
 Base: `https://firms.modaps.eosdis.nasa.gov`
 
-| Servicio | URL | Uso en el proyecto |
+| Service | URL | Use in the project |
 |---|---|---|
-| Focos por área (lo más reciente) | `/api/area/csv/{MAP_KEY}/{SOURCE}/{W,S,E,N}/{DAY_RANGE}` | Job NRT diario |
-| Focos por área desde una fecha | `/api/area/csv/{MAP_KEY}/{SOURCE}/{W,S,E,N}/{DAY_RANGE}/{YYYY-MM-DD}` | Rellenos incrementales y reprocesos de los NRT → estándar |
-| Focos por país | `/api/country/csv/{MAP_KEY}/{SOURCE}/{ISO3}/{DAY_RANGE}[/{YYYY-MM-DD}]` | Alternativa a `area` para un país (p. ej., `PER`) |
-| Disponibilidad de fechas | `/api/data_availability/csv/{MAP_KEY}/{SOURCE\|ALL}` | Patrón confirmado en la [documentación](https://firms.modaps.eosdis.nasa.gov/api/data_availability/); consulta autenticada pendiente. Fechas de servicio, no cobertura válida de cada AOI |
-| Fechas sin datos | [Tabla publicada de missing data](https://firms.modaps.eosdis.nasa.gov/usfs/api/missing_data/) | Documenta días ausentes por satélite/tipo. Endpoint de datos y alcance aplicable a Perú pendientes; no asumir que existe `/api/missing_data/` ni que diagnostica nubosidad local |
-| Estado de la MAP_KEY | `/mapserver/mapkey_status/?MAP_KEY={MAP_KEY}` ⚠️ | Consultar el consumo de transacciones |
-| Documentación de la API | https://firms.modaps.eosdis.nasa.gov/api/area/ · https://firms.modaps.eosdis.nasa.gov/api/country/ · https://firms.modaps.eosdis.nasa.gov/api/data_availability/ | Separar documentación de rutas que devuelven CSV |
+| Hotspots by area (most recent) | `/api/area/csv/{MAP_KEY}/{SOURCE}/{W,S,E,N}/{DAY_RANGE}` | Daily NRT job |
+| Hotspots by area from a date | `/api/area/csv/{MAP_KEY}/{SOURCE}/{W,S,E,N}/{DAY_RANGE}/{YYYY-MM-DD}` | Incremental fills and NRT → standard reprocessing |
+| Hotspots by country | `/api/country/csv/{MAP_KEY}/{SOURCE}/{ISO3}/{DAY_RANGE}[/{YYYY-MM-DD}]` | Alternative to `area` for a country (e.g. `PER`) |
+| Date availability | `/api/data_availability/csv/{MAP_KEY}/{SOURCE\|ALL}` | Pattern confirmed in the [documentation](https://firms.modaps.eosdis.nasa.gov/api/data_availability/); authenticated query pending. Service dates, not valid coverage of each AOI |
+| Dates without data | [Published missing data table](https://firms.modaps.eosdis.nasa.gov/usfs/api/missing_data/) | Documents missing days per satellite/type. Data endpoint and scope applicable to Peru pending; do not assume that `/api/missing_data/` exists or that it diagnoses local cloudiness |
+| MAP_KEY status | `/mapserver/mapkey_status/?MAP_KEY={MAP_KEY}` ⚠️ | Check transaction usage |
+| API documentation | https://firms.modaps.eosdis.nasa.gov/api/area/ · https://firms.modaps.eosdis.nasa.gov/api/country/ · https://firms.modaps.eosdis.nasa.gov/api/data_availability/ | Separate documentation from routes that return CSV |
 
-- `AREA` = `oeste,sur,este,norte` en grados decimales (p. ej., Perú ≈ `-81.4,-18.4,-68.6,-0.03`), o `world`.
-- **Límites**: 5000 transacciones cada 10 minutos por MAP_KEY. Las solicitudes grandes pueden consumir múltiples transacciones; no asumir una equivalencia fija entre petición y transacción.
-  La [API `area`](https://firms.modaps.eosdis.nasa.gov/api/area/) documenta `DAY_RANGE` **1–5**; la [API `country`](https://firms.modaps.eosdis.nasa.gov/api/country/) documenta **1–10**. Configurar y comprobar por endpoint. Para el primer cliente de `area`, usar un máximo de 5; no enviar 10 porque otra API lo permita.
-- Los datos **RT** y **URT** (casi en tiempo real) se eliminan cuando se procesan los NRT correspondientes, o pasadas 6 h.
+- `AREA` = `west,south,east,north` in decimal degrees (e.g. Peru ≈ `-81.4,-18.4,-68.6,-0.03`), or `world`.
+- **Limits**: 5000 transactions every 10 minutes per MAP_KEY. Large requests can consume multiple transactions; do not assume a fixed equivalence between request and transaction.
+  The [`area` API](https://firms.modaps.eosdis.nasa.gov/api/area/) documents `DAY_RANGE` **1–5**; the [`country` API](https://firms.modaps.eosdis.nasa.gov/api/country/) documents **1–10**. Configure and check per endpoint. For the first `area` client, use a maximum of 5; do not send 10 because another API allows it.
+- **RT** and **URT** (near real time) data are removed when the corresponding NRT data are processed, or after 6 h.
 
-### 1.3 Archivos NRT de acceso directo (ventanas recientes; descarga pendiente de prueba)
+### 1.3 Direct-access NRT files (recent windows; download pending a test)
 
-Rutas candidatas para respaldo. No se comprobó en esta revisión el HTTP, contenido ni requisito de acceso de cada archivo. Validar redirecciones, cabecera CSV y última adquisición; una página de login devuelta como HTML no es una descarga de datos correcta.
+Candidate backup routes. The HTTP response, content and access requirement of each file were not checked in this review. Validate redirects, CSV header and last acquisition; a login page returned as HTML is not a correct data download.
 
-Patrón: `https://firms.modaps.eosdis.nasa.gov/data/active_fire/{carpeta}/{formato}/{PREFIJO}_{Región}_{24h|48h|7d}.{ext}`
+Pattern: `https://firms.modaps.eosdis.nasa.gov/data/active_fire/{folder}/{format}/{PREFIX}_{Region}_{24h|48h|7d}.{ext}`
 
-| Sensor | Carpeta | Prefijo | Ejemplo (global, 7 días, CSV) |
+| Sensor | Folder | Prefix | Example (global, 7 days, CSV) |
 |---|---|---|---|
 | MODIS C6.1 | `modis-c6.1` | `MODIS_C6_1` | https://firms.modaps.eosdis.nasa.gov/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_7d.csv |
 | NOAA-20 | `noaa-20-viirs-c2` | `J1_VIIRS_C2` | https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_7d.csv |
 | NOAA-21 | `noaa-21-viirs-c2` ⚠️ | `J2_VIIRS_C2` ⚠️ | https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_7d.csv ⚠️ |
-| S-NPP (congelado) | `suomi-npp-viirs-c2` | `SUOMI_VIIRS_C2` | ya no se actualiza |
+| S-NPP (frozen) | `suomi-npp-viirs-c2` | `SUOMI_VIIRS_C2` | no longer updated |
 
-- Regiones candidatas: `Global`, `South_America` ⚠️, `Central_America` ⚠️, etc. El borrador mencionaba `J1_VIIRS_C2_Northern_and_Central_Africa_24h.csv`; ese archivo no se volvió a descargar en esta revisión.
-- Shapefile: `.../{carpeta}/shapes/zips/{PREFIJO}_{Región}_{periodo}.zip` (p. ej., `.../modis-c6.1/shapes/zips/MODIS_C6_1_Europe_24h.zip`).
-- Uso: **respaldo** del job NRT cuando la API falla. No sirven para el histórico.
+- Candidate regions: `Global`, `South_America` ⚠️, `Central_America` ⚠️, etc. The draft mentioned `J1_VIIRS_C2_Northern_and_Central_Africa_24h.csv`; that file was not downloaded again in this review.
+- Shapefile: `.../{folder}/shapes/zips/{PREFIX}_{Region}_{period}.zip` (e.g. `.../modis-c6.1/shapes/zips/MODIS_C6_1_Europe_24h.zip`).
+- Use: **backup** for the NRT job when the API fails. Not useful for the history.
 
-### 1.4 Archivos de texto diarios (últimos ~2 meses, con Earthdata Login)
+### 1.4 Daily text files (last ~2 months, with Earthdata Login)
 
-- Principal: https://nrt3.modaps.eosdis.nasa.gov/archive/FIRMS
-- Respaldo: https://nrt4.modaps.eosdis.nasa.gov/archive/FIRMS
-- Guía: https://nrt3.modaps.eosdis.nasa.gov/archive/FIRMS/README.pdf
-- Uso propuesto: diagnóstico de ingestión reciente. Comprobar retención y acceso; los conteos globales no certifican cobertura de un AOI.
+- Main: https://nrt3.modaps.eosdis.nasa.gov/archive/FIRMS
+- Backup: https://nrt4.modaps.eosdis.nasa.gov/archive/FIRMS
+- Guide: https://nrt3.modaps.eosdis.nasa.gov/archive/FIRMS/README.pdf
+- Proposed use: diagnosing recent ingestion. Check retention and access; global counts do not certify coverage of an AOI.
 
-### 1.5 Histórico masivo
+### 1.5 Bulk history
 
-| Recurso | URL | Notas |
+| Resource | URL | Notes |
 |---|---|---|
-| Herramienta de descarga del archivo | https://firms.modaps.eosdis.nasa.gov/download/ | La página documenta CSV, SHP y JSON, autenticación por Earthdata o código por email y entrega de instrucciones por email. El importador inicial usará CSV; queda pendiente completar una solicitud y validar su archivo real |
-| Resúmenes anuales por país (CSV) | https://firms.modaps.eosdis.nasa.gov/country/ | Archivo por país y año. La forma más rápida de cargar el histórico de un país (p. ej., Perú) |
-| Índice público de archivos anuales | https://firms.modaps.eosdis.nasa.gov/data/country/yearly_summary_files.txt | Verificado y utilizado por `scripts/bootstrap_data.py`: proporciona nombre, bytes y fecha de actualización. Se descargaron los 48 archivos `*_Peru.csv` publicados al consultar el índice |
-| MCD14ML mensual global (MODIS) | `sftp://fuoco.geog.umd.edu` → `data/MODIS/C6/MCD14ML/MCD14ML.YYYYMM.006.03.txt.gz` (o `C61` ⚠️) | Archivos de detecciones para agregar por fecha/plataforma. Ruta, colección y parser pendientes de comprobar contra un archivo real y su guía; un conteo de cero no demuestra por sí solo un fallo de observación |
-| VIIRS mensual (UMD) | `sftp://fuoco.geog.umd.edu` → `data/VIIRS/C1/VNP14IMGML` ⚠️ | Opcional: equivalente VIIRS de MCD14ML (revisar la colección disponible) |
+| Archive download tool | https://firms.modaps.eosdis.nasa.gov/download/ | The page documents CSV, SHP and JSON, authentication through Earthdata or an email code, and delivery of instructions by email. The initial importer will use CSV; completing a request and validating its real file is pending |
+| Annual summaries by country (CSV) | https://firms.modaps.eosdis.nasa.gov/country/ | One file per country and year. The fastest way to load a country's history (e.g. Peru) |
+| Public index of annual files | https://firms.modaps.eosdis.nasa.gov/data/country/yearly_summary_files.txt | Verified and used by `scripts/bootstrap_data.py`: provides name, bytes and update date. The 48 `*_Peru.csv` files published when the index was queried were downloaded |
+| Global monthly MCD14ML (MODIS) | `sftp://fuoco.geog.umd.edu` → `data/MODIS/C6/MCD14ML/MCD14ML.YYYYMM.006.03.txt.gz` (or `C61` ⚠️) | Detection files to aggregate by date/platform. Path, collection and parser pending a check against a real file and its guide; a zero count alone does not prove an observation failure |
+| Monthly VIIRS (UMD) | `sftp://fuoco.geog.umd.edu` → `data/VIIRS/C1/VNP14IMGML` ⚠️ | Optional: VIIRS equivalent of MCD14ML (check the available collection) |
 
-### 1.6 Documentación de productos y DOI para citar
+### 1.6 Product documentation and DOIs for citation
 
-| Producto | Página / documento | DOI del dataset |
+| Product | Page / document | Dataset DOI |
 |---|---|---|
 | MCD14DL (MODIS NRT) | https://www.earthdata.nasa.gov/node/13777 | 10.5067/FIRMS/MODIS/MCD14DL.NRT.0061 |
-| MCD14ML (MODIS estándar) | Guía MODIS C6/C6.1 v1.0: https://www.earthdata.nasa.gov/s3fs-public/2023-09/MODIS_C6_C6.1_Fire_User_Guide_1.0.pdf | 10.5067/FIRMS/MODIS/MCD14ML |
+| MCD14ML (MODIS standard) | MODIS C6/C6.1 guide v1.0: https://www.earthdata.nasa.gov/s3fs-public/2023-09/MODIS_C6_C6.1_Fire_User_Guide_1.0.pdf | 10.5067/FIRMS/MODIS/MCD14ML |
 | VNP14IMGTDL_NRT (S-NPP) | https://www.earthdata.nasa.gov/node/13827 | 10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002 |
 | VJ114IMGTDL_NRT (NOAA-20) | https://www.earthdata.nasa.gov/node/13826 | 10.5067/FIRMS/VIIRS/VJ114IMGT_NRT.002 |
-| VJ214IMGTDL_NRT (NOAA-21) | https://www.earthdata.nasa.gov/node/13825 | ver la página del producto |
-| Atributos MODIS/VIIRS | https://www.earthdata.nasa.gov/data/tools/firms/active-fire-data-attributes-modis-viirs | — |
-| Guía del algoritmo VIIRS 375 m | https://viirsland.gsfc.nasa.gov/PDF/VIIRS_activefire_User_Guide.pdf | — |
-| Fin de S-NPP en FIRMS | https://www.earthdata.nasa.gov/news/blog/transitioning-from-suomi-npp-viirs-omps-what-firms-users-need-know | — |
-| Historial de alertas e interrupciones | https://www.earthdata.nasa.gov/data/alerts-outages/content/data-alert-history/21880 | — |
+| VJ214IMGTDL_NRT (NOAA-21) | https://www.earthdata.nasa.gov/node/13825 | see the product page |
+| MODIS/VIIRS attributes | https://www.earthdata.nasa.gov/data/tools/firms/active-fire-data-attributes-modis-viirs | — |
+| VIIRS 375 m algorithm guide | https://viirsland.gsfc.nasa.gov/PDF/VIIRS_activefire_User_Guide.pdf | — |
+| End of S-NPP in FIRMS | https://www.earthdata.nasa.gov/news/blog/transitioning-from-suomi-npp-viirs-omps-what-firms-users-need-know | — |
+| History of alerts and outages | https://www.earthdata.nasa.gov/data/alerts-outages/content/data-alert-history/21880 | — |
 
 ---
 
-## 2. Datos auxiliares
+## 2. Auxiliary data
 
-| Dato | URL | Notas |
+| Data | URL | Notes |
 |---|---|---|
-| **Límites administrativos GADM 4.1** | Patrón: `https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_{ISO3}.gpkg` (p. ej., `gadm41_PER.gpkg`). Índice SHP: https://geodata.ucdavis.edu/gadm/gadm4.1/shp/ | La [licencia publicada](https://gadm.org/license.html) permite usos académicos/no comerciales y exige permiso previo para **redistribución o uso comercial**. No incorporar el archivo a una descarga pública o repositorio por defecto; seleccionar una geometría con condiciones adecuadas al uso de NINA |
-| Límites oficiales del Perú (INEI/IGN) | Portal de datos abiertos del INEI ⚠️ | Opcional, para tener nombres oficiales |
-| **Ecorregiones RESOLVE 2017** | Shapefile (~150 MB, CC-BY 4.0): https://storage.googleapis.com/teow2016/Ecoregions2017.zip ⚠️ · Visor: https://ecoregions2017.appspot.com/ · Earth Engine: `RESOLVE/ECOREGIONS/2017` | 846 ecorregiones, 14 biomas. Estratos de HAR-01 |
-| **MCD12Q1 v6.1** (cobertura del suelo, 500 m, anual) | DOI: https://doi.org/10.5067/MODIS/MCD12Q1.061 · [Catálogo del producto](https://www.earthdata.nasa.gov/data/catalog/lpcloud-mcd12q1-061) · Recortes por región: https://appeears.earthdatacloud.nasa.gov/ | Clase urbana = IGBP 13 (`LC_Type1`). Incluye `LW`. El catálogo confirma **cautela para 2021 en adelante** por desactualización del entrenamiento. Contexto/estratificación opcional; no reemplaza una máscara de observación de cada pasada |
-| GHSL (zonas urbanas, alternativa) | https://human-settlement.emergency.copernicus.eu/ ⚠️ | Alternativa a MCD12Q1 para la máscara urbana después de 2021 |
-| **Volcanes · Smithsonian GVP** (Volcanoes of the World v5.4.0, 7-ago-2026) | Base de datos: https://volcano.si.edu/ · DOI: https://doi.org/10.5479/si.GVP.VOTW5-2026.5.4 · WFS (GeoJSON): `https://webservices.volcano.si.edu/geoserver/GVP-VOTW/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=GVP-VOTW:Smithsonian_VOTW_Holocene_Volcanoes&outputFormat=json` ⚠️ | Citar la versión y la fecha de descarga |
-| **MCD64A1 v6.1** (área quemada, opcional) | DOI: https://doi.org/10.5067/MODIS/MCD64A1.061 · `sftp://fuoco.geog.umd.edu` → `data/MODIS/C6/MCD64A1` | Contraste complementario, no verdad equivalente a focos ni evidencia plenamente independiente de MODIS; documentar las dependencias del algoritmo |
-| **MOD14CMQ / MYD14CMQ** (grilla de 0,25°, mensual, opcional) | `sftp://fuoco.geog.umd.edu` → `data/MODIS/C6/Mx14CMQ` ⚠️ | Diagnóstico agregado que requiere verificar contenido y versión. Su escala mensual/0,25° no sustituye las oportunidades de observación por celda/pasada del método propuesto |
-| Zonas horarias IANA | Releases: https://github.com/evansiroky/timezone-boundary-builder/releases → `timezones-with-oceans.geojson.zip` | Fecha local en la API (licencia ODbL, datos de OSM) |
-| Repositorios LP DAAC / LAADS | https://lpdaac.usgs.gov/ · https://ladsweb.modaps.eosdis.nasa.gov/ | Productos MODIS de tierra y de nivel 1 |
+| **GADM 4.1 administrative boundaries** | Pattern: `https://geodata.ucdavis.edu/gadm/gadm4.1/gpkg/gadm41_{ISO3}.gpkg` (e.g. `gadm41_PER.gpkg`). SHP index: https://geodata.ucdavis.edu/gadm/gadm4.1/shp/ | The [published license](https://gadm.org/license.html) allows academic/non-commercial use and requires prior permission for **redistribution or commercial use**. Do not include the file in a public download or repository by default; choose a geometry with terms suited to NINA's use |
+| Official boundaries of Peru (INEI/IGN) | INEI open data portal ⚠️ | Optional, to get official names |
+| **RESOLVE 2017 ecoregions** | Shapefile (~150 MB, CC-BY 4.0): https://storage.googleapis.com/teow2016/Ecoregions2017.zip ⚠️ · Viewer: https://ecoregions2017.appspot.com/ · Earth Engine: `RESOLVE/ECOREGIONS/2017` | 846 ecoregions, 14 biomes. Strata for HAR-01 |
+| **MCD12Q1 v6.1** (land cover, 500 m, annual) | DOI: https://doi.org/10.5067/MODIS/MCD12Q1.061 · [Product catalog](https://www.earthdata.nasa.gov/data/catalog/lpcloud-mcd12q1-061) · Regional subsets: https://appeears.earthdatacloud.nasa.gov/ | Urban class = IGBP 13 (`LC_Type1`). Includes `LW`. The catalog confirms **caution for 2021 onwards** because the training data are out of date. Optional context/stratification; it does not replace an observation mask for each overpass |
+| GHSL (urban areas, alternative) | https://human-settlement.emergency.copernicus.eu/ ⚠️ | Alternative to MCD12Q1 for the urban mask after 2021 |
+| **Volcanoes · Smithsonian GVP** (Volcanoes of the World v5.4.0, 7 Aug 2026) | Database: https://volcano.si.edu/ · DOI: https://doi.org/10.5479/si.GVP.VOTW5-2026.5.4 · WFS (GeoJSON): `https://webservices.volcano.si.edu/geoserver/GVP-VOTW/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=GVP-VOTW:Smithsonian_VOTW_Holocene_Volcanoes&outputFormat=json` ⚠️ | Cite the version and download date |
+| **MCD64A1 v6.1** (burned area, optional) | DOI: https://doi.org/10.5067/MODIS/MCD64A1.061 · `sftp://fuoco.geog.umd.edu` → `data/MODIS/C6/MCD64A1` | Complementary cross-check, not a truth equivalent to hotspots nor evidence fully independent of MODIS; document the algorithm's dependencies |
+| **MOD14CMQ / MYD14CMQ** (0.25° grid, monthly, optional) | `sftp://fuoco.geog.umd.edu` → `data/MODIS/C6/Mx14CMQ` ⚠️ | Aggregated diagnostic that requires checking content and version. Its monthly/0.25° scale does not replace the per-cell/per-overpass observation opportunities of the proposed method |
+| IANA time zones | Releases: https://github.com/evansiroky/timezone-boundary-builder/releases → `timezones-with-oceans.geojson.zip` | Local date in the API (ODbL license, OSM data) |
+| LP DAAC / LAADS repositories | https://lpdaac.usgs.gov/ · https://ladsweb.modaps.eosdis.nasa.gov/ | MODIS land and level-1 products |
 
-Estos auxiliares son elecciones de diseño, no una lista de requisitos de la hackathon. Para el piloto peruano puede declararse `America/Lima` sin incorporar todavía una capa mundial de zonas horarias. No excluir automáticamente focos urbanos, agrícolas o industriales: el enunciado incluye quemas antropogénicas; cualquier filtro debe ser explícito y configurable.
+These auxiliaries are design choices, not a list of hackathon requirements. For the Peruvian pilot `America/Lima` can be declared without adding a global time-zone layer yet. Do not automatically exclude urban, agricultural or industrial hotspots: the challenge statement includes anthropogenic burning; any filter must be explicit and configurable.
 
 ---
 
-## 3. Estrategia de descarga recomendada
+## 3. Recommended download strategy
 
-| Necesidad | Fuente | Frecuencia |
+| Need | Source | Frequency |
 |---|---|---|
-| Histórico MODIS de la región (2000-11 → último estándar) | Archivo CSV o resúmenes por país | Carga inicial + comprobación periódica de revisiones |
-| Histórico VIIRS S-NPP (2012-01-20 → 2026-11-02) | Herramienta de descarga del archivo (`VIIRS_SNPP_SP`) | Carga histórica y control de revisiones: terminó la adquisición nueva, pero pueden cambiar versiones o reprocesamientos |
-| Histórico VIIRS NOAA-20 (2018-04 →) | Herramienta de descarga del archivo o API `VIIRS_NOAA20_SP` | Una vez + incremental |
-| Histórico VIIRS NOAA-21 (archivo FIRMS desde 2023-03-01) | Archivo o `area` con `VIIRS_NOAA21_SP`, tras comprobar disponibilidad | Carga histórica + incremental; no suponer soporte idéntico en `country` |
-| Recientes (NRT) | API `area` con `MODIS_NRT`, `VIIRS_NOAA20_NRT` y `VIIRS_NOAA21_NRT` | Diaria |
-| Reemplazo de NRT por estándar | Archivo/API, `_SP` y `data_availability`; comprobar rango y volumen | Revisión periódica. Conservar versiones para reproducir resultados; el archivo FIRMS indica un desfase aproximado de 5 meses, no un plazo garantizado |
-| Diagnóstico de disponibilidad | Catálogo/tabla de faltantes + ingestión y comprobación de gránulos | Los conteos globales sirven como señal de diagnóstico; no identifican solos la cobertura local ni prueban que un día sin focos sea un hueco |
+| MODIS history of the region (2000-11 → latest standard) | CSV archive or country summaries | Initial load + periodic revision check |
+| VIIRS S-NPP history (2012-01-20 → 2026-11-02) | Archive download tool (`VIIRS_SNPP_SP`) | Historical load and revision control: new acquisition has ended, but versions or reprocessing may change |
+| VIIRS NOAA-20 history (2018-04 →) | Archive download tool or `VIIRS_NOAA20_SP` API | Once + incremental |
+| VIIRS NOAA-21 history (FIRMS archive from 2023-03-01) | Archive or `area` with `VIIRS_NOAA21_SP`, after checking availability | Historical load + incremental; do not assume identical support in `country` |
+| Recent (NRT) | `area` API with `MODIS_NRT`, `VIIRS_NOAA20_NRT` and `VIIRS_NOAA21_NRT` | Daily |
+| Replacing NRT with standard | Archive/API, `_SP` and `data_availability`; check range and volume | Periodic review. Keep versions to reproduce results; the FIRMS archive indicates a lag of about 5 months, not a guaranteed delay |
+| Availability diagnosis | Catalog/missing-data table + ingestion and granule checks | Global counts serve as a diagnostic signal; alone they do not identify local coverage or prove that a day without hotspots is a gap |
 
 ---
 
-## 4. Datos que faltaban en el catálogo para la armonización propuesta
+## 4. Data missing from the catalog for the proposed harmonization
 
-Los puntos de FIRMS bastan para comenzar a importar detecciones, visualizar mapas y construir conteos brutos por sensor. La arquitectura de NINA añade un objetivo científico: estimar conteos bajo un protocolo de observación común. Para ese método hay que poder reconstruir oportunidades válidas, incluidos ceros observados. Los siguientes productos no son nuevos requisitos atribuidos a NASA; son entradas necesarias para esa metodología.
+FIRMS points are enough to start importing detections, display maps and build raw counts per sensor. NINA's architecture adds a scientific goal: estimating counts under a common observation protocol. For that method, valid opportunities must be rebuilt, including observed zeros. The following products are not new requirements attributed to NASA; they are inputs needed for that methodology.
 
-| Plataforma | Producto de fuego L2 | Formato | Inicio indicado por el catálogo L2 | Uso |
+| Platform | L2 fire product | Format | Start stated by the L2 catalog | Use |
 |---|---|---|---|---|
-| Terra MODIS | [MOD14 C6.1](https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod14-061) | HDF4 | 24-feb-2000 | Máscara, calidad y puente del historial anterior a Aqua |
-| Aqua MODIS | [MYD14 C6.1](https://www.earthdata.nasa.gov/data/catalog/lpcloud-myd14-061) | HDF4 | 4-jul-2002 | Referencia instrumental inicial propuesta para NINA |
-| S-NPP VIIRS | [VNP14IMG C2](https://www.earthdata.nasa.gov/data/catalog/lpcloud-vnp14img-002) | NetCDF-4 | 17-ene-2012 | Entrenamiento y evaluación en solapamiento; histórico tras el fin de entrega nueva |
-| NOAA-20 VIIRS | [VJ114IMG C2](https://www.earthdata.nasa.gov/data/catalog/lpcloud-vj114img-002) | NetCDF-4 | 1-ene-2018 | Continuidad y prueba de transferencia entre plataformas |
-| NOAA-21 VIIRS | [VJ214IMG C2](https://www.earthdata.nasa.gov/data/catalog/lpcloud-vj214img-002) | NetCDF-4 | 10-feb-2023 | Continuidad reciente y prueba adicional por plataforma |
+| Terra MODIS | [MOD14 C6.1](https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod14-061) | HDF4 | 24 Feb 2000 | Mask, quality and bridge for the history before Aqua |
+| Aqua MODIS | [MYD14 C6.1](https://www.earthdata.nasa.gov/data/catalog/lpcloud-myd14-061) | HDF4 | 4 Jul 2002 | Initial instrument reference proposed for NINA |
+| S-NPP VIIRS | [VNP14IMG C2](https://www.earthdata.nasa.gov/data/catalog/lpcloud-vnp14img-002) | NetCDF-4 | 17 Jan 2012 | Training and evaluation in the overlap; history after the end of new delivery |
+| NOAA-20 VIIRS | [VJ114IMG C2](https://www.earthdata.nasa.gov/data/catalog/lpcloud-vj114img-002) | NetCDF-4 | 1 Jan 2018 | Continuity and cross-platform transfer test |
+| NOAA-21 VIIRS | [VJ214IMG C2](https://www.earthdata.nasa.gov/data/catalog/lpcloud-vj214img-002) | NetCDF-4 | 10 Feb 2023 | Recent continuity and an additional per-platform test |
 
-**Las fechas L2 difieren de las del archivo FIRMS de puntos.** El estado del catálogo o el sufijo `_SP` no garantizan que cualquier día/AOI esté completo: consultar disponibilidad y comprobar los gránulos efectivos.
+**L2 dates differ from those of the FIRMS point archive.** The catalog state or the `_SP` suffix do not guarantee that any day/AOI is complete: check availability and verify the effective granules.
 
-### Geolocalización, máscaras y calidad
+### Geolocation, masks and quality
 
-- Añadir explícitamente la geolocalización correspondiente al producto y colección. Los catálogos VIIRS consultados señalan `VNP03MODLL`, `VJ103MODLL` y `VJ203MODLL`, respectivamente. La guía y un gránulo real deben confirmar cómo alinear esos datos con la máscara; no asumir coincidencia de dimensiones entre todas las capas.
-- Para MODIS, verificar en la guía la geolocalización incluida y las dependencias necesarias para la máscara completa y la geometría, usando los productos de geolocalización correspondientes cuando proceda. No se fija todavía una ruta binaria no probada.
-- Leer códigos de máscara, calidad, relleno, agua, nubes y ausencia de observación según la versión. Una columna de `confidence` de puntos no sustituye esos estados.
-- Registrar hora de pasada, geometría de observación y exposición. Si una variable requerida no está en el producto elegido, incorporar su dependencia documentada o limitar el método.
-- Distinguir MODIS Terra de Aqua aunque se obtengan desde una fuente combinada de FIRMS. Comparar todas las pasadas matutinas y vespertinas como si fueran equivalentes introduciría un sesgo.
-- No sumar plataformas VIIRS de forma que incorporar otro satélite duplique el muestreo objetivo. Preservar plataforma, oportunidad y protocolo de referencia.
+- Explicitly add the geolocation matching the product and collection. The VIIRS catalogs consulted point to `VNP03MODLL`, `VJ103MODLL` and `VJ203MODLL`, respectively. The guide and a real granule must confirm how to align those data with the mask; do not assume matching dimensions across all layers.
+- For MODIS, check in the guide the included geolocation and the dependencies needed for the full mask and the geometry, using the corresponding geolocation products where appropriate. No untested binary path is fixed yet.
+- Read mask, quality, fill, water, cloud and no-observation codes according to the version. A point `confidence` column does not replace those states.
+- Record overpass time, observation geometry and exposure. If a required variable is not in the chosen product, add its documented dependency or limit the method.
+- Distinguish MODIS Terra from Aqua even when obtained from a combined FIRMS source. Comparing all morning and afternoon overpasses as if they were equivalent would introduce a bias.
+- Do not add VIIRS platforms together in a way that adding another satellite duplicates the target sampling. Keep platform, opportunity and reference protocol.
 
-Antes de escalar, descargar y leer al menos un par de productos por plataforma/colección objetivo, con su geolocalización, para comprobar driver HDF4/NetCDF, campos, unidades, dimensiones, máscaras y alineación. En 0.1 se verificaron documentación y muestras de metadatos de gránulos CMR mediante `scripts/inventory_l2.py`; no se ha leído todavía el contenido científico L2.
+Before scaling, download and read at least one pair of products per target platform/collection, with its geolocation, to check the HDF4/NetCDF driver, fields, units, dimensions, masks and alignment. In 0.1, documentation and samples of CMR granule metadata were verified through `scripts/inventory_l2.py`; the L2 scientific content has not been read yet.
 
-### Auxiliares y contraste
+### Auxiliaries and cross-checks
 
-Para la primera versión bastan un AOI bien definido y los datos que exige el protocolo de observación. Ecorregiones, cobertura del suelo, fuentes térmicas persistentes y área quemada se incorporan cuando respondan una pregunta o mejoren una evaluación.
+For the first version, a well-defined AOI and the data required by the observation protocol are enough. Ecoregions, land cover, persistent thermal sources and burned area are added when they answer a question or improve an evaluation.
 
-La [ficha RESOLVE](https://developers.google.com/earth-engine/datasets/catalog/RESOLVE_ECOREGIONS_2017) confirma 846 ecorregiones y CC-BY 4.0; eso no verifica por sí solo el enlace ZIP del borrador. La advertencia de MCD12Q1 desde 2021 está confirmada en su [catálogo](https://www.earthdata.nasa.gov/data/catalog/lpcloud-mcd12q1-061). Las rutas de GVP, GHSL, SFTP y archivos directos conservan el estado pendiente de prueba donde corresponde; no se realizó una validación de descarga exhaustiva de cada auxiliar.
+The [RESOLVE page](https://developers.google.com/earth-engine/datasets/catalog/RESOLVE_ECOREGIONS_2017) confirms 846 ecoregions and CC-BY 4.0; that alone does not verify the draft's ZIP link. The MCD12Q1 warning from 2021 is confirmed in its [catalog](https://www.earthdata.nasa.gov/data/catalog/lpcloud-mcd12q1-061). The GVP, GHSL, SFTP and direct-file routes keep their pending-test state where appropriate; no exhaustive download validation of each auxiliary was done.
 
-## 5. Qué tenemos y qué falta
+## 5. What we have and what is missing
 
-| Elemento | Estado comprobado en el workspace | Criterio para darlo por listo |
+| Item | State checked in the workspace | Criterion to consider it ready |
 |---|---|---|
-| Recurso publicado del reto | Texto facilitado por el equipo: enlace a FIRMS | Conservar procedencia; revisar cualquier ampliación del organizador |
-| Arquitectura y experiencia | `NINA-arquitectura.md` y `nina-demo.html` existentes | Mantener distinción entre prototipo y resultados reales |
-| Inventario de fuentes | Documentación contrastada; rutas candidatas marcadas | Fijar productos, colecciones, disponibilidad y contrato de ingestión |
-| Credenciales | No configuradas al entregar 0.1; descarga pública verificada | Consulta autenticada y descarga científica correctas |
-| Dataset nacional | 48 CSV, 2.034.899 detecciones únicas, hashes y Parquet | Añadir entradas L2 y datos recientes por otra vía |
-| Geometría nacional | geoBoundaries versionado, representación de 2008; 5.452 detecciones sin departamento en esa geometría | Evaluar geometría oficial actual y conservar trazabilidad |
-| Pipeline | Descarga reanudable, ingestión, deduplicación técnica y exportación Parquet implementadas | Completar el procesamiento de oportunidades L2 |
-| Armonización | Dos modelos Poisson exploratorios ajustados a conteos, con benchmark reservado | Validar el método científico con exposición, máscaras y puentes entre plataformas |
-| Calendario real | Aplicación React/API conectada al archivo nacional observado | Incorporar serie armonizada validada y cobertura |
-| Asistente | Motor local conectado a análisis reales; adaptador LLM preparado | Probar proveedor externo configurado y evaluar con usuarios |
+| Published challenge resource | Text provided by the team: link to FIRMS | Keep provenance; review any extension by the organizer |
+| Architecture and experience | `ARCHITECTURE.md` and `nina-demo.html` exist | Keep the distinction between prototype and real results |
+| Source inventory | Cross-checked documentation; candidate routes marked | Fix products, collections, availability and ingestion contract |
+| Credentials | Not configured when 0.1 was delivered; public download verified | Correct authenticated query and scientific download |
+| National dataset | 48 CSVs, 2,034,899 unique detections, hashes and Parquet | Add L2 inputs and recent data by another route |
+| National geometry | Versioned geoBoundaries, 2008 representation; 5,452 detections without a department in that geometry | Evaluate the current official geometry and keep traceability |
+| Pipeline | Resumable download, ingestion, technical deduplication and Parquet export implemented | Complete L2 opportunity processing |
+| Harmonization | Two exploratory Poisson models fitted to counts, with a held-out benchmark | Validate the scientific method with exposure, masks and platform bridges |
+| Real calendar | React application/API connected to the observed national archive | Add a validated harmonized series and coverage |
+| Assistant | Local engine connected to real analyses; LLM adapter prepared | Test a configured external provider and evaluate with users |
 
-La publicación de Resources resuelve la incertidumbre sobre la fuente central. No transforma automáticamente un catálogo de URLs en un dataset listo, ni demuestra que un modelo funcione. Tampoco aporta, en el texto recibido, etiquetas de entrenamiento/test o un benchmark oficial ya preparado.
+The Resources publication resolves the uncertainty about the central source. It does not automatically turn a catalog of URLs into a ready dataset, nor does it prove that a model works. Nor does it provide, in the text received, training/test labels or an already prepared official benchmark.
 
-## 6. Cómo seguir: implementación nacional
+## 6. How to proceed: national implementation
 
-El [plan de implementación](PLAN_IMPLEMENTACION.md) sustituye la secuencia anterior centrada en un piloto de Madre de Dios. Define 18 tareas con dependencias, responsables propuestos y resultados comprobables.
+The [implementation plan](IMPLEMENTATION_PLAN.md) replaces the earlier sequence centered on a Madre de Dios pilot. It defines 18 tasks with dependencies, proposed owners and verifiable results.
 
-La primera adquisición se organiza para todo el Perú. Se inventarían las detecciones históricas por fuente/período y los gránulos L2 y dependencias que intersectan el país. Después de probar formatos y accesos con lotes pequeños se ejecuta la descarga nacional reanudable. Los lotes pequeños son una prueba técnica, no una reducción del alcance territorial.
+The first acquisition is organized for all of Peru. Historical detections per source/period and the L2 granules and dependencies that intersect the country are inventoried. After testing formats and access with small batches, the resumable national download is run. The small batches are a technical test, not a reduction of the territorial scope.
 
-Todavía no se conoce el volumen total de bytes: debe medirse en el inventario y distinguir descarga acumulada, almacenamiento permanente y espacio temporal. Los archivos de pasadas pueden extenderse más allá del país; seleccionar Perú no equivale a recibir automáticamente todos los productos científicos recortados.
+The total volume in bytes is not known yet: it must be measured in the inventory, distinguishing cumulative download, permanent storage and temporary space. Overpass files can extend beyond the country; selecting Peru does not mean automatically receiving all the scientific products clipped.
 
-El primer hito funcional de consulta y exportación de observaciones reales nacionales ya está implementado. El calendario armonizado requiere oportunidades válidas y evaluación en regiones/períodos reservados de condiciones diversas. El asistente local ya consulta las salidas observadas; la conexión de un proveedor LLM y la fase científica completa conservan sus estados pendientes.
+The first functional milestone of querying and exporting real national observations is already implemented. The harmonized calendar requires valid opportunities and evaluation on held-out regions/periods with diverse conditions. The local assistant already queries the observed outputs; connecting an LLM provider and the full scientific phase keep their pending states.

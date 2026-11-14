@@ -1,33 +1,34 @@
-# AGENTS.md · Rol C — Web (`web/`)
+# AGENTS.md · Role C — Web (`web/`)
 
-> Prevalece sobre el `AGENTS.md` raíz para los archivos de esta carpeta. Reparto completo en `WORK_PLAN.md` §2.
+> Takes precedence over the root `AGENTS.md` for files in this folder. Full split of responsibilities in `WORK_PLAN.md` §2.
 
-## Puedes escribir
+## You may write
 
 - `web/**`, `design/**`, `nina-demo.html`, `.nvmrc`.
 
-## No escribas
+## Do not write
 
-`nina/**`, `scripts/**`, `tests/**`, `openapi.json`, `data/**`, dependencias Python, Docker, lanzadores, `.github/**`.
-Si necesitas un cambio en la API: `docs/requests/api-<slug>.md`.
+`nina/**`, `scripts/**`, `tests/**`, `openapi.json`, `data/**`, Python dependencies, Docker, launchers, `.github/**`.
+If you need an API change: `docs/requests/api-<slug>.md`.
 
-## Reglas del área
+## Area rules
 
-- React + Vite + TypeScript `strict` + CesiumJS. Dependencias con `npm.cmd --prefix web install <pkg>` (commitea
-  `package-lock.json`; nunca lo edites a mano).
-- Los tipos de la API viven solo en `src/types.ts` y las llamadas en `src/api.ts`; deben coincidir con `openapi.json`.
-  Si no coinciden, pide el cambio a B, no adaptes la respuesta en el componente.
-- Trabaja contra el servidor local (`.\start-nina.ps1`) con datos reales; `npm.cmd --prefix web run dev` para desarrollo.
-- Las observaciones se muestran identificadas por instrumento/plataforma; nunca sumes sensores en la interfaz.
-- Hueco ≠ parcial ≠ cero: un hueco nunca se pinta como 0 (gris con trama); parcial y provisional, distinguibles.
-- Cita y aviso de FIRMS visibles (AGENTS §11); atribución de cartografía en `public/assets/attribution.json`.
-- Un componente por archivo en `src/`; si un archivo crece demasiado, divídelo en una carpeta por funcionalidad.
-- Funciones a medio terminar, detrás de `VITE_FEATURE_*`.
+- React + Vite + TypeScript `strict` + CesiumJS. Dependencies via `npm.cmd --prefix web install <pkg>` (commit
+  `package-lock.json`; never edit it by hand).
+- API types live only in `src/types.ts` and calls in `src/api.ts`; they must match `openapi.json`.
+  If they do not match, ask B for the change; do not adapt the response inside the component.
+- Work against the local server (`.\start-nina.ps1`) with real data; `npm.cmd --prefix web run dev` for development.
+- Observations are always shown identified by instrument/platform; never add sensors together in the interface.
+- Gap ≠ partial ≠ zero: a gap is never painted as 0 (grey with hatching); partial and provisional must be distinguishable.
+- FIRMS citation and warning visible (AGENTS §11); cartography attribution in `public/assets/attribution.json`.
+- Interface text is bilingual (English by default, Spanish available) through `tr()` in `src/i18n.ts`.
+- One component per file in `src/`; if a file grows too large, split it into a folder per feature.
+- Half-finished features go behind `VITE_FEATURE_*`.
 
-## Verificación
+## Verification
 
 ```powershell
 npm.cmd --prefix web run build
 ```
 
-Commits: `feat(web): …` · Ramas: `web/<slug>`.
+Commits: `feat(web): …` · Branches: `web/<slug>`.

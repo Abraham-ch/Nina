@@ -1,72 +1,72 @@
-# Contrato de la API y de la base de datos
+# API and database contract
 
-> Ubicación en el repo: `docs/API_CONTRACT.md`. Versión del contrato: **v0.2.0**.
+> Location in the repo: `docs/API_CONTRACT.md`. Contract version: **v0.2.0**.
 >
-> **Estado: diseño objetivo de la versión armonizada, NO implementado.** La API vigente es la del MVP
-> (`nina/main.py`, rutas `/api/*`), descrita en `openapi.json` y en AGENTS §12. Este documento fija hacia dónde
-> evoluciona. Donde asume tecnologías que el MVP no usa, la implementación sigue al MVP salvo ADR:
+> **Status: target design of the harmonized version, NOT implemented.** The current API is the MVP one
+> (`nina/main.py`, `/api/*` routes), described in `openapi.json` and in AGENTS §12. This document sets where it
+> evolves. Where it assumes technologies the MVP does not use, the implementation follows the MVP unless an ADR says otherwise:
 >
-> | Este documento | Implementación en el MVP |
+> | This document | MVP implementation |
 > |---|---|
-> | Esquema `serving` en PostGIS, migraciones SQL, Alembic | Tablas DuckDB en `nina/store.py` (`data/nina.duckdb`) |
-> | Teselas Martin (`serving.v_hotspots_tiles`) | `GET /api/analyses/{id}/points` + CesiumJS |
-> | Caché Redis | Análisis persistidos en la tabla `analyses` |
-> | `nina.stats` | `nina/analytics.py` (y `nina/science.py` para la calibración) |
-> | Seed `packages/schemas/db/seed/` | Bases sintéticas creadas por `tests/` |
+> | `serving` schema in PostGIS, SQL migrations, Alembic | DuckDB tables in `nina/store.py` (`data/nina.duckdb`) |
+> | Martin tiles (`serving.v_hotspots_tiles`) | `GET /api/analyses/{id}/points` + CesiumJS |
+> | Redis cache | Analyses persisted in the `analyses` table |
+> | `nina.stats` | `nina/analytics.py` (and `nina/science.py` for calibration) |
+> | Seed `packages/schemas/db/seed/` | Synthetic databases created by `tests/` |
 
-> Este documento define las dos fronteras entre los equipos:
+> This document defines the two boundaries between teams:
 >
-> 1. **Procesamiento → API**: tablas del esquema `serving` (Parte B; hoy, tablas DuckDB de `nina/store.py`).
-> 2. **API → Web**: endpoints REST `/api/v1` (Parte A).
+> 1. **Processing → API**: tables of the `serving` schema (Part B; today, DuckDB tables in `nina/store.py`).
+> 2. **API → Web**: REST endpoints `/api/v1` (Part A).
 >
-> **Fuente de verdad en código:**
-> - API: rutas de `nina/main.py` y modelos de `nina/analytics.py` → `openapi.json` (raíz), generado con
->   `scripts/export_openapi.py` (no se edita a mano). La web replica los tipos en `web/src/types.ts`.
-> - Base de datos: esquema en `nina/store.py`.
-> - Textos legales: `docs/reference/firms_legal.json` (referencia) y la interfaz (`web/src/`).
+> **Source of truth in code:**
+> - API: routes in `nina/main.py` and models in `nina/analytics.py` → `openapi.json` (root), generated with
+>   `scripts/export_openapi.py` (not edited by hand). The web replicates the types in `web/src/types.ts`.
+> - Database: schema in `nina/store.py`.
+> - Legal texts: `docs/reference/firms_legal.json` (reference) and the interface (`web/src/`).
 >
-> Este documento y esos archivos deben coincidir. Si este documento y AGENTS §12 difieren, **prevalece este contrato**.
-> Cualquier cambio sigue el proceso de `WORK_PLAN.md` §6.
+> This document and those files must match. If this document and AGENTS §12 differ, **this contract prevails**.
+> Any change follows the process in `WORK_PLAN.md` §6.
 
 ---
 
-## Parte A · API REST
+## Part A · REST API
 
-### A.1 Convenciones generales
+### A.1 General conventions
 
-| Tema | Regla |
+| Topic | Rule |
 |---|---|
 | Base | `/api/v1` |
-| Formato | JSON (UTF-8). Fechas `YYYY-MM-DD`; instantes ISO-8601 en UTC (`2025-11-05T00:00:00Z`) |
-| Nombres | `snake_case` en JSON y en parámetros |
-| Errores | `application/problem+json` (RFC 9457) con un campo extra `code` (§A.5) |
-| Cabeceras de respuesta | `X-Harmonization-Version`, `ETag`, `Cache-Control: public, max-age=3600` (los datos provisionales usan `max-age=600`) |
-| Avisos | Los avisos no bloqueantes van en `warnings: [{ "code": "...", "message": "..." }]` dentro del cuerpo |
-| Sensor de origen | **No se expone** en los endpoints de análisis. Solo `/meta` y la exportación con `include_source=true` |
-| Autenticación | Ninguna en v1 (datos públicos). Límite de uso por IP en el *reverse proxy* |
+| Format | JSON (UTF-8). Dates `YYYY-MM-DD`; instants ISO-8601 in UTC (`2025-11-05T00:00:00Z`) |
+| Names | `snake_case` in JSON and in parameters |
+| Errors | `application/problem+json` (RFC 9457) with an extra `code` field (§A.5) |
+| Response headers | `X-Harmonization-Version`, `ETag`, `Cache-Control: public, max-age=3600` (provisional data use `max-age=600`) |
+| Warnings | Non-blocking warnings go in `warnings: [{ "code": "...", "message": "..." }]` inside the body |
+| Source sensor | **Not exposed** in the analysis endpoints. Only `/meta` and the export with `include_source=true` |
+| Authentication | None in v1 (public data). Per-IP rate limit at the *reverse proxy* |
 
-### A.2 Parámetros comunes de consulta (`QueryParams`)
+### A.2 Common query parameters (`QueryParams`)
 
-Los usan `/calendar`, `/timeseries`, `/ranking`, `/hotspots` y `/export/*`.
+Used by `/calendar`, `/timeseries`, `/ranking`, `/hotspots` and `/export/*`.
 
-| Parámetro | Tipo | Requerido | Por defecto | Regla |
+| Parameter | Type | Required | Default | Rule |
 |---|---|---|---|---|
-| `region_id` | string | uno de los tres | — | Id de `/regions` (p. ej., `PER.15_1`) |
-| `bbox` | string `W,S,E,N` | uno de los tres | — | Grados decimales, WGS84 |
-| `geometry_id` | string (uuid) | uno de los tres | — | Devuelto por `POST /geometries` (válido 24 h) |
-| `start` | date | sí | — | ≥ `2000-11-01` |
-| `end` | date | sí | — | ≥ `start`, ≤ última fecha disponible |
-| `tz` | string IANA | no | `UTC` | Agrupación por fecha local (p. ej., `America/Lima`) |
-| `min_confidence` | `nominal` \| `high` | no | `nominal` | `low` nunca está disponible |
+| `region_id` | string | one of the three | — | Id from `/regions` (e.g. `PER.15_1`) |
+| `bbox` | string `W,S,E,N` | one of the three | — | Decimal degrees, WGS84 |
+| `geometry_id` | string (uuid) | one of the three | — | Returned by `POST /geometries` (valid 24 h) |
+| `start` | date | yes | — | ≥ `2000-11-01` |
+| `end` | date | yes | — | ≥ `start`, ≤ latest available date |
+| `tz` | IANA string | no | `UTC` | Grouping by local date (e.g. `America/Lima`) |
+| `min_confidence` | `nominal` \| `high` | no | `nominal` | `low` is never available |
 | `daynight` | `all` \| `D` \| `N` | no | `all` | |
 
-Se pasa **exactamente uno** de `region_id`, `bbox` o `geometry_id`. Si no, la respuesta es `422 INVALID_REGION_SPEC`.
+**Exactly one** of `region_id`, `bbox` or `geometry_id` is passed. Otherwise the response is `422 INVALID_REGION_SPEC`.
 
 ### A.3 Endpoints
 
 #### `GET /health`
 
-Sirve para el *liveness* y el *readiness*.
+Used for *liveness* and *readiness*.
 
 ```json
 { "status": "ok", "db": "ok", "cache": "ok", "harmonization_version": "0.3.0" }
@@ -74,7 +74,7 @@ Sirve para el *liveness* y el *readiness*.
 
 #### `GET /meta`
 
-Devuelve los metadatos del dataset. La web los usa en el pie de página, en "Detalles del dataset" y para acotar las fechas seleccionables.
+Returns the dataset metadata. The web uses it in the footer, in "Dataset details" and to bound the selectable dates.
 
 ```json
 {
@@ -94,15 +94,15 @@ Devuelve los metadatos del dataset. La web los usa en el pie de página, en "Det
 }
 ```
 
-`citation` y `disclaimer` se leen de `docs/reference/firms_legal.json` (no de la base de datos), igual que en la web.
+`citation` and `disclaimer` are read from `docs/reference/firms_legal.json` (not from the database), as in the web.
 
 #### `GET /regions`
 
-Busca regiones administrativas.
+Searches administrative regions.
 
-| Parámetro | Tipo | Por defecto |
+| Parameter | Type | Default |
 |---|---|---|
-| `q` | string (búsqueda sin tildes ni mayúsculas) | — |
+| `q` | string (accent- and case-insensitive search) | — |
 | `country` | ISO3 | — |
 | `level` | 0–3 | — |
 | `limit` | 1–100 | 20 |
@@ -118,33 +118,33 @@ Busca regiones administrativas.
 
 #### `GET /regions/{region_id}`
 
-Devuelve una región con su geometría simplificada.
+Returns one region with its simplified geometry.
 
-| Parámetro | Tipo | Por defecto |
+| Parameter | Type | Default |
 |---|---|---|
-| `simplify` | metros | `500` |
+| `simplify` | metres | `500` |
 
-Responde con un GeoJSON `Feature` cuyas `properties` son las mismas de un ítem de `/regions`. Si no existe: `404 REGION_NOT_FOUND`.
+Responds with a GeoJSON `Feature` whose `properties` are the same as an item of `/regions`. If it does not exist: `404 REGION_NOT_FOUND`.
 
 #### `POST /geometries`
 
-Sube un área dibujada o un archivo del usuario y devuelve un `geometry_id` reutilizable.
+Uploads a drawn area or a user file and returns a reusable `geometry_id`.
 
-- **Entrada:** `application/geo+json` (un Feature o una FeatureCollection de polígonos) o `multipart/form-data` con `file` (un `.zip` de Shapefile o un `.geojson`, de 10 MB como máximo).
-- **Proceso:** reproyecta a EPSG:4326, corrige la geometría (`make_valid`) y une todos los polígonos en un multipolígono.
+- **Input:** `application/geo+json` (a Feature or a FeatureCollection of polygons) or `multipart/form-data` with `file` (a Shapefile `.zip` or a `.geojson`, at most 10 MB).
+- **Process:** reprojects to EPSG:4326, fixes the geometry (`make_valid`) and merges all polygons into one multipolygon.
 
 ```json
 { "geometry_id": "8f0c…", "area_km2": 1532.4, "bbox": [-76.1, -12.3, -75.7, -11.9],
   "expires_at": "2026-11-15T09:00:00Z", "warnings": [] }
 ```
 
-Errores: `422 INVALID_GEOMETRY`, `413 FILE_TOO_LARGE`, `422 AREA_TOO_LARGE` (si supera `MAX_AREA_KM2`).
+Errors: `422 INVALID_GEOMETRY`, `413 FILE_TOO_LARGE`, `422 AREA_TOO_LARGE` (if it exceeds `MAX_AREA_KM2`).
 
 #### `GET /calendar`
 
-Matriz año × mes de la región. Es la vista principal de la app.
+Year × month matrix of the region. It is the main view of the app.
 
-| Parámetro extra | Tipo | Por defecto |
+| Extra parameter | Type | Default |
 |---|---|---|
 | `metric` | `hotspots` \| `active_cells` | `hotspots` |
 
@@ -165,22 +165,22 @@ Matriz año × mes de la región. Es la vista principal de la app.
 }
 ```
 
-Reglas:
+Rules:
 
-- `value` es `null` si `data_gap = true`. **Nunca** se devuelve 0 para un hueco.
-- Los meses parcialmente fuera de `[start, end]` se incluyen con `partial_period: true`.
-- `anomaly_z` y `percentile` se calculan contra la climatología del mismo mes (`nina/analytics.py`).
-- `rank_in_month` es la posición del año entre todos los años para ese mes (1 = el de mayor actividad).
+- `value` is `null` if `data_gap = true`. **Never** return 0 for a gap.
+- Months partially outside `[start, end]` are included with `partial_period: true`.
+- `anomaly_z` and `percentile` are computed against the climatology of the same month (`nina/analytics.py`).
+- `rank_in_month` is the year's position among all years for that month (1 = the most active).
 
 #### `GET /timeseries`
 
-Serie temporal con la banda climatológica.
+Time series with the climatological band.
 
-| Parámetro extra | Tipo | Por defecto |
+| Extra parameter | Type | Default |
 |---|---|---|
 | `freq` | `day` \| `week` \| `month` | `month` |
 | `metric` | `hotspots` \| `active_cells` | `hotspots` |
-| `compare_years` | lista de años separados por coma (máx. 5) | — |
+| `compare_years` | comma-separated list of years (max. 5) | — |
 
 ```json
 {
@@ -192,19 +192,19 @@ Serie temporal con la banda climatológica.
       "data_gap": false, "is_provisional": false }
   ],
   "compare": [ { "year": 2023, "points": [ { "period_start": "2023-09-04", "value": 30.2 } ] } ],
-  "warnings": [ { "code": "SAMPLING_BIAS", "message": "Agregaciones menores de 8 días tienen sesgo de muestreo." } ]
+  "warnings": [ { "code": "SAMPLING_BIAS", "message": "Aggregations shorter than 8 days have sampling bias." } ]
 }
 ```
 
-`freq=day` **siempre** incluye el aviso `SAMPLING_BIAS` y **no** devuelve los campos de climatología (SAMP-01).
+`freq=day` **always** includes the `SAMPLING_BIAS` warning and does **not** return the climatology fields (SAMP-01).
 
 #### `GET /ranking`
 
-Años ordenados por actividad.
+Years sorted by activity.
 
-| Parámetro extra | Tipo | Por defecto |
+| Extra parameter | Type | Default |
 |---|---|---|
-| `months` | lista `1–12` (temporada; p. ej., `7,8,9,10`) | todos |
+| `months` | list `1–12` (season; e.g. `7,8,9,10`) | all |
 | `top` | 1–30 | 10 |
 
 ```json
@@ -214,137 +214,137 @@ Años ordenados por actividad.
 
 #### `GET /hotspots`
 
-Focos individuales de la consulta, para el mapa y para inspección.
+Individual hotspots of the query, for the map and for inspection.
 
-| Parámetro extra | Tipo | Por defecto |
+| Extra parameter | Type | Default |
 |---|---|---|
 | `limit` | 1–5000 | 1000 |
-| `cursor` | string opaco | — |
+| `cursor` | opaque string | — |
 
-La respuesta es una GeoJSON `FeatureCollection` más `next_cursor`. Cada feature trae
-`hotspot_id`, `acq_datetime_utc`, `frp_mw`, `confidence_class`, `daynight` e `is_provisional`.
+The response is a GeoJSON `FeatureCollection` plus `next_cursor`. Each feature carries
+`hotspot_id`, `acq_datetime_utc`, `frp_mw`, `confidence_class`, `daynight` and `is_provisional`.
 
-Para mostrar muchos puntos, la web usa las **teselas vectoriales** (§A.4), no este endpoint.
+To show many points, the web uses the **vector tiles** (§A.4), not this endpoint.
 
 #### `GET /export/hotspots`
 
-Descarga de los focos de la consulta.
+Download of the query's hotspots.
 
-| Parámetro extra | Tipo | Por defecto |
+| Extra parameter | Type | Default |
 |---|---|---|
 | `format` | `csv` \| `zip` | `zip` |
 | `include_source` | bool | `false` |
 
-- `csv`: `text/csv` en *streaming*, UTF-8 con BOM, con las columnas de AGENTS §12.1.
-- `zip`: incluye `hotspots.csv` y `LEEME.txt` (cita, DOI, aviso, filtros usados y versión).
-- Límite: `EXPORT_MAX_ROWS` (por defecto 1 000 000). Si se supera: `413 EXPORT_TOO_LARGE`, con el conteo estimado en `detail`.
+- `csv`: streamed `text/csv`, UTF-8 with BOM, with the columns of AGENTS §12.1.
+- `zip`: includes `hotspots.csv` and `README.txt` (citation, DOI, warning, filters used and version).
+- Limit: `EXPORT_MAX_ROWS` (default 1,000,000). If exceeded: `413 EXPORT_TOO_LARGE`, with the estimated count in `detail`.
 
 #### `GET /export/calendar`
 
-Descarga la matriz de `/calendar`.
+Downloads the `/calendar` matrix.
 
-| Parámetro extra | Tipo | Por defecto |
+| Extra parameter | Type | Default |
 |---|---|---|
 | `format` | `csv` \| `zip` | `csv` |
 | `metric` | `hotspots` \| `active_cells` | `hotspots` |
 
-Columnas: `year, month, value, climatology_median, climatology_p10, climatology_p90, anomaly_z, percentile, data_gap, partial_coverage, is_provisional`.
+Columns: `year, month, value, climatology_median, climatology_p10, climatology_p90, anomaly_z, percentile, data_gap, partial_coverage, is_provisional`.
 
-### A.4 Teselas vectoriales (fuera de FastAPI)
+### A.4 Vector tiles (outside FastAPI)
 
-| Recurso | URL | Dueño |
+| Resource | URL | Owner |
 |---|---|---|
-| Focos | `{VITE_TILES_URL}/serving.v_hotspots_tiles/{z}/{x}/{y}` (Martin) | API (configuración) + Procesamiento (vista) |
+| Hotspots | `{VITE_TILES_URL}/serving.v_hotspots_tiles/{z}/{x}/{y}` (Martin) | API (configuration) + Processing (view) |
 
-- Atributos: `hotspot_id`, `date` (entero `YYYYMMDD`), `frp_mw`, `confidence_class`.
-- La web filtra por fecha en el cliente con expresiones de MapLibre.
+- Attributes: `hotspot_id`, `date` (integer `YYYYMMDD`), `frp_mw`, `confidence_class`.
+- The web filters by date on the client with MapLibre expressions.
 
-### A.5 Errores
+### A.5 Errors
 
 ```json
-{ "type": "https://fire-calendar/errors/area-too-large", "title": "Área demasiado grande",
-  "status": 422, "code": "AREA_TOO_LARGE", "detail": "El área (812 000 km²) supera el máximo (500 000 km²)." }
+{ "type": "https://fire-calendar/errors/area-too-large", "title": "Area too large",
+  "status": 422, "code": "AREA_TOO_LARGE", "detail": "The area (812,000 km²) exceeds the maximum (500,000 km²)." }
 ```
 
-| `code` | HTTP | Cuándo |
+| `code` | HTTP | When |
 |---|---|---|
-| `INVALID_REGION_SPEC` | 422 | Ninguno, o más de uno, de `region_id`, `bbox` y `geometry_id` |
-| `REGION_NOT_FOUND` | 404 | `region_id` inexistente |
-| `GEOMETRY_EXPIRED` | 410 | `geometry_id` vencido |
-| `INVALID_GEOMETRY` | 422 | Geometría o archivo no válido |
-| `AREA_TOO_LARGE` | 422 | Área > `MAX_AREA_KM2` |
-| `INVALID_DATE_RANGE` | 422 | `start > end`, o fuera de `[date_min, date_max]` |
-| `INVALID_PARAMETER` | 422 | Otro parámetro fuera de dominio |
-| `FILE_TOO_LARGE` | 413 | Subida > 10 MB |
-| `EXPORT_TOO_LARGE` | 413 | Exportación > `EXPORT_MAX_ROWS` |
-| `INTERNAL_ERROR` | 500 | Error no controlado (se registra con un `request_id`) |
+| `INVALID_REGION_SPEC` | 422 | None, or more than one, of `region_id`, `bbox` and `geometry_id` |
+| `REGION_NOT_FOUND` | 404 | Non-existent `region_id` |
+| `GEOMETRY_EXPIRED` | 410 | Expired `geometry_id` |
+| `INVALID_GEOMETRY` | 422 | Invalid geometry or file |
+| `AREA_TOO_LARGE` | 422 | Area > `MAX_AREA_KM2` |
+| `INVALID_DATE_RANGE` | 422 | `start > end`, or outside `[date_min, date_max]` |
+| `INVALID_PARAMETER` | 422 | Another parameter out of domain |
+| `FILE_TOO_LARGE` | 413 | Upload > 10 MB |
+| `EXPORT_TOO_LARGE` | 413 | Export > `EXPORT_MAX_ROWS` |
+| `INTERNAL_ERROR` | 500 | Unhandled error (logged with a `request_id`) |
 
-Códigos de **aviso** (`warnings`, no son errores): `SAMPLING_BIAS`, `PROVISIONAL_DATA`, `PARTIAL_COVERAGE`, `DATA_GAPS`, `GEOMETRY_REPAIRED`.
+**Warning** codes (`warnings`, not errors): `SAMPLING_BIAS`, `PROVISIONAL_DATA`, `PARTIAL_COVERAGE`, `DATA_GAPS`, `GEOMETRY_REPAIRED`.
 
-### A.6 Rendimiento esperado (para revisar en la Fase 4)
+### A.6 Expected performance (to review in Phase 4)
 
-| Endpoint | p95 objetivo (región ≤ 50 000 km², 25 años) |
+| Endpoint | Target p95 (region ≤ 50,000 km², 25 years) |
 |---|---|
-| `/calendar` (región administrativa, precalculada) | < 300 ms |
-| `/calendar` (geometría libre) | < 2 s |
+| `/calendar` (administrative region, precomputed) | < 300 ms |
+| `/calendar` (free geometry) | < 2 s |
 | `/timeseries?freq=week` | < 2 s |
-| `/export/hotspots` (primer byte) | < 1 s |
+| `/export/hotspots` (first byte) | < 1 s |
 
 ---
 
-## Parte B · Contrato de base de datos (Procesamiento → API)
+## Part B · Database contract (Processing → API)
 
-**Reglas de propiedad:**
+**Ownership rules:**
 
-- Procesamiento es dueño del esquema `serving`: escribe el DDL en `packages/schemas/db/serving.sql`, aplica las migraciones en
-  `packages/schemas/db/migrations/NNN_*.sql` y carga los datos.
-- La API **solo lee** de `serving`. Los objetos propios de la API, si los necesita, van en el esquema `api`, con migraciones
-  Alembic en `apps/api/migrations`.
+- Processing owns the `serving` schema: it writes the DDL in `packages/schemas/db/serving.sql`, applies the migrations in
+  `packages/schemas/db/migrations/NNN_*.sql` and loads the data.
+- The API **only reads** from `serving`. The API's own objects, if needed, go in the `api` schema, with Alembic migrations
+  in `apps/api/migrations`.
 
-### B.1 Tablas y vistas de `serving`
+### B.1 `serving` tables and views
 
-| Objeto | Grano | Columnas principales | Índices |
+| Object | Grain | Main columns | Indexes |
 |---|---|---|---|
 | `serving.cell_day` | `h3_cell × date` | `h3_cell text`, `date date`, `hotspots_equiv real`, `active_equiv real`, `data_gap bool`, `partial_coverage bool`, `is_provisional bool`, `low_observability bool` | PK (`h3_cell`, `date`); BRIN (`date`) |
 | `serving.cell_geom` | `h3_cell` | `h3_cell text PK`, `geom geometry(Polygon,4326)`, `centroid geometry(Point,4326)` | GIST (`geom`) |
-| `serving.hotspots` | detección | `hotspot_id text PK`, `acq_datetime_utc timestamptz`, `acq_date date`, `geom geometry(Point,4326)`, `h3_cell text`, `frp_mw real`, `confidence_class text`, `daynight char(1)`, `quality_level text`, `is_provisional bool`, `instrument text`, `satellite text` | GIST (`geom`); BRIN (`acq_date`); btree (`h3_cell`, `acq_date`) |
-| `serving.region` | región administrativa | `region_id text PK`, `name text`, `name_norm text`, `level smallint`, `country char(3)`, `parent_id text`, `geom geometry(MultiPolygon,4326)`, `area_km2 real` | GIST (`geom`); trigram (`name_norm`) |
-| `serving.region_cell` | `region_id × h3_cell` | `region_id`, `h3_cell`, `weight real` (fracción de la celda dentro de la región) | PK (`region_id`, `h3_cell`) |
-| `serving.region_month` (vista materializada) | `region_id × year × month × metric` | `value`, `data_gap_days`, `partial_days`, `provisional_days` | PK |
+| `serving.hotspots` | detection | `hotspot_id text PK`, `acq_datetime_utc timestamptz`, `acq_date date`, `geom geometry(Point,4326)`, `h3_cell text`, `frp_mw real`, `confidence_class text`, `daynight char(1)`, `quality_level text`, `is_provisional bool`, `instrument text`, `satellite text` | GIST (`geom`); BRIN (`acq_date`); btree (`h3_cell`, `acq_date`) |
+| `serving.region` | administrative region | `region_id text PK`, `name text`, `name_norm text`, `level smallint`, `country char(3)`, `parent_id text`, `geom geometry(MultiPolygon,4326)`, `area_km2 real` | GIST (`geom`); trigram (`name_norm`) |
+| `serving.region_cell` | `region_id × h3_cell` | `region_id`, `h3_cell`, `weight real` (fraction of the cell inside the region) | PK (`region_id`, `h3_cell`) |
+| `serving.region_month` (materialized view) | `region_id × year × month × metric` | `value`, `data_gap_days`, `partial_days`, `provisional_days` | PK |
 | `serving.global_day_status` | `date` | `data_gap bool`, `partial_coverage bool`, `is_provisional bool`, `sensors text[]` | PK (`date`) |
-| `serving.dataset_meta` | 1 fila | `harmonization_version`, `generated_at`, `date_min`, `date_max`, `provisional_from`, `climatology_start`, `climatology_end` | — |
+| `serving.dataset_meta` | 1 row | `harmonization_version`, `generated_at`, `date_min`, `date_max`, `provisional_from`, `climatology_start`, `climatology_end` | — |
 | `serving.sensor_coverage` | `sensor` | `first_date`, `last_date`, `status` | — |
-| `serving.known_gaps` | periodo | `start`, `end`, `scope`, `reason` | — |
-| `serving.v_hotspots_tiles` | vista | `hotspot_id`, `geom` (EPSG:3857), `date int`, `frp_mw`, `confidence_class` (solo los que pasaron QA) | — |
+| `serving.known_gaps` | period | `start`, `end`, `scope`, `reason` | — |
+| `serving.v_hotspots_tiles` | view | `hotspot_id`, `geom` (EPSG:3857), `date int`, `frp_mw`, `confidence_class` (only those that passed QA) | — |
 
-### B.2 Garantías que da Procesamiento
+### B.2 Guarantees provided by Processing
 
-1. La carga es **atómica por versión**: se escribe en `serving_next` y se intercambia con `serving` en una sola transacción,
-   así que la API nunca ve datos a medias.
-2. `serving.dataset_meta.harmonization_version` cambia en cada publicación. La API usa ese valor para invalidar la caché.
-3. Los valores de `serving.cell_day` ya están armonizados ("equivalente VIIRS") y filtrados por QA.
-4. `data_gap = true` implica `hotspots_equiv IS NULL`.
-5. Existe un **seed** pequeño y sintético, con el mismo DDL: `packages/schemas/db/seed/seed.sql.gz`. Cubre una región de prueba,
-   2001–2025, e incluye a propósito huecos, meses provisionales y cobertura parcial.
+1. Loading is **atomic per version**: it writes to `serving_next` and swaps it with `serving` in a single transaction,
+   so the API never sees half-written data.
+2. `serving.dataset_meta.harmonization_version` changes on every publication. The API uses that value to invalidate the cache.
+3. Values in `serving.cell_day` are already harmonized ("VIIRS equivalent") and QA-filtered.
+4. `data_gap = true` implies `hotspots_equiv IS NULL`.
+5. There is a small synthetic **seed** with the same DDL: `packages/schemas/db/seed/seed.sql.gz`. It covers a test region,
+   2001–2025, and deliberately includes gaps, provisional months and partial coverage.
 
-### B.3 Lógica compartida
+### B.3 Shared logic
 
-Las fórmulas de climatología, percentil, anomalía y ranking viven **solo** en `nina/analytics.py` (objetivo: un módulo `nina/stats.py`), que son funciones
-puras sin I/O. La API las importa; no las reimplementa. Procesamiento es dueño del módulo y la API revisa sus cambios.
+The climatology, percentile, anomaly and ranking formulas live **only** in `nina/analytics.py` (target: a `nina/stats.py` module), as pure
+functions without I/O. The API imports them; it does not reimplement them. Processing owns the module and the API reviews its changes.
 
-| Función | Firma (resumen) |
+| Function | Signature (summary) |
 |---|---|
-| `monthly_climatology(values_by_year_month, years) -> {month: (median, p10, p90)}` | Excluye los meses con hueco o cobertura parcial > 20 % |
-| `anomaly(value, climatology) -> (z, percentile)` | z robusto: `(x - mediana) / (1.4826 · MAD)` |
+| `monthly_climatology(values_by_year_month, years) -> {month: (median, p10, p90)}` | Excludes months with a gap or partial coverage > 20 % |
+| `anomaly(value, climatology) -> (z, percentile)` | Robust z: `(x - median) / (1.4826 · MAD)` |
 | `rank_years(values_by_year, months) -> [(year, value, z, excluded)]` | |
-| `count_breaks(values) -> list[float]` / `ANOMALY_BREAKS` | Cortes de la escala de color que usa la web |
+| `count_breaks(values) -> list[float]` / `ANOMALY_BREAKS` | Color scale breaks used by the web |
 
 ---
 
-## Historial del contrato
+## Contract history
 
-| Versión | Fecha | Cambio |
+| Version | Date | Change |
 |---|---|---|
-| 0.1.0 | 2026-11-14 | Versión inicial |
-| 0.1.1 | 2026-11-14 | Rutas al proyecto actual (`nina`, `apps/api/API_CONTRACT.md`); OpenAPI generado desde `models.py` en lugar de `openapi.yaml` a mano; cita y aviso desde `packages/schemas/legal/` (se quitan de `serving.dataset_meta`) |
-| 0.2.0 | 2026-11-14 | Integración del MVP en la raíz: el documento pasa a ser diseño objetivo; tabla de equivalencias con DuckDB/FastAPI del MVP; rutas actualizadas |
+| 0.1.0 | 2026-11-14 | Initial version |
+| 0.1.1 | 2026-11-14 | Paths to the current project (`nina`, `apps/api/API_CONTRACT.md`); OpenAPI generated from `models.py` instead of a hand-written `openapi.yaml`; citation and warning from `packages/schemas/legal/` (removed from `serving.dataset_meta`) |
+| 0.2.0 | 2026-11-14 | MVP integrated at the root: the document becomes a target design; equivalence table with the MVP's DuckDB/FastAPI; paths updated |

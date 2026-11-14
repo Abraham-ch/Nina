@@ -1,9 +1,9 @@
-# Huecos conocidos de MODIS (AGENTS.md §5.4). Fechas a confirmar con el conteo diario real.
-# end es inclusivo; partial: true → solo falta parte del periodo.
-- {satellite: [terra], start: 2000-09-01, end: 2000-10-31, reason: "Fallas de hardware/calibración (Guía §7.2.1, §8.3.3)"}
-- {satellite: [terra, aqua], start: 2001-06-25, end: 2001-07-05, reason: "Datos faltantes (Readme); confirmar límites"}
-- {satellite: [terra, aqua], start: 2002-01-01, end: 2002-12-31, partial: true, reason: "Faltantes intermitentes (Readme); confirmar días"}
-- {satellite: [terra, aqua], start: 2007-08-15, end: 2007-08-31, reason: "Faltantes desde mediados de agosto (Readme); confirmar fin"}
-- {satellite: [terra, aqua], start: 2009-04-21, end: 2009-04-21, partial: true, reason: "Datos faltantes parciales (Readme)"}
-- {satellite: [terra, aqua], start: 2009-04-22, end: 2009-04-22, reason: "Datos faltantes (Readme)"}
-- {satellite: [aqua], start: 2020-08-16, end: 2020-09-02, partial: true, reason: "Falla del FMU; solo recepción directa (Guía §7.2.4)"}
+# Known MODIS gaps (AGENTS.md §5.4). Dates to be confirmed with the real daily count.
+# end is inclusive; partial: true → only part of the period is missing.
+- {satellite: [terra], start: 2000-09-01, end: 2000-10-31, reason: "Hardware/calibration failures (Guide §7.2.1, §8.3.3)"}
+- {satellite: [terra, aqua], start: 2001-06-25, end: 2001-07-05, reason: "Missing data (Readme); confirm limits"}
+- {satellite: [terra, aqua], start: 2002-01-01, end: 2002-12-31, partial: true, reason: "Intermittent gaps (Readme); confirm days"}
+- {satellite: [terra, aqua], start: 2007-08-15, end: 2007-08-31, reason: "Gaps from mid-August (Readme); confirm end"}
+- {satellite: [terra, aqua], start: 2009-04-21, end: 2009-04-21, partial: true, reason: "Partial missing data (Readme)"}
+- {satellite: [terra, aqua], start: 2009-04-22, end: 2009-04-22, reason: "Missing data (Readme)"}
+- {satellite: [aqua], start: 2020-08-16, end: 2020-09-02, partial: true, reason: "FMU failure; direct broadcast only (Guide §7.2.4)"}

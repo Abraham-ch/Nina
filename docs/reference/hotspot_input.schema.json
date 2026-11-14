@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "hotspot_input.schema.json",
-    "title": "Entrada de focos FIRMS (AGENTS.md §6)",
+    "title": "FIRMS hotspot input (AGENTS.md §6)",
     "type": "array",
     "items": {
         "type": "object",

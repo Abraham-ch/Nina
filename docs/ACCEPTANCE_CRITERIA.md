@@ -1,612 +1,611 @@
-# Criterios de aceptación · Procesamiento y armonización de focos de calor
+# Acceptance criteria · Hotspot processing and harmonization
 
-> Ubicación en el repo: `docs/ACCEPTANCE_CRITERIA.md`
-> Aplica a todo cambio de procesamiento: `nina/ingest.py`, `nina/global_ingest.py`, `nina/remote.py`, `nina/science.py` y `scripts/`.
-> El MVP actual cumple solo parte de estos criterios: los no implementados se reportan como `pendiente`.
-> Complementa a `AGENTS.md` (§5–§10). Si hay conflicto, **este archivo prevalece** para el procesamiento de datos.
+> Location in the repo: `docs/ACCEPTANCE_CRITERIA.md`
+> Applies to every processing change: `nina/ingest.py`, `nina/global_ingest.py`, `nina/remote.py`, `nina/science.py` and `scripts/`.
+> The current MVP meets only part of these criteria: those not implemented are reported as `pending`.
+> Complements `AGENTS.md` (§5–§10). In case of conflict, **this file prevails** for data processing.
 
-## Cómo usar este documento (instrucciones para el agente)
+## How to use this document (instructions for the agent)
 
-1. Antes de empezar, identifica qué criterios toca tu tarea (columna **Área**).
-2. Un criterio **[OBL]** (obligatorio) no puede quedar sin cumplir. Uno **[REC]** (recomendado) puede
-   postergarse, pero debes dejarlo anotado en el reporte como `pendiente` y explicar el motivo.
-3. Cada criterio indica **cómo se verifica**: un test automatizado, un artefacto generado o una revisión.
-   Si el test no existe, créalo; no marques el criterio como cumplido sin evidencia.
-4. Al terminar, genera `data/reports/acceptance_<run_id>.md` con la plantilla del final, indicando para cada
-   criterio afectado si está `cumple`, `no cumple`, `no aplica` o `pendiente`, junto con su evidencia.
-5. Formato de los criterios: **Dado** (contexto) · **Cuando** (acción) · **Entonces** (resultado esperado).
+1. Before starting, identify which criteria your task touches (**Area** column).
+2. An **[REQ]** (required) criterion cannot be left unmet. A **[REC]** (recommended) one can be
+   postponed, but you must note it in the report as `pending` and explain why.
+3. Each criterion states **how it is verified**: an automated test, a generated artifact or a review.
+   If the test does not exist, create it; do not mark the criterion as met without evidence.
+4. When finished, generate `data/reports/acceptance_<run_id>.md` with the template at the end, stating for each
+   affected criterion whether it is `met`, `not met`, `not applicable` or `pending`, together with its evidence.
+5. Criteria format: **Given** (context) · **When** (action) · **Then** (expected result).
 
-### Fuentes citadas
+### Sources cited
 
-| Clave      | Documento                                                             |
+| Key        | Document                                                              |
 | ---------- | --------------------------------------------------------------------- |
-| **GUÍA**   | _MODIS C6/C6.1 Active Fire Product User's Guide_ v1.0 (Giglio et al.) |
-| **README** | `Readme.txt` incluido en las descargas de NASA FIRMS                  |
+| **GUIDE**  | _MODIS C6/C6.1 Active Fire Product User's Guide_ v1.0 (Giglio et al.) |
+| **README** | `Readme.txt` included in NASA FIRMS downloads                         |
 | **C61**    | _MODIS C61 Land – Proposed Changes_                                   |
-| **AGENTS** | `AGENTS.md` de este repositorio                                       |
+| **AGENTS** | `AGENTS.md` of this repository                                        |
 
 ---
 
-## 1. Ingesta y origen de los datos (ING)
+## 1. Ingestion and data origin (ING)
 
-**ING-01 [OBL] · Identificación del origen por nombre de archivo**
+**ING-01 [REQ] · Origin identified by file name**
 
-- Dado un ZIP o archivo de FIRMS con prefijo `DL_FIRE_M-C61`, `DL_FIRE_SV-C2`, `DL_FIRE_J1V-C2` o `DL_FIRE_J2V-C2`,
-- cuando se ingiere,
-- entonces cada fila recibe `instrument`, `satellite_norm` y `source_file` coherentes con el prefijo, y
-  los archivos `DL_FIRE_LS_*` (Landsat) se excluyen con `qa_reason = "excluded_instrument"`.
-- _Verificación:_ `test_ingest_detects_source_from_filename` con un archivo por prefijo.
-- _Fuente:_ README.
+- Given a FIRMS ZIP or file with prefix `DL_FIRE_M-C61`, `DL_FIRE_SV-C2`, `DL_FIRE_J1V-C2` or `DL_FIRE_J2V-C2`,
+- when it is ingested,
+- then each row receives `instrument`, `satellite_norm` and `source_file` consistent with the prefix, and
+  `DL_FIRE_LS_*` (Landsat) files are excluded with `qa_reason = "excluded_instrument"`.
+- _Verification:_ `test_ingest_detects_source_from_filename` with one file per prefix.
+- _Source:_ README.
 
-**ING-02 [OBL] · Calidad estándar vs. NRT**
+**ING-02 [REQ] · Standard vs. NRT quality**
 
-- Dado un archivo `fire_archive_*` o `fire_nrt_*`,
-- cuando se ingiere,
-- entonces `quality_level` es `standard` o `nrt` según el nombre. Si el nombre no lo indica, se usa el campo
-  `version` (si contiene `NRT`, es `nrt`).
-- _Verificación:_ test parametrizado con ambos tipos de archivo y con versiones `"6.1NRT"`, `"61.03"`, `"2.0NRT"`, `"2"`.
-- _Fuente:_ README.
+- Given a `fire_archive_*` or `fire_nrt_*` file,
+- when it is ingested,
+- then `quality_level` is `standard` or `nrt` according to the name. If the name does not say, the
+  `version` field is used (if it contains `NRT`, it is `nrt`).
+- _Verification:_ parameterized test with both file types and with versions `"6.1NRT"`, `"61.03"`, `"2.0NRT"`, `"2"`.
+- _Source:_ README.
 
-**ING-03 [OBL] · Precedencia de los datos estándar sobre los NRT**
+**ING-03 [REQ] · Precedence of standard data over NRT**
 
-- Dado que existen datos estándar y NRT para el mismo `satellite_norm` y la misma `acq_date_utc`,
-- cuando se consolida,
-- entonces se conservan solo los estándar y los NRT se registran con `qa_reason = "superseded_by_standard"`.
-- _Verificación:_ `test_standard_supersedes_nrt`; el reporte de QA muestra el conteo.
-- _Fuente:_ README (los NRT se reemplazan aprox. 3 meses después).
+- Given that standard and NRT data exist for the same `satellite_norm` and the same `acq_date_utc`,
+- when consolidating,
+- then only the standard data are kept and the NRT data are recorded with `qa_reason = "superseded_by_standard"`.
+- _Verification:_ `test_standard_supersedes_nrt`; the QA report shows the count.
+- _Source:_ README (NRT data are replaced about 3 months later).
 
-**ING-04 [OBL] · Calidad de NOAA-20 y NOAA-21 según lo que exista**
+**ING-04 [REQ] · NOAA-20 and NOAA-21 quality according to what exists**
 
-- Dados datos de NOAA-20 o NOAA-21,
-- cuando se ingieren,
-- entonces `quality_level` se determina por la fuente real (`VIIRS_NOAA20_SP` → `standard`; `*_NRT` → `nrt`) y **no** por una
-  regla fija. Qué sensores tienen datos estándar, y hasta qué fecha, se consulta en `/api/data_availability` (ING-09).
-  NOAA-21 sigue siendo solo NRT hasta que esa consulta diga lo contrario.
-- _Verificación:_ test con respuestas simuladas de `data_availability`.
-- _Fuente:_ README (dice que no hay datos estándar de NOAA-20/21; **está desactualizado**: la API ya ofrece `VIIRS_NOAA20_SP`).
+- Given NOAA-20 or NOAA-21 data,
+- when they are ingested,
+- then `quality_level` is determined by the real source (`VIIRS_NOAA20_SP` → `standard`; `*_NRT` → `nrt`) and **not** by a
+  fixed rule. Which sensors have standard data, and up to which date, is queried in `/api/data_availability` (ING-09).
+  NOAA-21 remains NRT-only until that query says otherwise.
+- _Verification:_ test with simulated `data_availability` responses.
+- _Source:_ README (it says there are no standard NOAA-20/21 data; **it is out of date**: the API already offers `VIIRS_NOAA20_SP`).
 
-**ING-05 [OBL] · Descargas vacías**
+**ING-05 [REQ] · Empty downloads**
 
-- Dado un CSV que solo tiene cabecera, un DBF vacío o un JSON `[]`,
-- cuando se ingiere,
-- entonces el proceso termina sin error, registra `0 filas` para ese archivo y continúa.
-- _Verificación:_ `test_empty_inputs` con los tres casos.
-- _Fuente:_ README.
+- Given a CSV with only a header, an empty DBF or a JSON `[]`,
+- when it is ingested,
+- then the process ends without error, records `0 rows` for that file and continues.
+- _Verification:_ `test_empty_inputs` with the three cases.
+- _Source:_ README.
 
-**ING-06 [OBL] · Codificación y proyección**
+**ING-06 [REQ] · Encoding and projection**
 
-- Dado cualquier archivo de entrada,
-- cuando se lee,
-- entonces se lee en UTF-8 (tolerando BOM), las coordenadas se tratan como EPSG:4326 y no se intenta interpretar
-  `Readme.txt` (trae caracteres mal codificados).
-- _Verificación:_ test con un fixture que tenga BOM; revisión del código.
-- _Fuente:_ README.
+- Given any input file,
+- when it is read,
+- then it is read as UTF-8 (tolerating a BOM), coordinates are treated as EPSG:4326 and no attempt is made to parse
+  `Readme.txt` (it contains badly encoded characters).
+- _Verification:_ test with a fixture that has a BOM; code review.
+- _Source:_ README.
 
-**ING-07 [OBL] · Datos de referencia globales para detectar huecos**
+**ING-07 [REQ] · Global reference data to detect gaps**
 
-- Dado que se procesa una región de interés,
-- cuando se calculan la cobertura y los huecos (GAP-02),
-- entonces se usan **conteos diarios globales (o de una zona amplia) por satélite**, no solo los de la región.
-  Fuente sugerida: archivos mensuales MCD14ML (SFTP de la Universidad de Maryland) o descarga global de FIRMS.
-- _Verificación:_ existe `data/interim/global_daily_counts.parquet` con las columnas `satellite_norm`, `date`, `n`.
-- _Fuente:_ GUÍA §7.1.1 (los archivos de focos no informan de datos faltantes) y §4.3.
-
----
-
-## 2. Esquema y tipos (SCH)
-
-**SCH-01 [OBL] · Contrato de entrada JSON**
-
-- Dado un `.json` cuya raíz es un array de objetos,
-- cuando se valida contra `hotspot_input.schema.json`,
-- entonces se aceptan los campos de AGENTS §6 y se rechazan con `schema_invalid` las filas a las que les falte
-  algún campo requerido.
-- _Verificación:_ `test_schema_valid_modis_example` (objeto de ejemplo de `data_type`) y `test_schema_invalid_rows`.
-- _Fuente:_ AGENTS §6.
-
-**SCH-02 [OBL] · Campos numéricos que llegan como texto**
-
-- Dados `confidence: "48"`, `type: "0"` y `acq_time: "0000"`,
-- cuando se normalizan,
-- entonces se obtiene `confidence_raw = "48"` y la clase `nominal`, `hotspot_type = 0` y la hora `00:00 UTC`.
-  Además, `acq_time` dado como `"618"` o `618` se interpreta como `06:18 UTC`.
-- _Verificación:_ test parametrizado.
-- _Fuente:_ AGENTS §6.1, GUÍA §5.5 (Tabla 10: `HHMM` en UTC).
-
-**SCH-03 [OBL] · Colección y versión**
-
-- Dado un registro MODIS con `version` de la Colección 6 o 6.1 (`"6.0"`, `"6.1"`, `"61.03"`, `"6.1NRT"`, etc.),
-- cuando se normaliza,
-- entonces se acepta **sin aplicar ningún ajuste** entre C6 y C6.1. Un registro de una colección anterior (que empiece
-  por `5` o `4`) se rechaza con `qa_reason = "unsupported_collection"`.
-- _Verificación:_ test parametrizado de versiones.
-- _Fuente:_ GUÍA §2.1 (C6 y C6.1 pueden mezclarse; FRP sin cambios; diferencia global del 0,001 %), C61 (los cambios de
-  calibración afectan las bandas 1 y 2, no las térmicas), GUÍA §7.3 (los problemas de C5 no deben entrar).
-
-**SCH-04 [OBL] · Campos de brillo por instrumento**
-
-- Dado un registro MODIS (`brightness`, `bright_t31`) o VIIRS (`bright_ti4`, `bright_ti5`, o sus alias `brightness` y `brightness_2`),
-- cuando se normaliza,
-- entonces se mapean a `bt_mir_k` y `bt_tir_k` sin perder el valor original.
-- _Verificación:_ test con un fixture de cada instrumento.
-- _Fuente:_ AGENTS §7.1.
+- Given that a region of interest is processed,
+- when coverage and gaps are computed (GAP-02),
+- then **global (or wide-area) daily counts per satellite** are used, not only those of the region.
+  Suggested source: monthly MCD14ML files (University of Maryland SFTP) or a global FIRMS download.
+- _Verification:_ `data/interim/global_daily_counts.parquet` exists with columns `satellite_norm`, `date`, `n`.
+- _Source:_ GUIDE §7.1.1 (hotspot files do not report missing data) and §4.3.
 
 ---
 
-## 3. Dominio temporal (TMP)
+## 2. Schema and types (SCH)
 
-**TMP-01 [OBL] · Fecha de inicio de la serie**
+**SCH-01 [REQ] · JSON input contract**
 
-- Dado un registro MODIS con `acq_datetime_utc < 2000-11-01`,
-- cuando se valida,
-- entonces se rechaza con `qa_reason = "pre_nov2000_quality"`.
-- _Verificación:_ `test_rejects_pre_november_2000`.
-- _Fuente:_ GUÍA §7.2.1 (antes de nov-2000 hubo detectores dañados, bandeado, fuegos no detectados y, en feb–mar 2000,
-  líneas de barrido completas marcadas como fuego) y GUÍA §8.3.10.
+- Given a `.json` whose root is an array of objects,
+- when it is validated against `hotspot_input.schema.json`,
+- then the fields of AGENTS §6 are accepted and rows missing any required field are rejected with `schema_invalid`.
+- _Verification:_ `test_schema_valid_modis_example` (example object from `data_type`) and `test_schema_invalid_rows`.
+- _Source:_ AGENTS §6.
 
-**TMP-02 [OBL] · Tiempo en UTC**
+**SCH-02 [REQ] · Numeric fields arriving as text**
 
-- Dado cualquier registro,
-- cuando se almacena,
-- entonces `acq_datetime_utc` está en UTC. La conversión a hora local solo ocurre en la API o la UI.
-- _Verificación:_ test y revisión del esquema (`timestamptz`).
-- _Fuente:_ GUÍA §5.5 (Tabla 10), AGENTS §8.
+- Given `confidence: "48"`, `type: "0"` and `acq_time: "0000"`,
+- when they are normalized,
+- then `confidence_raw = "48"` with class `nominal`, `hotspot_type = 0` and time `00:00 UTC` are obtained.
+  In addition, `acq_time` given as `"618"` or `618` is interpreted as `06:18 UTC`.
+- _Verification:_ parameterized test.
+- _Source:_ AGENTS §6.1, GUIDE §5.5 (Table 10: `HHMM` in UTC).
 
-**TMP-03 [OBL] · Cobertura calculada a partir de los datos**
+**SCH-03 [REQ] · Collection and version**
 
-- Dada una corrida del pipeline,
-- cuando termina,
-- entonces la tabla `coverage` tiene `first_date` y `last_date` reales por `satellite_norm` y `quality_level`.
-  No se aceptan fechas fijas escritas en el código.
-- _Verificación:_ artefacto `coverage` + test.
-- _Fuente:_ AGENTS §5.3.
+- Given a MODIS record with a Collection 6 or 6.1 `version` (`"6.0"`, `"6.1"`, `"61.03"`, `"6.1NRT"`, etc.),
+- when it is normalized,
+- then it is accepted **without applying any adjustment** between C6 and C6.1. A record from an earlier collection (starting
+  with `5` or `4`) is rejected with `qa_reason = "unsupported_collection"`.
+- _Verification:_ parameterized version test.
+- _Source:_ GUIDE §2.1 (C6 and C6.1 can be mixed; FRP unchanged; global difference of 0.001 %), C61 (calibration changes
+  affect bands 1 and 2, not the thermal ones), GUIDE §7.3 (C5 issues must not get in).
 
-**TMP-04 [OBL] · Climatología con años completos**
+**SCH-04 [REQ] · Brightness fields per instrument**
 
-- Dado el cálculo de la climatología mensual,
-- cuando se definen los años de referencia,
-- entonces se usa por defecto **2001 → último año completo**. Se excluyen 2000 (incompleto, y antes de nov-2000 no es fiable)
-  y los meses que no cumplan GAP-04.
-- _Verificación:_ test sobre la función de climatología.
-- _Fuente:_ GUÍA §7.2.1, AGENTS §8.
-
----
-
-## 4. Huecos y cobertura de observación (GAP)
-
-**GAP-01 [OBL] · Catálogo de huecos conocidos**
-
-- Dado `docs/reference/known_gaps.yaml`,
-- cuando se revisa,
-- entonces contiene **como mínimo** estos periodos, cada uno con su fuente:
-
-    | Satélite | Periodo                                                                               | Fuente      |
-    | -------- | ------------------------------------------------------------------------------------- | ----------- |
-    | Terra    | antes del 2000-11-01 (problemas de hardware y calibración)                            | GUÍA §7.2.1 |
-    | Terra    | septiembre de 2000 (instrumento inoperativo)                                          | GUÍA §8.3.3 |
-    | MODIS    | finales de junio a inicios de julio de 2001                                           | README      |
-    | MODIS    | 2002, faltantes intermitentes                                                         | README      |
-    | MODIS    | desde mediados de agosto de 2007                                                      | README      |
-    | MODIS    | 21-abr-2009 (parcial) y 22-abr-2009 (completo)                                        | README      |
-    | **Aqua** | **16-ago-2020 → 02-sep-2020** (falla del FMU; cobertura limitada a recepción directa) | GUÍA §7.2.4 |
-
-- _Verificación:_ test que carga el YAML y comprueba que estos periodos estén presentes.
-
-**GAP-02 [OBL] · Detección automática de huecos**
-
-- Dados los conteos diarios globales (ING-07),
-- cuando un satélite tiene 0 detecciones globales en un día, o un conteo por debajo del 10 % de la mediana móvil de 31 días,
-- entonces ese día se registra en `data_gaps` con `reason = "detected_outage"`, aunque no figure en GAP-01.
-- _Verificación:_ `test_detects_outage` con una serie sintética que tenga un apagón.
-- _Fuente:_ GUÍA §7.1.1 y §8.3.3, README.
-
-**GAP-03 [OBL] · Un hueco no es un cero**
-
-- Dado un día o mes de una región sin observación válida,
-- cuando se generan los agregados (`harmonized_cell_day`, calendario),
-- entonces el valor es `data_gap = true` con el conteo en `null`, **nunca** `0`.
-- _Verificación:_ `test_gap_is_not_zero` con el periodo de Aqua de 2020 y con 22-abr-2009.
-- _Fuente:_ GUÍA §7.1.1 (que falte un foco no implica que no hubo fuego).
-
-**GAP-04 [OBL] · Cobertura parcial de MODIS (Terra o Aqua ausente)**
-
-- Dado un día en que solo uno de los dos satélites, Terra o Aqua, tiene datos,
-- cuando se agrega MODIS combinado,
-- entonces el día se marca `partial_coverage = true`. Un mes con más del 20 % de días con hueco o cobertura parcial se
-  excluye de la calibración (HAR) y de la climatología (TMP-04) y se muestra en la UI como "cobertura incompleta".
-- _Verificación:_ test con agosto de 2020 (Aqua ausente, Terra presente).
-- _Fuente:_ GUÍA §7.2.4.
-
-**GAP-06 [OBL] · Huecos oficiales de FIRMS**
-
-- Dado el servicio `missing_data` de FIRMS (DATA_SOURCES §1.2),
-- cuando se actualiza `data_gaps`,
-- entonces se incorporan las fechas que FIRMS publica como faltantes (estándar y NRT, por satélite) con `reason = "firms_missing_data"`.
-  Esto complementa GAP-01 y GAP-02, no los reemplaza.
-- _Verificación:_ test con una respuesta simulada; el reporte de QA cuenta los huecos por origen.
-
-**GAP-07 [OBL] · Fin de misión no es un hueco**
-
-- Dado un satélite que terminó su misión (S-NPP desde el 2026-11-02 13:00 UTC, y Terra o Aqua cuando corresponda),
-- cuando no hay detecciones posteriores a esa fecha,
-- entonces la tabla `coverage` registra `end_of_mission` y esos días **no** se marcan como `detected_outage` ni `data_gap`.
-  La fecha se configura en `sensor_lifecycle.yaml`, nunca en el código.
-- _Verificación:_ `test_end_of_mission_not_gap` con S-NPP en noviembre de 2026.
-- _Fuente:_ aviso de NASA/NESDIS sobre el fin de S-NPP.
-
-**GAP-05 [REC] · Nubosidad y observabilidad**
-
-- Dados los productos mensuales en grilla de MODIS (MOD14CMQ/MYD14CMQ, 0,25°), con las capas `MeanCloudFraction`, `TotalPix` y `CloudCorrFirePix`,
-- cuando se integran,
-- entonces cada celda-mes con `MeanCloudFraction > 0.6` (configurable) se marca `low_observability`, y la relación
-  `CloudCorrFirePix / RawFirePix` se guarda como indicador de cuánto podrían estar subestimados los conteos.
-- _Verificación:_ artefacto `cloud_observability.parquet` y test de lectura.
-- _Fuente:_ GUÍA §3.6, §5.4.2 y §7.1.1.
+- Given a MODIS record (`brightness`, `bright_t31`) or a VIIRS one (`bright_ti4`, `bright_ti5`, or their aliases `brightness` and `brightness_2`),
+- when it is normalized,
+- then they are mapped to `bt_mir_k` and `bt_tir_k` without losing the original value.
+- _Verification:_ test with a fixture for each instrument.
+- _Source:_ AGENTS §7.1.
 
 ---
 
-## 5. Confianza de la detección (CONF)
+## 3. Temporal domain (TMP)
 
-**CONF-01 [OBL] · Umbrales de MODIS**
+**TMP-01 [REQ] · Series start date**
 
-- Dado un valor de confianza MODIS `C`,
-- cuando se clasifica,
-- entonces es `low` si `0 ≤ C < 30`, `nominal` si `30 ≤ C < 80` y `high` si `80 ≤ C ≤ 100`. Un valor fuera de 0–100
-  o que no sea numérico se registra como `schema_invalid`.
-- _Verificación:_ test con los valores límite `29, 30, 79, 80, 100, 101, "abc"`.
-- _Fuente:_ GUÍA §8.4.3 (Tabla 11).
+- Given a MODIS record with `acq_datetime_utc < 2000-11-01`,
+- when it is validated,
+- then it is rejected with `qa_reason = "pre_nov2000_quality"`.
+- _Verification:_ `test_rejects_pre_november_2000`.
+- _Source:_ GUIDE §7.2.1 (before Nov 2000 there were damaged detectors, striping, undetected fires and, in Feb–Mar 2000,
+  whole scan lines flagged as fire) and GUIDE §8.3.10.
 
-**CONF-02 [OBL] · Clases de VIIRS**
+**TMP-02 [REQ] · Time in UTC**
 
-- Dados `l`, `n` y `h`, entonces se clasifican como `low`, `nominal` y `high`. Cualquier otro valor es `schema_invalid`.
-- _Verificación:_ test.
+- Given any record,
+- when it is stored,
+- then `acq_datetime_utc` is in UTC. Conversion to local time only happens in the API or the UI.
+- _Verification:_ test and schema review (`timestamptz`).
+- _Source:_ GUIDE §5.5 (Table 10), AGENTS §8.
 
-**CONF-03 [OBL] · Filtro por defecto**
+**TMP-03 [REQ] · Coverage computed from the data**
 
-- Dada la configuración por defecto,
-- cuando se filtra,
-- entonces se conservan solo las detecciones `nominal` y `high`; las `low` se registran como `low_confidence`.
-  El umbral se puede cambiar con `MIN_CONFIDENCE_CLASS`.
-- _Verificación:_ test y conteo de `low_confidence` en el reporte de QA.
-- _Fuente:_ GUÍA §5.1.3 y §8.4.2 (para reducir las falsas alarmas se recomienda usar solo nominal y alta).
+- Given a pipeline run,
+- when it ends,
+- then the `coverage` table has real `first_date` and `last_date` per `satellite_norm` and `quality_level`.
+  Fixed dates written in the code are not accepted.
+- _Verification:_ `coverage` artifact + test.
+- _Source:_ AGENTS §5.3.
 
-**CONF-04 [OBL] · La confianza no se usa como peso**
+**TMP-04 [REQ] · Climatology with complete years**
 
-- Dada cualquier agregación o calibración,
-- entonces la confianza solo se usa como **filtro**, nunca como ponderación.
-- _Verificación:_ revisión de código.
-- _Fuente:_ GUÍA §7.2.2 (algunos píxeles dudosos siguen clasificados como nominales), AGENTS §9.2.
-
----
-
-## 6. Tipo de foco y fuentes estáticas (TYPE)
-
-**TYPE-01 [OBL] · Filtro por `type` en los datos estándar**
-
-- Dado un registro con el campo `type`,
-- cuando se filtra,
-- entonces solo se conserva `type = 0` (presunto incendio de vegetación). `1` (volcán activo), `2` (otra fuente terrestre
-  estática) y `3` (mar adentro) se registran como `non_vegetation_type`.
-- _Verificación:_ test parametrizado.
-- _Fuente:_ GUÍA §5.5 (Tabla 10).
-
-**TYPE-02 [OBL] · Máscara de fuentes estáticas con el criterio de la guía**
-
-- Dados los focos de VIIRS y los NRT, que no traen `type`, y también los MODIS estándar,
-- cuando se construye `static_source_mask`,
-- entonces una celda de ~1 km (H3 res. 8, configurable) se marca como estática si tuvo detecciones en **16 días o más
-  de un mismo año calendario**, o si está en **zona urbana**, o a menos de 2 km (configurable) de un **volcán activo**,
-  o sobre **agua** (posible quema de gas en el mar).
-- _Verificación:_ test con una serie sintética de 16 y de 15 días; artefacto `static_source_mask.parquet`.
-- _Fuente:_ GUÍA §5.5 (definición de `type = 2`: 16 días o más en un año calendario, más zonas urbanas según MCD12Q1; los
-  `type` 0–2 son solo de tierra y el 3 corresponde a agua).
-
-**TYPE-03 [OBL] · La máscara también se aplica a los MODIS con `type = 0`**
-
-- Dado un foco MODIS estándar con `type = 0` que cae en una celda de `static_source_mask`,
-- cuando se filtra,
-- entonces se excluye con `qa_reason = "static_source_mask"`, y el reporte de QA muestra cuántos `type = 0` capturó la máscara.
-- _Verificación:_ test y conteo en el reporte.
-- _Fuente:_ GUÍA §7.2.3 (algunas fuentes estáticas no están marcadas en `type`).
-
-**TYPE-04 [OBL] · Validación de la máscara frente a MODIS `type = 2`**
-
-- Dado el periodo de solapamiento con datos MODIS estándar,
-- cuando se compara la máscara construida con datos VIIRS contra las celdas MODIS con `type ∈ {1, 2}`,
-- entonces la máscara recupera **al menos el 80 %** de esas celdas y elimina **como máximo el 2 %** de las detecciones
-  MODIS `type = 0` (umbrales configurables y documentados).
-- _Verificación:_ artefacto `data/reports/static_mask_validation_<version>.json`; el flujo falla si no se cumplen los umbrales.
-- _Fuente:_ GUÍA §5.5 y §7.2.3.
-
-**TYPE-05 [OBL] · Datos auxiliares de la máscara**
-
-- Dada la máscara,
-- entonces usa: zonas urbanas de **MCD12Q1** (clase IGBP 13, "Urban and Built-up"), con GHSL como alternativa;
-  volcanes del **Smithsonian GVP**; y una máscara de tierra/agua. Cada fuente queda registrada en `data/sources.yaml` (ver AUX-01).
-- _Verificación:_ revisión de `sources.yaml` y test de carga.
-- _Fuente:_ GUÍA §5.5 y C61 (MCD12Q1 C6.1 trae una corrección menor en la clase UMD; usar la versión C6.1).
+- Given the monthly climatology computation,
+- when the reference years are defined,
+- then **2001 → last complete year** is used by default. 2000 (incomplete, and not reliable before Nov 2000) is excluded,
+  as are months that do not meet GAP-04.
+- _Verification:_ test on the climatology function.
+- _Source:_ GUIDE §7.2.1, AGENTS §8.
 
 ---
 
-## 7. Geometría del píxel (PIX)
+## 4. Gaps and observation coverage (GAP)
 
-**PIX-01 [OBL] · Área del píxel**
+**GAP-01 [REQ] · Catalog of known gaps**
 
-- Dados `scan` y `track` (en km),
-- cuando se normaliza,
-- entonces se calcula `pixel_area_km2 = scan × track` y se conserva.
-- _Verificación:_ test (para el ejemplo de `data_type`: 2,5 × 1,5 = 3,75 km²).
-- _Fuente:_ GUÍA §8.4.6 (el píxel MODIS mide nominalmente 1 km² y crece lejos del nadir).
+- Given `docs/reference/known_gaps.yaml`,
+- when it is reviewed,
+- then it contains **at least** these periods, each with its source:
 
-**PIX-02 [OBL] · El conteo de celdas no depende del tamaño del píxel**
+    | Satellite | Period                                                                                    | Source      |
+    | --------- | ----------------------------------------------------------------------------------------- | ----------- |
+    | Terra     | before 2000-11-01 (hardware and calibration problems)                                     | GUIDE §7.2.1 |
+    | Terra     | September 2000 (instrument inoperative)                                                   | GUIDE §8.3.3 |
+    | MODIS     | late June to early July 2001                                                              | README      |
+    | MODIS     | 2002, intermittent gaps                                                                   | README      |
+    | MODIS     | from mid-August 2007                                                                      | README      |
+    | MODIS     | 21 Apr 2009 (partial) and 22 Apr 2009 (complete)                                          | README      |
+    | **Aqua**  | **16 Aug 2020 → 02 Sep 2020** (FMU failure; coverage limited to direct broadcast)         | GUIDE §7.2.4 |
 
-- Dados dos focos del mismo satélite y la misma pasada que caen en la misma celda H3 de agregación,
-- cuando se calcula `active` (AGENTS §10.1),
-- entonces la celda cuenta **una sola vez**.
-- _Verificación:_ `test_cell_counts_once`.
-- _Fuente:_ GUÍA §7.1.1 (riesgo de mal uso de las ubicaciones de píxel).
+- _Verification:_ test that loads the YAML and checks that these periods are present.
 
-**PIX-03 [REC] · Sensibilidad al ángulo de barrido**
+**GAP-02 [REQ] · Automatic gap detection**
 
-- Dado el periodo de solapamiento,
-- cuando se valida la armonización,
-- entonces el reporte incluye una comparación de resultados con y sin los focos de `pixel_area_km2 > 4` (configurable).
-- _Verificación:_ sección presente en `validation_<version>.json`.
-- _Fuente:_ GUÍA §8.4.6.
+- Given the global daily counts (ING-07),
+- when a satellite has 0 global detections on a day, or a count below 10 % of the 31-day rolling median,
+- then that day is recorded in `data_gaps` with `reason = "detected_outage"`, even if it is not listed in GAP-01.
+- _Verification:_ `test_detects_outage` with a synthetic series containing an outage.
+- _Source:_ GUIDE §7.1.1 and §8.3.3, README.
 
----
+**GAP-03 [REQ] · A gap is not a zero**
 
-## 8. Resolución temporal y sesgo de muestreo (SAMP)
+- Given a day or month of a region without a valid observation,
+- when the aggregates are generated (`harmonized_cell_day`, calendar),
+- then the value is `data_gap = true` with the count as `null`, **never** `0`.
+- _Verification:_ `test_gap_is_not_zero` with the 2020 Aqua period and with 22 Apr 2009.
+- _Source:_ GUIDE §7.1.1 (a missing hotspot does not imply there was no fire).
 
-**SAMP-01 [OBL] · Unidad principal del calendario**
+**GAP-04 [REQ] · Partial MODIS coverage (Terra or Aqua missing)**
 
-- Dados los agregados para la app,
-- cuando se generan los productos del calendario,
-- entonces la unidad principal es **mensual**, y las anomalías y rankings solo se calculan con agregaciones de **8 días o más**.
-- _Verificación:_ test sobre la función de anomalías: `freq="day"` debe lanzar `ValueError` o devolver la advertencia `sampling_bias`.
-- _Fuente:_ GUÍA §7.1.1 (sesgos graves en intervalos menores de unos 8 días) y §8.6.2.
+- Given a day on which only one of the two satellites, Terra or Aqua, has data,
+- when combined MODIS is aggregated,
+- then the day is marked `partial_coverage = true`. A month with more than 20 % of days with a gap or partial coverage is
+  excluded from calibration (HAR) and climatology (TMP-04) and shown in the UI as "incomplete coverage".
+- _Verification:_ test with August 2020 (Aqua missing, Terra present).
+- _Source:_ GUIDE §7.2.4.
 
-**SAMP-02 [OBL] · Advertencia en las salidas diarias**
+**GAP-06 [REQ] · Official FIRMS gaps**
 
-- Dada una salida diaria (serie o CSV agregado),
-- entonces incluye `sampling_bias_warning = true` en sus metadatos y la API la propaga hacia la UI.
-- _Verificación:_ test de contrato de `/timeseries?freq=day`.
-- _Fuente:_ GUÍA §7.1.1.
+- Given the FIRMS `missing_data` service (DATA_SOURCES §1.2),
+- when `data_gaps` is updated,
+- then the dates FIRMS publishes as missing (standard and NRT, per satellite) are added with `reason = "firms_missing_data"`.
+  This complements GAP-01 and GAP-02; it does not replace them.
+- _Verification:_ test with a simulated response; the QA report counts gaps by origin.
 
-**SAMP-03 [OBL] · Combinación de Terra y Aqua**
+**GAP-07 [REQ] · End of mission is not a gap**
 
-- Dados Terra y Aqua,
-- cuando se agrega MODIS,
-- entonces ambos se combinan en una sola serie MODIS (como el producto MCD14ML, que reúne los dos). Aqua no existe antes de
-  julio de 2002, y la calibración debe considerar ese cambio en la frecuencia de muestreo: estrato `modis_terra_only`
-  antes de jul-2002 y `modis_terra_aqua` desde entonces.
-- _Verificación:_ test y coeficientes de calibración separados.
-- _Fuente:_ GUÍA §3.7 y §8.6.2 (con un solo instrumento el muestreo es insuficiente en periodos cortos).
+- Given a satellite that ended its mission (S-NPP from 2026-11-02 13:00 UTC, and Terra or Aqua when applicable),
+- when there are no detections after that date,
+- then the `coverage` table records `end_of_mission` and those days are **not** marked as `detected_outage` or `data_gap`.
+  The date is configured in `sensor_lifecycle.yaml`, never in the code.
+- _Verification:_ `test_end_of_mission_not_gap` with S-NPP in November 2026.
+- _Source:_ NASA/NESDIS notice about the end of S-NPP.
 
----
+**GAP-05 [REC] · Cloudiness and observability**
 
-## 9. Armonización MODIS ↔ VIIRS (HAR)
-
-**HAR-01 [OBL] · Estratificación**
-
-- Dado el ajuste de calibración,
-- entonces se estima por **bioma o ecorregión** (p. ej., RESOLVE Ecoregions 2017) **× mes calendario** y **× estrato de muestreo**
-  (SAMP-03). Si un estrato tiene menos de 30 celdas-mes con actividad, se usa el estrato superior (bioma → región → global).
-- _Verificación:_ artefacto `calibration_<version>.parquet` con las columnas `stratum`, `month`, `sampling_stratum`, `n`, `coef`, `fallback_level`.
-
-**HAR-02 [OBL] · Periodo de calibración**
-
-- Dado el periodo de solapamiento,
-- entonces la calibración MODIS ↔ VIIRS usa **solo datos estándar** de MODIS y de VIIRS S-NPP, desde el 2012-01-20 hasta la última
-  fecha estándar de S-NPP (como mucho el 2026-11-02), excluyendo los NRT, NOAA-21 y los meses afectados por GAP-03, GAP-04 o TYPE.
-  NOAA-20 estándar solo se usa para el puente entre sensores VIIRS (SRC-02).
-- _Verificación:_ aserción en el flujo y test.
-- _Fuente:_ README, GUÍA §7.2.4, aviso de fin de S-NPP (DATA_SOURCES §1.1).
-
-**HAR-03 [OBL] · Validación cruzada dejando años fuera**
-
-- Dada una calibración,
-- cuando se valida dejando un año fuera cada vez,
-- entonces |sesgo relativo| ≤ 10 % y Spearman de la estacionalidad mensual ≥ 0,8 en al menos el 80 % de los estratos con datos.
-  Si no se cumple, **no se publica** el dataset.
-- _Verificación:_ `validation_<version>.json`; el flujo devuelve un código de error.
-- _Fuente:_ AGENTS §10.3.
-
-**HAR-04 [OBL] · Sin saltos en 2012**
-
-- Dada la serie armonizada de una región de prueba,
-- cuando se compara MODIS calibrado ("equivalente VIIRS") con VIIRS observado en 2012–2014,
-- entonces la diferencia mensual media es ≤ 10 %.
-- _Verificación:_ test de integración con un fixture regional.
-
-**HAR-05 [OBL] · Reproducibilidad**
-
-- Dadas las mismas entradas y la misma configuración,
-- cuando se ejecuta el pipeline dos veces,
-- entonces el hash de `harmonized_cell_day` es idéntico.
-- _Verificación:_ test de reproducibilidad (semillas fijas, orden determinista).
-
-**HAR-06 [REC] · Validación externa**
-
-- Dada el área quemada **MCD64A1**,
-- entonces el reporte incluye la correlación mensual entre la actividad armonizada y el área quemada por estrato.
-- _Fuente:_ GUÍA §8.3.9 (no hay una relación constante entre píxel y área quemada: se usa solo como validación, no como conversión).
+- Given the MODIS monthly gridded products (MOD14CMQ/MYD14CMQ, 0.25°), with the layers `MeanCloudFraction`, `TotalPix` and `CloudCorrFirePix`,
+- when they are integrated,
+- then each cell-month with `MeanCloudFraction > 0.6` (configurable) is marked `low_observability`, and the ratio
+  `CloudCorrFirePix / RawFirePix` is stored as an indicator of how much the counts could be underestimated.
+- _Verification:_ `cloud_observability.parquet` artifact and a reading test.
+- _Source:_ GUIDE §3.6, §5.4.2 and §7.1.1.
 
 ---
 
-## 10. QA, salidas y trazabilidad (OUT)
+## 5. Detection confidence (CONF)
 
-**OUT-01 [OBL] · Ninguna fila se pierde sin registro**
+**CONF-01 [REQ] · MODIS thresholds**
 
-- Dada una corrida,
-- entonces `filas_leídas = filas_aceptadas + Σ filas_rechazadas(qa_reason)` por archivo.
-- _Verificación:_ test de cuadre sobre el reporte de QA.
-- _Fuente:_ AGENTS §2.3.
+- Given a MODIS confidence value `C`,
+- when it is classified,
+- then it is `low` if `0 ≤ C < 30`, `nominal` if `30 ≤ C < 80` and `high` if `80 ≤ C ≤ 100`. A value outside 0–100
+  or non-numeric is recorded as `schema_invalid`.
+- _Verification:_ test with the boundary values `29, 30, 79, 80, 100, 101, "abc"`.
+- _Source:_ GUIDE §8.4.3 (Table 11).
 
-**OUT-02 [OBL] · Reporte de QA**
+**CONF-02 [REQ] · VIIRS classes**
 
-- Dada una corrida,
-- entonces `data/reports/qa_<run_id>.json` contiene: filas por archivo, rechazos por `qa_reason`, cobertura por satélite,
-  días con hueco (conocidos y detectados), días sospechosos, `type = 0` capturados por la máscara y el porcentaje de `low_confidence`.
-- _Verificación:_ validación del JSON contra `qa_report.schema.json`.
+- Given `l`, `n` and `h`, then they are classified as `low`, `nominal` and `high`. Any other value is `schema_invalid`.
+- _Verification:_ test.
 
-**OUT-03 [OBL] · Umbral de errores de esquema**
+**CONF-03 [REQ] · Default filter**
 
-- Si `schema_invalid / filas_leídas > 1 %` en cualquier archivo, entonces el flujo falla.
-- _Verificación:_ test.
+- Given the default configuration,
+- when filtering,
+- then only `nominal` and `high` detections are kept; `low` ones are recorded as `low_confidence`.
+  The threshold can be changed with `MIN_CONFIDENCE_CLASS`.
+- _Verification:_ test and `low_confidence` count in the QA report.
+- _Source:_ GUIDE §5.1.3 and §8.4.2 (to reduce false alarms, using only nominal and high is recommended).
 
-**OUT-04 [OBL] · Versión del dataset**
+**CONF-04 [REQ] · Confidence is not used as a weight**
 
-- Dado un dataset publicado,
-- entonces `dataset_versions` registra `nina_version`, la fecha, el hash de la configuración, las métricas de HAR-03 y TYPE-04,
-  y las versiones de cada dato auxiliar.
-- _Verificación:_ consulta a la tabla y test.
-
-**OUT-05 [OBL] · Cita y aviso legal**
-
-- Dado cualquier artefacto exportable,
-- entonces va acompañado de la cita de FIRMS, los **DOI de los productos usados** (DATA_SOURCES §1.6) y el aviso de que los datos
-  no son aptos para decisiones tácticas o a escala local.
-- _Verificación:_ test de exportación.
-- _Fuente:_ README.
+- Given any aggregation or calibration,
+- then confidence is only used as a **filter**, never as a weighting.
+- _Verification:_ code review.
+- _Source:_ GUIDE §7.2.2 (some doubtful pixels are still classified as nominal), AGENTS §9.2.
 
 ---
 
-## 11. Datos auxiliares (AUX)
+## 6. Hotspot type and static sources (TYPE)
 
-**AUX-01 [OBL] · Registro de fuentes**
+**TYPE-01 [REQ] · Filter by `type` in standard data**
 
-- Dado `data/sources.yaml`,
-- entonces cada fuente tiene: `name`, `url`, `version`/`collection`, `license`, `download_date`, `sha256` y `used_in` (criterios que la usan).
-  Las URLs salen de `docs/DATA_SOURCES.md`, y toda URL marcada ⚠️ se verifica con una petición real antes de usarla.
+- Given a record with the `type` field,
+- when filtering,
+- then only `type = 0` (presumed vegetation fire) is kept. `1` (active volcano), `2` (other static land
+  source) and `3` (offshore) are recorded as `non_vegetation_type`.
+- _Verification:_ parameterized test.
+- _Source:_ GUIDE §5.5 (Table 10).
 
-**AUX-02 [OBL] · Licencias compatibles con el uso**
+**TYPE-02 [REQ] · Static-source mask with the guide's criterion**
 
-- Dado un dato auxiliar con licencia restrictiva (p. ej., **GADM: gratis solo para uso académico y no comercial**),
-- cuando la app se vaya a publicar o a usar comercialmente,
-- entonces se documenta la decisión en un ADR, o se reemplaza por una fuente con licencia abierta.
-- _Verificación:_ el campo `license` está en `sources.yaml` y existe el ADR correspondiente.
+- Given VIIRS and NRT hotspots, which do not carry `type`, and also standard MODIS,
+- when `static_source_mask` is built,
+- then a ~1 km cell (H3 res. 8, configurable) is marked as static if it had detections on **16 or more days
+  of the same calendar year**, or if it is in an **urban area**, or within 2 km (configurable) of an **active volcano**,
+  or over **water** (possible offshore gas flaring).
+- _Verification:_ test with a synthetic series of 16 and 15 days; `static_source_mask.parquet` artifact.
+- _Source:_ GUIDE §5.5 (definition of `type = 2`: 16 or more days in a calendar year, plus urban areas from MCD12Q1;
+  `type` 0–2 are land only and 3 corresponds to water).
 
-**AUX-03 [OBL] · Cautela con MCD12Q1 desde 2021**
+**TYPE-03 [REQ] · The mask also applies to MODIS with `type = 0`**
 
-- Dada la máscara urbana basada en MCD12Q1 v6.1,
-- cuando se usan años de 2021 en adelante,
-- entonces se usa el último año anterior a 2021 o se reemplaza por GHSL, y la elección queda registrada en `sources.yaml`.
-- _Verificación:_ revisión de la configuración y test de carga.
-- _Fuente:_ metadatos de MCD12Q1 v6.1 (los datos de entrenamiento no se actualizaron; el productor pide cautela desde 2021).
+- Given a standard MODIS hotspot with `type = 0` that falls in a `static_source_mask` cell,
+- when filtering,
+- then it is excluded with `qa_reason = "static_source_mask"`, and the QA report shows how many `type = 0` the mask captured.
+- _Verification:_ test and count in the report.
+- _Source:_ GUIDE §7.2.3 (some static sources are not flagged in `type`).
 
-| Dato                                                                   | Obligatorio | Usado en               |
-| ---------------------------------------------------------------------- | ----------- | ---------------------- |
-| FIRMS MODIS C6.1 estándar + NRT                                        | Sí          | todo                   |
-| FIRMS VIIRS S-NPP estándar (2012-01-20 → 2026-11-02)                   | Sí          | HAR, TYPE-04, SRC-02   |
-| FIRMS VIIRS NOAA-20 estándar + NRT (2018 →) y NOAA-21 NRT (2024 →)     | Sí          | SRC-01, SRC-02, NRT    |
-| FIRMS `data_availability` y `missing_data`                             | Sí          | ING-09, GAP-06         |
-| Conteos diarios globales por satélite (MCD14ML mensual o FIRMS global) | Sí          | ING-07, GAP-02         |
-| Límites administrativos (GADM / INEI)                                  | Sí          | API, HAR-01 (respaldo) |
-| Biomas o ecorregiones (RESOLVE 2017)                                   | Sí          | HAR-01                 |
-| MCD12Q1 C6.1 (clase urbana) o GHSL                                     | Sí          | TYPE-02, TYPE-05       |
-| Volcanes Holoceno (Smithsonian GVP)                                    | Sí          | TYPE-02                |
-| Máscara de tierra/agua                                                 | Sí          | TYPE-02                |
-| MOD14CMQ / MYD14CMQ (0,25°, mensual)                                   | No          | GAP-05                 |
-| MCD64A1 (área quemada)                                                 | No          | HAR-06                 |
-| Zonas horarias IANA (timezone-boundary-builder)                        | No          | fecha local en la API  |
+**TYPE-04 [REQ] · Validation of the mask against MODIS `type = 2`**
 
----
+- Given the overlap period with standard MODIS data,
+- when the mask built from VIIRS data is compared against MODIS cells with `type ∈ {1, 2}`,
+- then the mask recovers **at least 80 %** of those cells and removes **at most 2 %** of MODIS `type = 0`
+  detections (configurable and documented thresholds).
+- _Verification:_ `data/reports/static_mask_validation_<version>.json` artifact; the flow fails if the thresholds are not met.
+- _Source:_ GUIDE §5.5 and §7.2.3.
 
-## 12. Continuidad de sensores y adquisición (SRC)
+**TYPE-05 [REQ] · Auxiliary data for the mask**
 
-**SRC-01 [OBL] · Serie VIIRS sin S-NPP desde el 2-nov-2026**
-
-- Dado que S-NPP dejó de entregar datos nuevos el **2026-11-02 a las 13:00 UTC**,
-- cuando se construye la serie VIIRS posterior a esa fecha,
-- entonces se usan NOAA-20 (y NOAA-21 como respaldo de continuidad). El job NRT **no** consulta `VIIRS_SNPP_NRT`, y una
-  configuración que lo incluya falla al validarse.
-- _Verificación:_ test de la configuración del job NRT; aserción en `nrt_daily_flow`.
-- _Fuente:_ aviso de NASA FIRMS y NESDIS sobre el fin de S-NPP.
-
-**SRC-02 [OBL] · Puente entre sensores VIIRS (S-NPP → NOAA-20)**
-
-- Dado el solapamiento de datos **estándar** de S-NPP y NOAA-20 (2018 → 2026-11-02),
-- cuando se arma la serie "equivalente VIIRS",
-- entonces se estima un factor S-NPP ↔ NOAA-20 por estrato y mes (mismo método que HAR-01 y HAR-03) y se aplica a NOAA-20 desde el
-  2026-11-02, para que el cambio de satélite no produzca un salto. Se valida con |sesgo relativo| ≤ 5 % en el solapamiento.
-- _Verificación:_ `inter_viirs_bridge_<version>.json` + test de continuidad en noviembre de 2026.
-- _Fuente:_ NASA indica que NOAA-20 y NOAA-21 llevan el mismo VIIRS en el mismo plano orbital, con unos 50 minutos de diferencia.
-  La hora de paso distinta justifica comprobar el sesgo en vez de suponerlo nulo.
-
-**SRC-03 [OBL] · MODIS sin final fijo**
-
-- Dado que NASA recomienda migrar desde MODIS y que Terra es el único paso de la mañana,
-- cuando Terra o Aqua dejen de entregar datos,
-- entonces el pipeline sigue funcionando: la serie armonizada está anclada en VIIRS (MODIS solo se usa calibrado para
-  2000–2011), se aplica GAP-07 y se registra el fin en `sensor_lifecycle.yaml`.
-- _Verificación:_ test simulando el fin de Terra y luego el de Aqua; la serie 2012 → hoy no cambia.
-
-**SRC-04 [OBL] · Límites de la API de FIRMS**
-
-- Dado el cliente de la API (`nina/io/firms_api.py`),
-- entonces respeta **5000 transacciones cada 10 minutos por MAP_KEY** (contando cada día de `DAY_RANGE` como una transacción),
-  usa `FIRMS_MAX_DAY_RANGE` (configurable, por defecto 5), reintenta con espera exponencial ante errores 429 y 5xx, y registra el consumo
-  consultando el estado de la MAP_KEY.
-- _Verificación:_ test con un servidor simulado que devuelve 429; el número de transacciones calculado coincide con el registrado.
-
-**SRC-05 [OBL] · Datos RT y URT**
-
-- Dado que FIRMS elimina las detecciones RT y URT cuando procesa los NRT correspondientes, o pasadas 6 h,
-- cuando corre el job NRT,
-- entonces solo se ingieren como definitivos los NRT con más de 6 h de antigüedad. Las detecciones RT y URT, si se usan, se guardan como
-  `quality_level = "rt"`, se marcan `is_provisional` y se reemplazan en la corrida siguiente.
-- _Verificación:_ test de reemplazo de RT por NRT.
-
-**SRC-06 [OBL] · Disponibilidad y retraso del estándar**
-
-- Dado `/api/data_availability`,
-- cuando se decide qué periodo es provisional y qué reprocesar,
-- entonces `is_provisional` se calcula a partir de la última fecha estándar real de cada sensor, no con un número de días fijo. FIRMS
-  indica un retraso de unos 3 meses (Readme) o unos 5 meses (página de descarga), así que `PROVISIONAL_DAYS` solo sirve de respaldo
-  (por defecto 150). Un job semanal reemplaza NRT por estándar cuando aparece.
-- _Verificación:_ test con fechas de disponibilidad simuladas.
-
-**SRC-07 [OBL] · Credenciales**
-
-- Dados `FIRMS_MAP_KEY` y Earthdata Login,
-- entonces se leen de variables de entorno o de `~/.netrc`, nunca aparecen en logs, reportes ni commits, y el CI usa _secrets_.
-- _Verificación:_ test que busca patrones de clave (32 caracteres hexadecimales) en los logs; _secret scanning_ en el CI.
-
-**ING-08 [OBL] · Estrategia de adquisición documentada**
-
-- Dado el pipeline,
-- entonces el histórico se carga desde la herramienta de descarga del archivo o los resúmenes por país, lo reciente desde la API, y los
-  archivos NRT sin clave solo como respaldo, según la tabla de DATA_SOURCES §3. No se usa la API para descargar años completos día a día
-  si existe la descarga del archivo.
-- _Verificación:_ revisión de `scripts/` y `nina/` y reporte de transacciones de la corrida.
-
-**ING-09 [OBL] · Sensores y fechas tomados de la API**
-
-- Dado el inicio de cada corrida,
-- entonces el pipeline consulta `data_availability` y guarda la respuesta en `data/interim/data_availability_<run_id>.csv`. La
-  cobertura (TMP-03), la calidad estándar o NRT (ING-04) y el reprocesamiento (SRC-06) se basan en ese archivo.
-- _Verificación:_ el archivo existe y el reporte lo referencia.
+- Given the mask,
+- then it uses: urban areas from **MCD12Q1** (IGBP class 13, "Urban and Built-up"), with GHSL as an alternative;
+  volcanoes from the **Smithsonian GVP**; and a land/water mask. Each source is recorded in `data/sources.yaml` (see AUX-01).
+- _Verification:_ review of `sources.yaml` and a loading test.
+- _Source:_ GUIDE §5.5 and C61 (MCD12Q1 C6.1 has a minor fix in the UMD class; use the C6.1 version).
 
 ---
 
-## Plantilla del reporte de aceptación
+## 7. Pixel geometry (PIX)
+
+**PIX-01 [REQ] · Pixel area**
+
+- Given `scan` and `track` (in km),
+- when normalizing,
+- then `pixel_area_km2 = scan × track` is computed and kept.
+- _Verification:_ test (for the `data_type` example: 2.5 × 1.5 = 3.75 km²).
+- _Source:_ GUIDE §8.4.6 (the MODIS pixel is nominally 1 km² and grows away from nadir).
+
+**PIX-02 [REQ] · Cell counting does not depend on pixel size**
+
+- Given two hotspots from the same satellite and the same overpass that fall in the same aggregation H3 cell,
+- when `active` is computed (AGENTS §10.1),
+- then the cell counts **only once**.
+- _Verification:_ `test_cell_counts_once`.
+- _Source:_ GUIDE §7.1.1 (risk of misusing pixel locations).
+
+**PIX-03 [REC] · Sensitivity to scan angle**
+
+- Given the overlap period,
+- when the harmonization is validated,
+- then the report includes a comparison of results with and without hotspots where `pixel_area_km2 > 4` (configurable).
+- _Verification:_ section present in `validation_<version>.json`.
+- _Source:_ GUIDE §8.4.6.
+
+---
+
+## 8. Temporal resolution and sampling bias (SAMP)
+
+**SAMP-01 [REQ] · Main calendar unit**
+
+- Given the aggregates for the app,
+- when the calendar products are generated,
+- then the main unit is **monthly**, and anomalies and rankings are only computed with aggregations of **8 days or more**.
+- _Verification:_ test on the anomaly function: `freq="day"` must raise `ValueError` or return the `sampling_bias` warning.
+- _Source:_ GUIDE §7.1.1 (severe biases at intervals shorter than about 8 days) and §8.6.2.
+
+**SAMP-02 [REQ] · Warning on daily outputs**
+
+- Given a daily output (series or aggregated CSV),
+- then it includes `sampling_bias_warning = true` in its metadata and the API propagates it to the UI.
+- _Verification:_ contract test of `/timeseries?freq=day`.
+- _Source:_ GUIDE §7.1.1.
+
+**SAMP-03 [REQ] · Combining Terra and Aqua**
+
+- Given Terra and Aqua,
+- when MODIS is aggregated,
+- then both are combined into a single MODIS series (like the MCD14ML product, which brings both together). Aqua does not exist before
+  July 2002, and the calibration must account for that change in sampling frequency: stratum `modis_terra_only`
+  before Jul 2002 and `modis_terra_aqua` from then on.
+- _Verification:_ test and separate calibration coefficients.
+- _Source:_ GUIDE §3.7 and §8.6.2 (with a single instrument sampling is insufficient over short periods).
+
+---
+
+## 9. MODIS ↔ VIIRS harmonization (HAR)
+
+**HAR-01 [REQ] · Stratification**
+
+- Given the calibration fit,
+- then it is estimated per **biome or ecoregion** (e.g. RESOLVE Ecoregions 2017) **× calendar month** and **× sampling stratum**
+  (SAMP-03). If a stratum has fewer than 30 cell-months with activity, the higher stratum is used (biome → region → global).
+- _Verification:_ `calibration_<version>.parquet` artifact with columns `stratum`, `month`, `sampling_stratum`, `n`, `coef`, `fallback_level`.
+
+**HAR-02 [REQ] · Calibration period**
+
+- Given the overlap period,
+- then the MODIS ↔ VIIRS calibration uses **only standard data** from MODIS and VIIRS S-NPP, from 2012-01-20 to the last
+  standard S-NPP date (at most 2026-11-02), excluding NRT, NOAA-21 and months affected by GAP-03, GAP-04 or TYPE.
+  Standard NOAA-20 is used only for the bridge between VIIRS sensors (SRC-02).
+- _Verification:_ assertion in the flow and a test.
+- _Source:_ README, GUIDE §7.2.4, S-NPP end notice (DATA_SOURCES §1.1).
+
+**HAR-03 [REQ] · Leave-one-year-out cross-validation**
+
+- Given a calibration,
+- when it is validated leaving one year out each time,
+- then |relative bias| ≤ 10 % and Spearman of the monthly seasonality ≥ 0.8 in at least 80 % of the strata with data.
+  If this is not met, the dataset is **not published**.
+- _Verification:_ `validation_<version>.json`; the flow returns an error code.
+- _Source:_ AGENTS §10.3.
+
+**HAR-04 [REQ] · No jumps in 2012**
+
+- Given the harmonized series of a test region,
+- when calibrated MODIS ("VIIRS equivalent") is compared with observed VIIRS in 2012–2014,
+- then the mean monthly difference is ≤ 10 %.
+- _Verification:_ integration test with a regional fixture.
+
+**HAR-05 [REQ] · Reproducibility**
+
+- Given the same inputs and the same configuration,
+- when the pipeline runs twice,
+- then the hash of `harmonized_cell_day` is identical.
+- _Verification:_ reproducibility test (fixed seeds, deterministic ordering).
+
+**HAR-06 [REC] · External validation**
+
+- Given **MCD64A1** burned area,
+- then the report includes the monthly correlation between harmonized activity and burned area per stratum.
+- _Source:_ GUIDE §8.3.9 (there is no constant relation between pixel and burned area: it is used only for validation, not as a conversion).
+
+---
+
+## 10. QA, outputs and traceability (OUT)
+
+**OUT-01 [REQ] · No row is lost without a record**
+
+- Given a run,
+- then `rows_read = rows_accepted + Σ rows_rejected(qa_reason)` per file.
+- _Verification:_ balance test on the QA report.
+- _Source:_ AGENTS §2.3.
+
+**OUT-02 [REQ] · QA report**
+
+- Given a run,
+- then `data/reports/qa_<run_id>.json` contains: rows per file, rejections per `qa_reason`, coverage per satellite,
+  gap days (known and detected), suspicious days, `type = 0` captured by the mask and the percentage of `low_confidence`.
+- _Verification:_ validation of the JSON against `qa_report.schema.json`.
+
+**OUT-03 [REQ] · Schema error threshold**
+
+- If `schema_invalid / rows_read > 1 %` in any file, then the flow fails.
+- _Verification:_ test.
+
+**OUT-04 [REQ] · Dataset version**
+
+- Given a published dataset,
+- then `dataset_versions` records `nina_version`, the date, the configuration hash, the HAR-03 and TYPE-04 metrics,
+  and the versions of each auxiliary dataset.
+- _Verification:_ query to the table and test.
+
+**OUT-05 [REQ] · Citation and legal notice**
+
+- Given any exportable artifact,
+- then it comes with the FIRMS citation, the **DOIs of the products used** (DATA_SOURCES §1.6) and the warning that the data
+  are not suitable for tactical or local-scale decisions.
+- _Verification:_ export test.
+- _Source:_ README.
+
+---
+
+## 11. Auxiliary data (AUX)
+
+**AUX-01 [REQ] · Source registry**
+
+- Given `data/sources.yaml`,
+- then each source has: `name`, `url`, `version`/`collection`, `license`, `download_date`, `sha256` and `used_in` (criteria that use it).
+  URLs come from `docs/DATA_SOURCES.md`, and every URL marked ⚠️ is verified with a real request before use.
+
+**AUX-02 [REQ] · Licenses compatible with the use**
+
+- Given an auxiliary dataset with a restrictive license (e.g. **GADM: free only for academic and non-commercial use**),
+- when the app is going to be published or used commercially,
+- then the decision is documented in an ADR, or it is replaced by an openly licensed source.
+- _Verification:_ the `license` field is in `sources.yaml` and the corresponding ADR exists.
+
+**AUX-03 [REQ] · Caution with MCD12Q1 from 2021**
+
+- Given the urban mask based on MCD12Q1 v6.1,
+- when years from 2021 onwards are used,
+- then the last year before 2021 is used or it is replaced by GHSL, and the choice is recorded in `sources.yaml`.
+- _Verification:_ configuration review and a loading test.
+- _Source:_ MCD12Q1 v6.1 metadata (the training data were not updated; the producer asks for caution from 2021).
+
+| Data                                                                   | Required | Used in                |
+| ---------------------------------------------------------------------- | -------- | ---------------------- |
+| FIRMS MODIS C6.1 standard + NRT                                        | Yes      | everything             |
+| FIRMS VIIRS S-NPP standard (2012-01-20 → 2026-11-02)                   | Yes      | HAR, TYPE-04, SRC-02   |
+| FIRMS VIIRS NOAA-20 standard + NRT (2018 →) and NOAA-21 NRT (2024 →)   | Yes      | SRC-01, SRC-02, NRT    |
+| FIRMS `data_availability` and `missing_data`                           | Yes      | ING-09, GAP-06         |
+| Global daily counts per satellite (monthly MCD14ML or global FIRMS)    | Yes      | ING-07, GAP-02         |
+| Administrative boundaries (GADM / INEI)                                | Yes      | API, HAR-01 (fallback) |
+| Biomes or ecoregions (RESOLVE 2017)                                    | Yes      | HAR-01                 |
+| MCD12Q1 C6.1 (urban class) or GHSL                                     | Yes      | TYPE-02, TYPE-05       |
+| Holocene volcanoes (Smithsonian GVP)                                   | Yes      | TYPE-02                |
+| Land/water mask                                                        | Yes      | TYPE-02                |
+| MOD14CMQ / MYD14CMQ (0.25°, monthly)                                   | No       | GAP-05                 |
+| MCD64A1 (burned area)                                                  | No       | HAR-06                 |
+| IANA time zones (timezone-boundary-builder)                            | No       | local date in the API  |
+
+---
+
+## 12. Sensor continuity and acquisition (SRC)
+
+**SRC-01 [REQ] · VIIRS series without S-NPP from 2 Nov 2026**
+
+- Given that S-NPP stopped delivering new data on **2026-11-02 at 13:00 UTC**,
+- when the VIIRS series after that date is built,
+- then NOAA-20 is used (and NOAA-21 as a continuity backup). The NRT job does **not** query `VIIRS_SNPP_NRT`, and a
+  configuration that includes it fails validation.
+- _Verification:_ test of the NRT job configuration; assertion in `nrt_daily_flow`.
+- _Source:_ NASA FIRMS and NESDIS notice about the end of S-NPP.
+
+**SRC-02 [REQ] · Bridge between VIIRS sensors (S-NPP → NOAA-20)**
+
+- Given the overlap of **standard** S-NPP and NOAA-20 data (2018 → 2026-11-02),
+- when the "VIIRS equivalent" series is assembled,
+- then an S-NPP ↔ NOAA-20 factor is estimated per stratum and month (same method as HAR-01 and HAR-03) and applied to NOAA-20 from
+  2026-11-02, so that the satellite change does not produce a jump. It is validated with |relative bias| ≤ 5 % in the overlap.
+- _Verification:_ `inter_viirs_bridge_<version>.json` + continuity test in November 2026.
+- _Source:_ NASA states that NOAA-20 and NOAA-21 carry the same VIIRS in the same orbital plane, about 50 minutes apart.
+  The different overpass time justifies checking the bias rather than assuming it is zero.
+
+**SRC-03 [REQ] · MODIS without a fixed end**
+
+- Given that NASA recommends migrating away from MODIS and that Terra is the only morning overpass,
+- when Terra or Aqua stop delivering data,
+- then the pipeline keeps working: the harmonized series is anchored on VIIRS (MODIS is only used, calibrated, for
+  2000–2011), GAP-07 is applied and the end is recorded in `sensor_lifecycle.yaml`.
+- _Verification:_ test simulating the end of Terra and then of Aqua; the 2012 → today series does not change.
+
+**SRC-04 [REQ] · FIRMS API limits**
+
+- Given the API client (`nina/io/firms_api.py`),
+- then it respects **5000 transactions every 10 minutes per MAP_KEY** (counting each day of `DAY_RANGE` as one transaction),
+  uses `FIRMS_MAX_DAY_RANGE` (configurable, default 5), retries with exponential backoff on 429 and 5xx errors, and records usage
+  by querying the MAP_KEY status.
+- _Verification:_ test with a simulated server that returns 429; the computed number of transactions matches the recorded one.
+
+**SRC-05 [REQ] · RT and URT data**
+
+- Given that FIRMS removes RT and URT detections when it processes the corresponding NRT data, or after 6 h,
+- when the NRT job runs,
+- then only NRT data older than 6 h are ingested as final. RT and URT detections, if used, are stored as
+  `quality_level = "rt"`, marked `is_provisional` and replaced in the next run.
+- _Verification:_ test replacing RT with NRT.
+
+**SRC-06 [REQ] · Availability and delay of standard data**
+
+- Given `/api/data_availability`,
+- when deciding which period is provisional and what to reprocess,
+- then `is_provisional` is computed from the real last standard date of each sensor, not with a fixed number of days. FIRMS
+  states a delay of about 3 months (Readme) or about 5 months (download page), so `PROVISIONAL_DAYS` only serves as a fallback
+  (default 150). A weekly job replaces NRT with standard data when they appear.
+- _Verification:_ test with simulated availability dates.
+
+**SRC-07 [REQ] · Credentials**
+
+- Given `FIRMS_MAP_KEY` and Earthdata Login,
+- then they are read from environment variables or from `~/.netrc`, never appear in logs, reports or commits, and CI uses _secrets_.
+- _Verification:_ test that searches for key patterns (32 hexadecimal characters) in the logs; _secret scanning_ in CI.
+
+**ING-08 [REQ] · Documented acquisition strategy**
+
+- Given the pipeline,
+- then the history is loaded from the archive download tool or the country summaries, recent data from the API, and
+  keyless NRT files only as a backup, according to the table in DATA_SOURCES §3. The API is not used to download whole years day by day
+  when the archive download exists.
+- _Verification:_ review of `scripts/` and `nina/` and the run's transaction report.
+
+**ING-09 [REQ] · Sensors and dates taken from the API**
+
+- Given the start of each run,
+- then the pipeline queries `data_availability` and stores the response in `data/interim/data_availability_<run_id>.csv`.
+  Coverage (TMP-03), standard or NRT quality (ING-04) and reprocessing (SRC-06) are based on that file.
+- _Verification:_ the file exists and the report references it.
+
+---
+
+## Acceptance report template
 
 `data/reports/acceptance_<run_id>.md`
 
 ```markdown
-# Reporte de aceptación · run <run_id> · nina <version>
+# Acceptance report · run <run_id> · nina <version>
 
-| ID      | Estado    | Evidencia                                                      | Notas                                          |
-| ------- | --------- | -------------------------------------------------------------- | ---------------------------------------------- |
-| ING-01  | cumple    | tests/test_ingest.py::test_ingest_detects_source_from_filename |                                                |
-| GAP-01  | cumple    | known_gaps.yaml (commit abc123)                                |                                                |
-| GAP-05  | pendiente | —                                                              | Falta descargar MOD14CMQ 2001–2024             |
-| TYPE-04 | no cumple | static_mask_validation_0.3.0.json                              | recall 0.74 < 0.80 → ajustar radio de volcanes |
-| ...     |           |                                                                |                                                |
+| ID      | Status         | Evidence                                                       | Notes                                          |
+| ------- | -------------- | -------------------------------------------------------------- | ---------------------------------------------- |
+| ING-01  | met            | tests/test_ingest.py::test_ingest_detects_source_from_filename |                                                |
+| GAP-01  | met            | known_gaps.yaml (commit abc123)                                |                                                |
+| GAP-05  | pending        | —                                                              | MOD14CMQ 2001–2024 still to be downloaded      |
+| TYPE-04 | not met        | static_mask_validation_0.3.0.json                              | recall 0.74 < 0.80 → adjust volcano radius     |
+| ...     |                |                                                                |                                                |
 
-Resultado: ✅ apto para publicar / ❌ no apto (lista de criterios [OBL] incumplidos)
+Result: ✅ ready to publish / ❌ not ready (list of unmet [REQ] criteria)
 ```
 
-**Regla final:** el agente **no puede** publicar un dataset ni marcar la tarea como terminada si queda algún criterio
-**[OBL]** en `no cumple` o sin evidencia.
+**Final rule:** the agent **cannot** publish a dataset or mark the task as done if any **[REQ]** criterion
+remains `not met` or without evidence.
