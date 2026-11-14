@@ -4,6 +4,10 @@ Aplicación para explorar detecciones de fuego de NASA FIRMS: API FastAPI, inter
 
 Esta carpeta contiene una aplicación independiente del monorepo de la raíz. Ejecuta los comandos desde `Nina/mvp`.
 
+La versión final incorpora lecturas consistentes durante la ingesta, actualización espacial de productos estándar y provisionales, orientación del asistente por rol y cartografía mundial validada. El visor, el calendario, la comparación y el experimento comparten territorio y período.
+
+El [estado de la versión 0.2](ESTADO_V2.md) documenta las funciones y comprobaciones de la entrega. Sus cifras de observaciones corresponden al entorno donde se descargaron los datos; cada clon empieza con una base vacía y genera sus propios resultados.
+
 ## Obtener el proyecto
 
 ```bash
@@ -104,6 +108,8 @@ Reiniciar el servidor después de cambiar `.env`. Las credenciales permanecen en
 - Contrato de los 22 endpoints: [openapi.json](openapi.json), importable en Postman.
 - Regenerar el contrato: `python scripts/export_openapi.py` con el entorno virtual activado.
 
+La API de esta aplicación usa el prefijo `/api`. El contrato `apps/api/API_CONTRACT.md` de la raíz pertenece al servicio del monorepo.
+
 Para desarrollar la interfaz, mantener la API abierta y ejecutar en otra terminal:
 
 ```bash
@@ -120,6 +126,8 @@ npm.cmd --prefix web run build
 ```
 
 En Linux/macOS, con el entorno activado, usar `python -m pytest -q --basetemp=.nina-qa/pytest-local` y `npm --prefix web run build`. Las pruebas usan datos pequeños en directorios temporales separados.
+
+Con el servidor detenido y el entorno activado, `python scripts/verify_v2.py --refresh-parquet` comprueba los hashes de los archivos importados y actualiza el snapshot Parquet. Su resultado se guarda localmente en `data/release-v0.2.json`. `python scripts/validate_geography.py` valida y normaliza la cartografía de países incluida; si se modifica, volver a compilar la interfaz.
 
 ## Contenido y alcance
 

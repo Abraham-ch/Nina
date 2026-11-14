@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Literal
 import shapely
 from pydantic import BaseModel, Field, model_validator
-from .store import database, rows, boundaries, now, code_revision
+from .store import database, rows, boundaries, now, code_revision,atomic_read
 from .config import DATA
 
 class Selection(BaseModel):
@@ -88,6 +88,7 @@ def spatial_coverage(batch,s):
     chosen=[shapely.geometry.shape(f['geometry']) for f in features if s.department=='all' or f['properties']['id']==s.department]
     return bool(chosen and geometry.covers(shapely.union_all(chosen)))
 
+@atomic_read
 def analyze(s):
     start=date(max(2000,s.year_start-10),1,1);end=date(s.year_end+1,1,1)
     grouped={}

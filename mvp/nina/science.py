@@ -15,7 +15,7 @@ from .config import DATA
 def train():
     with database() as c:
         monthly=rows(c,"""SELECT department,year(acquired) AS year,month(acquired) AS month,source,platform,count(*) AS n
-            FROM observations WHERE department IS NOT NULL AND processing='SP'
+            FROM observations WHERE department IS NOT NULL AND processing='SP' AND year(acquired) BETWEEN 2018 AND 2025
             GROUP BY department,year(acquired),month(acquired),source,platform""")
     groups={}
     for r in monthly:
@@ -93,6 +93,7 @@ def substitution_experiment(source='viirs-snpp',department=None):
                         'baseline':round(raw*model['scale_ratio'],2),'absolute_error':round(abs(predicted-pair['reference']),2)})
     return {'available':bool(samples),'source':source,'department':department,'area_name':region['properties']['name'],
             'model_id':model.get('model_id'),'training_years':model['training_years'],'test_years':'2024–2025',
+            'training_data_revision':model.get('training_data_revision'),
             'region_reserved':int(hashlib.sha256(department.encode()).hexdigest()[:8],16)%5==0,
             'samples':samples,'synthetic':False,'status':'exploratory_archive_count_test',
             'limitations':model['limitations'],

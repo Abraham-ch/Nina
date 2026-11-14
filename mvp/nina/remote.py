@@ -76,6 +76,7 @@ def acquire(products,start=None,days=1,scope='world',geometry=None):
         area=','.join(f'{v:.5f}' for v in bounds)
         # FIRMS queries bounding boxes; exact polygon filtering happens during analysis.
         geometry=shapely.geometry.mapping(shapely.box(*bounds))
+        geometry['bbox']=list(bounds)
     else: raise ValueError('Área de adquisición inválida')
     results=[]
     for product in products:
@@ -92,7 +93,7 @@ def acquire(products,start=None,days=1,scope='world',geometry=None):
             with destination.open(encoding='utf-8-sig') as source:
                 if 'latitude' not in source.readline().lower(): raise ValueError('FIRMS no devolvió CSV; revisa la clave y el límite de consultas')
             result=ingest_file(destination,PRODUCTS[product],'NASA FIRMS Area API (MAP_KEY omitted)',
-                               start,end,'api_requested_window',spatial_scope=scope,spatial_geometry=geometry)
+                               start,end,'api_requested_window',spatial_scope=scope,spatial_geometry=geometry,processing_hint='SP' if product.endswith('_SP') else 'NRT')
             results.append({'product':product,'start':str(start),'end':str(end),**result})
         except Exception:
             # An incomplete transfer is never recorded as an available window.

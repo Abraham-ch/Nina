@@ -8,6 +8,7 @@ from nina import config,store,analytics,ingest,science,main,remote
 
 @pytest.fixture()
 def client(tmp_path,monkeypatch):
+    for key in ['NINA_LLM_BASE_URL','NINA_LLM_API_KEY','NINA_LLM_MODEL']: monkeypatch.delenv(key,raising=False)
     for name in ['raw','processed','models','boundaries','jobs','exports']: (tmp_path/name).mkdir()
     for module in [config,store,analytics,ingest,science,main,remote]: monkeypatch.setattr(module,'DATA',tmp_path)
     country={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'shapeID':'test-region','shapeName':'Región de prueba'},'geometry':{'type':'Polygon','coordinates':[[[-78,-12],[-72,-12],[-72,-7],[-78,-7],[-78,-12]]]}}]}
@@ -227,3 +228,37 @@ def test_global_upload_retains_geography_and_exports_same_rows(client):
         time.sleep(.02)
     assert job['status']=='complete' and store.status()['observations']==1
     assert store.status()['batches'][0]['spatial_scope']=='world'
+
+
+def test_standard_aoi_replaces_provisional_only_inside_requested_box(client):
+    c,path=client
+    p=foreign_csv(path/'raw'/'global-nrt.csv',2024,n=1)
+    ingest.ingest_file(p,'modis','NASA FIRMS Area API','2024-09-03','2024-09-03','api_requested_window',spatial_scope='world')
+    q=fixture_csv(path/'raw'/'peru-nrt.csv',2024,n=1,version='6.1NRT');ingest.ingest_file(q,'modis')
+    empty=path/'raw'/'empty-sp.csv';empty.write_text('latitude,longitude,acq_date,acq_time,satellite,confidence,version\n')
+    geometry={'type':'Polygon','coordinates':[[[26,-16],[28,-16],[28,-14],[26,-14],[26,-16]]],'bbox':[26,-16,28,-14]}
+    ingest.ingest_file(empty,'modis','NASA FIRMS Area API','2024-09-01','2024-09-05','api_requested_window',spatial_scope='custom',spatial_geometry=geometry,processing_hint='SP')
+    assert store.status()['observations']==1
+    # A subsequent identical provisional detection cannot undo the standard window.
+    other=foreign_csv(path/'raw'/'later-nrt.csv',2024,n=2)
+    ingest.ingest_file(other,'modis','NASA FIRMS Area API','2024-09-03','2024-09-03','api_requested_window',spatial_scope='world')
+    assert store.status()['observations']==1
+
+
+def test_standard_upgrade_refreshes_measurements(client):
+    c,path=client
+    p=fixture_csv(path/'raw'/'nrt.csv',2024,n=1,version='6.1NRT');ingest.ingest_file(p,'modis')
+    q=fixture_csv(path/'raw'/'sp.csv',2024,n=1);q.write_text(q.read_text().replace('2.5','17.5'))
+    ingest.ingest_file(q,'modis')
+    with store.database() as connection:
+        assert connection.execute('SELECT frp,processing FROM observations').fetchone()==(17.5,'SP')
+
+
+def test_role_guidance_changes_without_changing_evidence(client):
+    c,path=client;seed(path)
+    a=c.post('/api/analyses',json=selection()).json()
+    scientist=c.post('/api/assistant',json={'analysis_id':a['id'],'question':'Describe el mes','role':'ciencia'}).json()
+    communicator=c.post('/api/assistant',json={'analysis_id':a['id'],'question':'Describe el mes','role':'comunicacion'}).json()
+    assert scientist['guidance']!=communicator['guidance']
+    assert scientist['evidence']==communicator['evidence']
+    assert scientist['evidence'][1]['value']==6

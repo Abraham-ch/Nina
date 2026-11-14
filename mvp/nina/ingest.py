@@ -51,7 +51,7 @@ def classify(values):
     for pi,gi in zip(*pairs): values[int(pi)][12]=features[int(gi)]['properties']['id']
     return values
 
-def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=None, coverage_basis='unknown', progress=None, spatial_scope='PER', spatial_geometry=None):
+def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=None, coverage_basis='unknown', progress=None, spatial_scope='PER', spatial_geometry=None,processing_hint=None):
     initialize()
     if spatial_scope not in ['PER','world','custom']: raise ValueError('Ámbito geográfico desconocido')
     if spatial_scope=='custom' and not spatial_geometry: raise ValueError('El archivo por área requiere su geometría')
@@ -82,7 +82,7 @@ def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=No
     if spatial_scope=='PER' and coverage_basis!='provider_annual_file':
         excluded=sum(v[12] is None for v in values)
         values=[v for v in values if v[12] is not None]
-    processing=('SP' if all(r[9]=='SP' for r in values) else 'NRT') if values else ('NRT' if 'Area API' in url else 'SP')
+    processing=processing_hint or (('SP' if all(r[9]=='SP' for r in values) else 'NRT') if values else ('NRT' if 'Area API' in url else 'SP'))
     normalized=DATA/'processed'/f'{identifier}.csv'
     with normalized.open('w',encoding='utf-8',newline='') as stream:
         writer=csv.writer(stream)
@@ -96,15 +96,23 @@ def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=No
             c.execute('CREATE TEMP TABLE incoming AS SELECT * FROM observations LIMIT 0')
             c.execute("COPY incoming FROM '"+str(normalized).replace("'","''")+"' (HEADER TRUE, NULLSTR '')")
             if processing!='SP':
-                c.execute("DELETE FROM incoming WHERE EXISTS(SELECT 1 FROM batches b WHERE b.source=incoming.source AND b.processing='SP' AND b.coverage_start<=incoming.acquired::DATE AND b.coverage_end>=incoming.acquired::DATE AND b.coverage_basis='provider_annual_file' AND (b.spatial_scope='world' OR (b.spatial_scope='PER' AND incoming.department IS NOT NULL)))")
-            elif coverage_start and coverage_end and coverage_basis=='provider_annual_file':
+                c.execute("""DELETE FROM incoming WHERE EXISTS(SELECT 1 FROM batches b WHERE b.source=incoming.source AND b.processing='SP'
+                    AND b.coverage_start<=incoming.acquired::DATE AND b.coverage_end>=incoming.acquired::DATE
+                    AND b.coverage_basis IN ('provider_annual_file','api_requested_window') AND
+                    (b.spatial_scope='world' OR (b.spatial_scope='PER' AND incoming.department IS NOT NULL) OR
+                    (b.spatial_scope='custom' AND incoming.longitude BETWEEN CAST(json_extract(b.spatial_geometry,'$.bbox[0]') AS DOUBLE) AND CAST(json_extract(b.spatial_geometry,'$.bbox[2]') AS DOUBLE)
+                    AND incoming.latitude BETWEEN CAST(json_extract(b.spatial_geometry,'$.bbox[1]') AS DOUBLE) AND CAST(json_extract(b.spatial_geometry,'$.bbox[3]') AS DOUBLE))))""")
+            elif coverage_start and coverage_end and coverage_basis in ['provider_annual_file','api_requested_window']:
                 scope_filter='' if spatial_scope=='world' else " AND (department IS NOT NULL OR batch_id IN (SELECT id FROM batches WHERE spatial_scope='PER'))"
-                if spatial_scope!='custom':
-                    c.execute("DELETE FROM observations WHERE source=? AND processing<>'SP' AND acquired::DATE BETWEEN ? AND ?"+scope_filter,[source,coverage_start,coverage_end])
+                scope_args=[]
+                if spatial_scope=='custom':
+                    w,s,e,n=shapely.geometry.shape(spatial_geometry).bounds
+                    scope_filter=' AND longitude BETWEEN ? AND ? AND latitude BETWEEN ? AND ?';scope_args=[w,e,s,n]
+                c.execute("DELETE FROM observations WHERE source=? AND processing<>'SP' AND acquired::DATE BETWEEN ? AND ?"+scope_filter,[source,coverage_start,coverage_end,*scope_args])
             before=c.execute('SELECT count(*) FROM observations').fetchone()[0]
             c.execute('INSERT OR IGNORE INTO observations SELECT * FROM incoming')
             if processing=='SP':
-                c.execute("UPDATE observations SET version=i.version,processing=i.processing,batch_id=i.batch_id FROM incoming i WHERE observations.id=i.id AND observations.processing<>'SP'")
+                c.execute("UPDATE observations SET version=i.version,processing=i.processing,batch_id=i.batch_id,frp=i.frp,confidence=i.confidence,fire_type=i.fire_type,daynight=i.daynight,scan=i.scan,track=i.track,department=i.department FROM incoming i WHERE observations.id=i.id AND observations.processing<>'SP'")
             loaded=c.execute('SELECT count(*) FROM observations').fetchone()[0]-before
             c.execute('INSERT INTO batches VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[identifier,path.name,source,digest,path.stat().st_size,loaded,rejected,len(values)-loaded,url,now(),coverage_start,coverage_end,coverage_basis,processing,spatial_scope,json.dumps(spatial_geometry) if spatial_geometry else None])
             c.execute('COMMIT')

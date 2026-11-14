@@ -13,6 +13,6 @@ export type Batch={id:string;sha256:string;filename:string;source:string;bytes:n
 export type Status={observations:number;first_date:string;last_date:string;database_bytes:number;unassigned_department:number;sources:{source:string;platform:string;count:number;first_date:string;last_date:string}[];batches:Batch[]};
 export type Health={version:string;scope:string;firms_key_configured:boolean;earthdata_configured:boolean;llm_configured:boolean};
 export type Catalog={products:{product:string;source:string;start:string;end:string}[];checked_at:string|null;stale?:boolean;configured:boolean};
-export type Reply={answer:string;framing:string|null;engine:string;evidence:{id:string;label:string;value:unknown}[];references:string[]};
+export type Reply={answer:string;framing:string|null;guidance:string;engine:string;evidence:{id:string;label:string;value:unknown}[];references:string[]};
 export type Job={id:string;kind:string;status:string;message:string;progress:number;result:string|null};
 export type Experiment={available:boolean;reason?:string;source:string;department:string;area_name:string;model_id:string;region_reserved:boolean;training_years:string;test_years:string;mae:number|null;samples:{year:number;month:number;input:number;reference:number;estimate:number;baseline:number;absolute_error:number}[];limitations:string[]};
