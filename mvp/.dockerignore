@@ -1,0 +1,17 @@
+.git
+.venv
+.env
+.env.*
+.nina-qa
+.vscode
+**/node_modules
+web/dist
+web/public/cesium
+**/__pycache__
+**/*.pyc
+**/*.tsbuildinfo
+tests
+pytest-cache-files-*
+data/*
+!data/boundaries
+!data/boundaries/**

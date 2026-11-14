@@ -1,3 +1,25 @@
+# Ejecutar el MVP local
+
+La aplicación funcional de la rama `mvp` está en **[`mvp/`](mvp/README.md)**. Sus instrucciones de instalación, descarga de datos y API están en ese README.
+
+```bash
+git clone --branch mvp --single-branch https://github.com/Abraham-ch/Nina.git
+cd Nina/mvp
+```
+
+En Windows, con Python 3.14 y Node.js 22:
+
+```powershell
+.\setup-nina.ps1
+.\start-nina.ps1
+```
+
+Abrir http://127.0.0.1:8000. Para descargar además el histórico público de Perú, detener el servidor y ejecutar `setup-nina.ps1 -DownloadData`.
+
+El MVP conserva observaciones por instrumento y calibraciones exploratorias. La armonización científica descrita a continuación sigue siendo el objetivo del monorepo.
+
+---
+
 # Fire Calendar — Harmonized MODIS + VIIRS Hotspots
 
 An initiative focused on **harmonizing MODIS and VIIRS satellite fire detections** to improve the

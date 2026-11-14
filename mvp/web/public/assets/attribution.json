@@ -1,0 +1,15 @@
+{
+  "imagery": {
+    "name": "Blue Marble Next Generation",
+    "source": "NASA GIBS / ESDIS",
+    "url": "https://nasa-gibs.github.io/gibs-api-docs/",
+    "reference": true
+  },
+  "countries": {
+    "source": "Natural Earth, world-atlas 2.0.2",
+    "resolution": "110m",
+    "license": "Public Domain",
+    "url": "https://www.naturalearthdata.com/about/terms-of-use/"
+  },
+  "note": "Límites de referencia generalizados; las selecciones por país siguen esta geometría, salvo el archivo peruano identificado por su proveedor."
+}
