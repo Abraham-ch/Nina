@@ -86,7 +86,7 @@
 
 | ID | Spec | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1 (+ A1, A2) | inline | pendiente | — |
+| T1 | S1 (+ A1, A2) | inline | en curso — backend listo, falta T1-A (autor en lotes/análisis), cuotas, auditoría y web | `a0438d5` |
 | T2 | S2 (+ A1, A2) | inline | pendiente | — |
 | T3 | S3 (+ A1, A2) | inline | pendiente | — |
 
@@ -105,3 +105,34 @@
 - **L5** · contexto de arranque verificado contra el código: `/api/import`, `/api/sync`, `/api/acquisitions*` y
   `/api/models/train` existen en `nina/main.py` y están **sin proteger**; `nina/store.py` crea `observations`,
   `batches`, `analyses`, `jobs` — **no** existen `users`, `downloads` ni `audit_log`. El "Hoy" de §10 es exacto.
+- **L6** · **RED observado** antes de implementar: `tests/test_auth.py` → `12 failed` (rutas que devuelven 404 y
+  columnas inexistentes). No se escribió código de producción antes de verlo fallar.
+- **L7** · **GREEN observado**: `python -m pytest -q` → **`45 passed`** (33 preexistentes + 12 nuevos).
+  `npm --prefix web run build` → `✓ built in 4.24s`. Entorno: venv con Python 3.14 (`.python-version`) y
+  `requirements.lock.txt` intacto — **sin dependencias nuevas** (PBKDF2 viene de `hashlib`).
+- **L8** · **Regresión detectada por la comprobación diferencial y corregida**: `nina/ingest.py` y
+  `nina/analytics.py` hacían `INSERT … VALUES (?)` **posicional**; al añadir `created_by` a `batches`/`analyses`
+  ambos rompían con `_duckdb.BinderException: table "batches" has 17 columns but 16 values were supplied`.
+  Pasa a lista de columnas explícita en los dos sitios.
+- **L9** · **Cambio de comportamiento deliberado en `tests/test_nina.py`**: el fixture `client` ahora registra una
+  cuenta `admin` al abrirse. Es consecuencia directa de S1 ("exportaciones solo para usuarios autenticados",
+  rutas de administración solo para `admin`), no una adaptación silenciosa: los tests de datos se ejecutan como
+  operador autenticado. Los tests de autorización viven aparte en `tests/test_auth.py` con fixture propio anónimo.
+- **L10** · Commits de la tarea: `fb8ff88` (documento de feature) y `a0438d5` (backend de T1, **395 líneas
+  autorizadas** = 557 − 172 de `openapi.json` generado, dentro del presupuesto de 400 de WORK_PLAN §8).
+- **L11** · `openapi.json` regenerado con `scripts/export_openapi.py`: +4 rutas (`/api/auth/register`,
+  `/login`, `/logout`, `/me`). `web/src/types.ts` y `web/src/api.ts` se actualizan en el PR de T1 junto con la
+  interfaz (regla 7: mismo PR, no mismo commit).
+- **L12** · **Verificación independiente** (`gentle-ai-verify`) sobre `a0438d5` → **`advisories`, cero blockers**.
+  53/53 probes de S1 en verde; suite `45 passed` (base `33 passed`); diferencial base↔candidato idéntico salvo
+  la columna añadida `created_by`; esquema **aditivo sin problemas** (`PROBLEMS: none`); `openapi.json`
+  byte-idéntico al regenerar; build web `✓ built in 4.26s`. Spot check del padre: `45 passed` ✅.
+  **Aún no implementado** (coincide con el estado "en curso" de T1): historial `downloads` + pantalla
+  "Mis descargas", relleno de `created_by` (T1-A), cuotas, escritura y vista de `audit_log`.
+- **L13** · **Advisories del verificador → van en el siguiente corte de T1** (no se tocan los bytes ya
+  verificados): (1) cookie sin `secure` → condicionarlo al esquema de la petición; (2) PBKDF2 200 000 rondas
+  vs. 600 000 de OWASP — el hash guarda las rondas, se sube sin romper contraseñas existentes; (3) registro
+  abierto a `analista` sin aprobación; (4) sin límite de intentos de login ni *timing* uniforme en usuario
+  desconocido; (5) tokens de sesión en claro en `sessions`; (6) `POST /api/analyses` y `POST /api/assistant`
+  siguen sin exigir sesión — no están en la lista protegida de S1; (7) `GET /api/status` ahora expone
+  `created_by: null` por lote (consecuencia inherente de la columna pedida).
