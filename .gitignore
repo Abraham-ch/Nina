@@ -1,29 +1,35 @@
-node_modules/
-.turbo/
-dist/
-coverage/
+# Entornos y dependencias
 .venv/
+node_modules/
+web/dist/
+web/public/cesium/
 __pycache__/
+*.py[cod]
 *.egg-info/
-.mypy_cache/
-.ruff_cache/
 .pytest_cache/
+pytest-cache-files-*/
+.ruff_cache/
+.mypy_cache/
+*.tsbuildinfo
+*.log
+.ipynb_checkpoints/
+.vscode/
+
+# Credenciales
 .env
 .env.*
 !.env.example
-source/**
-!source/**/.gitkeep
-.ipynb_checkpoints/
-# descargas crudas de FIRMS (nunca se commitean)
+
+# Datos (nunca se commitean). Solo data/boundaries/ está versionado.
+/data/*
+!/data/boundaries/
+/source/*
+!/source/**/.gitkeep
+/data_abraham/
 *.zip
 
-# Archivos locales del MVP: datos, entornos y respaldos de la migración.
+# Verificaciones locales y artefactos de diseño
 /.nina-qa/
-/.vscode/
-/data/
-/data_abraham/
 /exa-results/
-/pytest-cache-files-*/
-*.log
-*.tsbuildinfo
-*.py[cod]
+design/gibs-capabilities.xml
+design/nina-design-preview.html

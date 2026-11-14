@@ -1,4 +1,0 @@
-{
-    "extends": "@fire/config/tsconfig/react.json",
-    "include": ["src"]
-}

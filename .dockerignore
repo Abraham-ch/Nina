@@ -1,0 +1,14 @@
+.venv
+.git
+.env
+.nina-qa
+data/*
+!data/boundaries
+exa-results
+web/node_modules
+web/dist
+__pycache__
+tests
+source
+node_modules
+docs

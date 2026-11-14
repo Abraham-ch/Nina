@@ -1,4 +1,0 @@
-{
-    "extends": "@fire/config/tsconfig/base.json",
-    "include": ["src", "legal"]
-}
