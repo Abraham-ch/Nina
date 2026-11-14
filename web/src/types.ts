@@ -113,6 +113,7 @@ export type Batch = {
   coverage_end: string
   coverage_basis: string
   spatial_scope: string
+  created_by: string | null
 }
 export type Status = {
   observations: number
@@ -179,4 +180,37 @@ export type Experiment = {
     absolute_error: number
   }[]
   limitations: string[]
+}
+export type Role = 'visitante' | 'analista' | 'admin'
+export type User = {
+  id: string
+  email: string
+  role: Role
+  display_name: string | null
+  created_at: string
+}
+export type Register = {
+  email: string
+  password: string
+  role: Role
+  display_name?: string
+}
+export type Login = { email: string; password: string }
+export type Download = {
+  id: string
+  user_id: string
+  analysis_id: string
+  kind: string
+  rows: number
+  filters: string
+  dataset_version: string | null
+  created_at: string
+}
+export type AuditEntry = {
+  id: string
+  user_id: string
+  action: string
+  target: string | null
+  detail: string | null
+  created_at: string
 }
