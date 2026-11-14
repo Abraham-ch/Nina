@@ -9,6 +9,8 @@ sin una cuenta administrativa. A partir de ahí nadie puede auto-proclamarse adm
 """
 
 import hashlib
+import json
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -167,3 +169,55 @@ def attach(response: Response, token: str) -> None:
 
 def detach(response: Response) -> None:
     response.delete_cookie(COOKIE, path='/')
+
+
+def optional():
+    """Como `require()`, pero devuelve `None` en vez de 401.
+
+    Los análisis se pueden crear sin sesión (son de consulta); cuando hay sesión, su
+    autor queda guardado en `analyses.created_by`.
+    """
+
+    def dependency(request: Request) -> dict | None:
+        return current_user(request)
+
+    return dependency
+
+
+def max_downloads_per_hour() -> int:
+    return max(1, int(os.getenv('MAX_DOWNLOADS_PER_HOUR', '60')))
+
+
+def record_download(user_id, analysis_id, kind, count, filters, dataset_version) -> None:
+    with database() as c:
+        c.execute(
+            'INSERT INTO downloads (id,user_id,analysis_id,kind,rows,filters,dataset_version,created_at) VALUES (?,?,?,?,?,?,?,?)',
+            [uuid.uuid4().hex, user_id, analysis_id, kind, count,
+             json.dumps(filters, ensure_ascii=False, default=str), dataset_version, now()],
+        )
+
+
+def downloads_for(user_id) -> list[dict]:
+    with database() as c:
+        return rows(c, 'SELECT * FROM downloads WHERE user_id=? ORDER BY created_at DESC LIMIT 200', [user_id])
+
+
+def downloads_last_hour(user_id) -> int:
+    desde = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    with database() as c:
+        return c.execute(
+            'SELECT count(*) FROM downloads WHERE user_id=? AND created_at>?', [user_id, desde]
+        ).fetchone()[0]
+
+
+def record_audit(user, action, target=None, detail=None) -> None:
+    with database() as c:
+        c.execute(
+            'INSERT INTO audit_log (id,user_id,action,target,detail,created_at) VALUES (?,?,?,?,?,?)',
+            [uuid.uuid4().hex, user['id'], action, target, detail, now()],
+        )
+
+
+def audit_entries() -> list[dict]:
+    with database() as c:
+        return rows(c, 'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 500')

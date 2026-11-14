@@ -18,7 +18,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from pydantic import BaseModel,Field
 from .config import ROOT, DATA, RAW, FIRMS, SOURCES
-from .auth import Login, Register, attach, clear_session, detach, require
+from .auth import Login, Register, attach, audit_entries, clear_session, detach
+from .auth import downloads_for, downloads_last_hour, max_downloads_per_hour, optional
+from .auth import record_audit, record_download, require
 from .auth import login as login_user, register as register_user
 from .store import initialize,database,rows,boundaries,status,now,code_revision,atomic_read
 from .analytics import Selection,analyze,get_analysis,points_for_analysis,selected_rows,iter_selected_rows,month_dates
@@ -93,6 +95,16 @@ def logout(request:Request,response:Response):
 def me(user:dict=Depends(require())):
     return user
 
+@app.get('/api/downloads')
+def downloads(user:dict=Depends(require('analista','admin'))):
+    """T1: historial propio de descargas ("Mis descargas"). Cada usuario solo ve las suyas."""
+    return downloads_for(user['id'])
+
+@app.get('/api/audit')
+def audit(user:dict=Depends(require('admin'))):
+    """T1: quién importó, sincronizó o entrenó, y cuándo. Visible solo para `admin`."""
+    return audit_entries()
+
 @app.get('/api/health')
 def health(): return {'status':'ok','version':'0.3.0','scope':'world','firms_key_configured':bool(os.getenv('FIRMS_MAP_KEY')),'earthdata_configured':bool(os.getenv('EARTHDATA_USERNAME')),'llm_configured':bool(os.getenv('NINA_LLM_BASE_URL') and os.getenv('NINA_LLM_API_KEY') and os.getenv('NINA_LLM_MODEL'))}
 
@@ -127,7 +139,8 @@ def regions():
     return {'geojson':boundaries(),'provenance':json.loads(path.read_text()) if path.exists() else None}
 
 @app.post('/api/analyses')
-def create_analysis(selection:Selection): return analyze(selection)
+def create_analysis(selection:Selection,user:dict|None=Depends(optional())):
+    return analyze(selection,created_by=user['id'] if user else None)
 
 @app.get('/api/analyses/{identifier}')
 def analysis(identifier:str): return existing(identifier)
@@ -168,21 +181,31 @@ def csv_output(data):
 @atomic_read
 def export(identifier:str,kind:Literal['series','detections','manifest','report'],user:dict=Depends(require('analista','admin'))):
     result=existing(identifier);s=Selection(**result['selection'])
+    if downloads_last_hour(user['id'])>=max_downloads_per_hour():
+        tope=max_downloads_per_hour()
+        raise HTTPException(429,f'Alcanzaste el máximo de {tope} descargas por hora. Vuelve más tarde o pide aumentar el límite.')
+    def guardar(count):
+        record_download(user['id'],identifier,kind,count,result['selection'],result.get('data_revision'))
+    filas=0
     if kind=='series':
+        filas=len(result['months'])
         columns=list(result['months'][0]);payload=csv_output([columns]+[[r[k] for k in columns] for r in result['months']]);mime='text/csv';suffix='csv'
     elif kind=='detections':
         a,b=month_dates(s.selected_year,s.selected_month)
         columns=['id','source','platform','acquired','latitude','longitude','frp','confidence','version','processing','daynight','fire_type','department','batch_id','scan','track']
         path=DATA/'exports'/f'{identifier}-{uuid.uuid4().hex}.csv'
         path.parent.mkdir(parents=True,exist_ok=True)
+        filas=0
         try:
             with path.open('w',encoding='utf-8-sig',newline='') as stream:
                 writer=csv.writer(stream);writer.writerow(columns)
                 for record in iter_selected_rows(s,a,b):
                     writer.writerow([("'"+str(x)) if isinstance(x,str) and x.startswith(('=','+','-','@')) else '' if x is None else x for x in (record[k] for k in columns)])
+                    filas+=1
         except Exception:
             path.unlink(missing_ok=True)
             raise
+        guardar(filas)
         return FileResponse(path,media_type='text/csv;charset=utf-8',filename=f'NINA_{identifier}_detections.csv',
                             background=BackgroundTask(path.unlink,missing_ok=True))
     elif kind=='manifest':
@@ -191,6 +214,7 @@ def export(identifier:str,kind:Literal['series','detections','manifest','report'
     else:
         answer=respond(result,'prepara un informe')['answer']
         payload='NINA · Informe de observaciones\n\n'+answer+'\n\n'+'\n'.join(result['limitations'])+'\n\nAnálisis: '+identifier+'\nFuentes:\n'+'\n'.join(result['references']);mime='text/plain';suffix='txt'
+    guardar(filas)
     return Response(payload,media_type=mime+';charset=utf-8',headers={'Content-Disposition':f'attachment; filename="NINA_{identifier}_{kind}.{suffix}"'})
 
 class Question(BaseModel):
@@ -206,7 +230,9 @@ def models():
     return json.loads(path.read_text()) if path.exists() else {'models':{},'scientific_harmonization_status':'pending_L2_opportunities'}
 
 @app.post('/api/models/train')
-def train_model(user:dict=Depends(require('admin'))): return submit('exploratory_model',train)
+def train_model(user:dict=Depends(require('admin'))):
+    record_audit(user,'train','modelos','queued')
+    return submit('exploratory_model',train)
 
 @app.get('/api/jobs')
 def jobs():
@@ -235,7 +261,8 @@ async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','
     except Exception:
         path.unlink(missing_ok=True);raise
     finally: await file.close()
-    return submit('import_csv',lambda:ingest_file(path,source,'local_upload',coverage_start,coverage_end,'user_declared' if coverage_start and coverage_end else 'unknown',spatial_scope=spatial_scope,spatial_geometry=geometry))
+    record_audit(user,'import',file.filename,'queued')
+    return submit('import_csv',lambda:ingest_file(path,source,'local_upload',coverage_start,coverage_end,'user_declared' if coverage_start and coverage_end else 'unknown',spatial_scope=spatial_scope,spatial_geometry=geometry,created_by=user['id']))
 
 class Sync(BaseModel):
     source:Literal['MODIS_NRT','VIIRS_NOAA20_NRT','VIIRS_NOAA21_NRT']='VIIRS_NOAA20_NRT'
@@ -246,6 +273,7 @@ class Sync(BaseModel):
 def sync(body:Sync,user:dict=Depends(require('admin'))):
     key=os.getenv('FIRMS_MAP_KEY')
     if not key: raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor para activar datos recientes.')
+    record_audit(user,'sync',body.source,'queued')
     return submit('sync_nrt',lambda:acquire([body.source],body.start,body.days,'PER'))
 
 class Acquisition(BaseModel):
@@ -260,6 +288,7 @@ def acquisition(body:Acquisition,user:dict=Depends(require('admin'))):
     if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
     try: Selection(scope=body.scope,geometry=body.geometry)
     except ValueError as error: raise HTTPException(422,'Geometría o ámbito inválidos')
+    record_audit(user,'acquire',f'{len(body.products)} productos','queued')
     return submit('acquire_'+body.scope,lambda:acquire(body.products,body.start,body.days,body.scope,body.geometry))
 
 @app.get('/api/experiments/substitution')
@@ -279,6 +308,7 @@ def archive_month(body:ArchiveMonth,user:dict=Depends(require('admin'))):
     if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
     try: Selection(scope=body.scope,geometry=body.geometry)
     except ValueError: raise HTTPException(422,'Geometría o ámbito inválidos')
+    record_audit(user,'acquire_month',f'{body.product} {body.year}-{body.month:02d}','queued')
     return submit('archive_month',lambda progress:acquire_month(body.product,body.year,body.month,body.scope,body.geometry,progress),with_progress=True)
 
 dist=ROOT/'web'/'dist'

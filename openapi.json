@@ -110,6 +110,40 @@
         }
       }
     },
+    "/api/downloads": {
+      "get": {
+        "summary": "Downloads",
+        "description": "T1: historial propio de descargas (\"Mis descargas\"). Cada usuario solo ve las suyas.",
+        "operationId": "downloads_api_downloads_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit": {
+      "get": {
+        "summary": "Audit",
+        "description": "T1: quién importó, sincronizó o entrenó, y cuándo. Visible solo para `admin`.",
+        "operationId": "audit_api_audit_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
