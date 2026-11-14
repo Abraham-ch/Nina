@@ -86,7 +86,7 @@
 
 | ID | Spec | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1 (+ A1, A2) | inline | backend completo (auth, guards, autor, descargas, auditoría, cuota horaria); **falta la web** y los advisories de L13 | `a0438d5`, `e374477` |
+| T1 | S1 (+ A1, A2) | inline | **"Terminado cuando" cumplido** (visitante no importa ni exporta · analista ve su historial · admin ve la auditoría); pendiente `MAX_EXPORT_ROWS` y los advisories de L13/L19 | `a0438d5`, `e374477`, `b9681da`, `4c791e9` |
 | T2 | S2 (+ A1, A2) | inline | pendiente | — |
 | T3 | S3 (+ A1, A2) | inline | pendiente | — |
 
@@ -162,3 +162,19 @@
   un `500` sin capturar (leer el valor con respaldo a valor por defecto); (3) `openapi.json` no documenta
   `401`/`403` en ninguna ruta — estilo previo, no regresión; (4) `MAX_EXPORT_ROWS` sigue sin implementarse;
   (5) `manifest`/`report` registran `rows=0` en `downloads`.
+- **L20** · **Celda C (web)** en `b9681da` + `4c791e9`. Un solo diálogo `web/src/Account.tsx` con tres vistas:
+  **formulario** (login/registro con rol `visitante`/`analista`), **perfil** y **"Mis descargas"**; más una cuarta
+  vista **Auditoría** reservada a `admin`. `App.tsx` carga `/api/auth/me` al arrancar y es la única dueña del
+  estado de sesión que comparten `Dialog` y `DataPanel`. Estados sin permiso: la lista de exportaciones se
+  sustituye por un aviso con acceso directo al inicio de sesión, y en `DataPanel` importar/sincronizar/entrenar
+  quedan deshabilitados con explicación para quien no es `admin`. Verificación: `tsc -b && vite build` en verde
+  (`✓ built in 4.03s`) y suite de Python **`56 passed`** (el backend no se tocó).
+- **L21** · **El criterio de aceptación de T1 queda cubierto**: "un visitante no puede importar ni exportar" (servidor
+  + interfaz), "un analista ve su historial" (vista "Mis descargas"), "un admin ve la auditoría" (vista "Auditoría",
+  añadida en `4c791e9` porque solo existía el endpoint y faltaba la pantalla).
+- **L22** · **PR #1 abierto hacia `mvp-abraham`** (<https://github.com/Abraham-ch/Nina/pull/1>) con los 6 primeros
+  commits. **Advertido en el cuerpo del PR**: 819 líneas autorizadas contra el tope de 400 de §8, con la oferta de
+  partirlo en dos PRs apilados (`a0438d5` y `e374477` ya vienen separados) sin tocar el contenido.
+- **L23** · `Risk: item 6` para la entrega de la interfaz — **`web/` no tiene ningún test**; la única red es
+  `tsc -b && vite build` (§15 del `AGENTS.md` raíz lo admite como verificación mínima del área). Corresponde
+  verificador independiente.
