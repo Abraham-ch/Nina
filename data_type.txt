@@ -1,0 +1,17 @@
+{
+        "latitude": -26.9523,
+        "longitude": 32.6844,
+        "acq_date": "2025-11-05",
+        "acq_time": "0000",
+        "scan": 2.5,
+        "confidence": "48",
+        "daynight": "N",
+        "bright_t31": 287,
+        "track": 1.5,
+        "type": "0",
+        "frp": 24.9,
+        "instrument": "MODIS",
+        "version": "61.03",
+        "satellite": "Aqua",
+        "brightness": 302.3
+}
