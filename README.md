@@ -1,10 +1,10 @@
 # Ejecutar el MVP local
 
-La aplicación funcional de la rama `mvp` está en **[`mvp/`](mvp/README.md)**. Sus instrucciones de instalación, descarga de datos y API están en ese README.
+Este directorio es la raíz del repositorio `Abraham-ch/Nina`, en la rama de trabajo `mvp`. La aplicación está en **[`mvp/`](mvp/README.md)**; los comandos siguientes se ejecutan desde la raíz.
 
 ```bash
 git clone --branch mvp --single-branch https://github.com/Abraham-ch/Nina.git
-cd Nina/mvp
+cd Nina
 ```
 
 En Windows, con Python 3.14 y Node.js 22:
@@ -16,7 +16,17 @@ En Windows, con Python 3.14 y Node.js 22:
 
 Abrir http://127.0.0.1:8000. Para descargar además el histórico público de Perú, detener el servidor y ejecutar `setup-nina.ps1 -DownloadData`.
 
-El MVP conserva observaciones por instrumento y calibraciones exploratorias. La armonización científica descrita a continuación sigue siendo el objetivo del monorepo.
+En este workspace la raíz es `C:\Users\david\vscode_projects\nasa_app`. Desde ahí funcionan `git status`, `git branch` y `git pull`. La copia anterior de `.nina-qa/mvp-repo` queda como respaldo local.
+
+La configuración privada está en `.env`, los datos en `data/` y las fuentes mundiales del equipo en `data_abraham/`; todos están excluidos de Git. El MVP usa Python 3.14 en `mvp/.venv/`, separado del entorno `.venv/` que administra `uv` para el monorepo. [Detalles del traslado y de la rama](docs/REPOSITORIO_LOCAL.md).
+
+```powershell
+git status
+git branch
+.\start-nina.ps1
+```
+
+El MVP conserva observaciones por instrumento y calibraciones exploratorias. Se preservó el trabajo local de ingesta mundial, todavía en preparación; trasladar el repositorio no completa esa importación. La armonización científica descrita a continuación sigue siendo el objetivo del monorepo.
 
 ---
 

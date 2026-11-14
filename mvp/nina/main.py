@@ -15,10 +15,11 @@ import truststore
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel,Field
 from .config import ROOT, DATA, FIRMS, SOURCES
 from .store import initialize,database,rows,boundaries,status,now,code_revision,atomic_read
-from .analytics import Selection,analyze,get_analysis,points_for_analysis,selected_rows,month_dates
+from .analytics import Selection,analyze,get_analysis,points_for_analysis,selected_rows,iter_selected_rows,month_dates
 from .ingest import ingest_file
 from .assistant import respond
 from .science import train
@@ -34,7 +35,7 @@ async def lifespan(app):
     yield
     POOL.shutdown(wait=False,cancel_futures=True)
 
-app=FastAPI(title='NINA · Atlas del fuego',version='0.2.0',lifespan=lifespan)
+app=FastAPI(title='NINA · Atlas del fuego',version='0.3.0',lifespan=lifespan)
 
 @app.middleware('http')
 async def local_origin(request: Request,call_next):
@@ -74,7 +75,7 @@ def submit(kind,function,with_progress=False):
     return {'id':identifier,'status':'queued'}
 
 @app.get('/api/health')
-def health(): return {'status':'ok','version':'0.2.0','scope':'world','firms_key_configured':bool(os.getenv('FIRMS_MAP_KEY')),'earthdata_configured':bool(os.getenv('EARTHDATA_USERNAME')),'llm_configured':bool(os.getenv('NINA_LLM_BASE_URL') and os.getenv('NINA_LLM_API_KEY') and os.getenv('NINA_LLM_MODEL'))}
+def health(): return {'status':'ok','version':'0.3.0','scope':'world','firms_key_configured':bool(os.getenv('FIRMS_MAP_KEY')),'earthdata_configured':bool(os.getenv('EARTHDATA_USERNAME')),'llm_configured':bool(os.getenv('NINA_LLM_BASE_URL') and os.getenv('NINA_LLM_API_KEY') and os.getenv('NINA_LLM_MODEL'))}
 
 @app.get('/api/catalog')
 def catalog():
@@ -136,7 +137,7 @@ def evidence(identifier:str):
     with database() as c: batches=rows(c,'SELECT filename,source,sha256,bytes,rows_loaded,rejected,url,imported_at,coverage_start,coverage_end,coverage_basis,processing,spatial_scope,spatial_geometry FROM batches ORDER BY source,coverage_start')
     scope=result['selection'].get('scope','PER')
     geometry_provenance=json.loads((DATA/'boundaries'/'provenance.json').read_text()) if scope=='PER' and (DATA/'boundaries'/'provenance.json').exists() else {'crs':'WGS84 / EPSG:4326','selection':'world' if scope=='world' else 'GeoJSON de la selección; los países usan Natural Earth 110m','reference':'https://www.naturalearthdata.com/about/terms-of-use/','license':'Public Domain (Natural Earth)'}
-    return {'analysis':result,'batches':batches,'software_version':'0.2.0','synthetic':False,'geometry_provenance':geometry_provenance}
+    return {'analysis':result,'batches':batches,'software_version':'0.3.0','synthetic':False,'geometry_provenance':geometry_provenance}
 
 def csv_output(data):
     out=io.StringIO(newline='');writer=csv.writer(out)
@@ -151,9 +152,20 @@ def export(identifier:str,kind:Literal['series','detections','manifest','report'
     if kind=='series':
         columns=list(result['months'][0]);payload=csv_output([columns]+[[r[k] for k in columns] for r in result['months']]);mime='text/csv';suffix='csv'
     elif kind=='detections':
-        a,b=month_dates(s.selected_year,s.selected_month);data=selected_rows(s,a,b)
+        a,b=month_dates(s.selected_year,s.selected_month)
         columns=['id','source','platform','acquired','latitude','longitude','frp','confidence','version','processing','daynight','fire_type','department','batch_id','scan','track']
-        payload=csv_output([columns]+[[r[k] for k in columns] for r in data]);mime='text/csv';suffix='csv'
+        path=DATA/'exports'/f'{identifier}-{uuid.uuid4().hex}.csv'
+        path.parent.mkdir(parents=True,exist_ok=True)
+        try:
+            with path.open('w',encoding='utf-8-sig',newline='') as stream:
+                writer=csv.writer(stream);writer.writerow(columns)
+                for record in iter_selected_rows(s,a,b):
+                    writer.writerow([("'"+str(x)) if isinstance(x,str) and x.startswith(('=','+','-','@')) else '' if x is None else x for x in (record[k] for k in columns)])
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        return FileResponse(path,media_type='text/csv;charset=utf-8',filename=f'NINA_{identifier}_detections.csv',
+                            background=BackgroundTask(path.unlink,missing_ok=True))
     elif kind=='manifest':
         from fastapi.encoders import jsonable_encoder
         payload=json.dumps(jsonable_encoder(evidence(identifier)),ensure_ascii=False,indent=2);mime='application/json';suffix='json'

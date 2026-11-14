@@ -1,5 +1,10 @@
 param([int]$Port = 8000)
 $ErrorActionPreference = 'Stop'
+$rootLauncher = Join-Path (Split-Path $PSScriptRoot) 'start-nina.ps1'
+if (Test-Path -LiteralPath $rootLauncher) {
+    & $rootLauncher -Port $Port
+    exit $LASTEXITCODE
+}
 Set-Location -LiteralPath $PSScriptRoot
 $ninaPython = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $ninaPython)) { throw 'Primero ejecuta setup-nina.ps1 para instalar las dependencias.' }

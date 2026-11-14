@@ -110,7 +110,9 @@ def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=No
                     scope_filter=' AND longitude BETWEEN ? AND ? AND latitude BETWEEN ? AND ?';scope_args=[w,e,s,n]
                 c.execute("DELETE FROM observations WHERE source=? AND processing<>'SP' AND acquired::DATE BETWEEN ? AND ?"+scope_filter,[source,coverage_start,coverage_end,*scope_args])
             before=c.execute('SELECT count(*) FROM observations').fetchone()[0]
-            c.execute('INSERT OR IGNORE INTO observations SELECT * FROM incoming')
+            c.execute('''INSERT INTO observations SELECT * FROM incoming i WHERE NOT EXISTS
+                (SELECT 1 FROM observations o WHERE o.id=i.id)
+                QUALIFY row_number() OVER(PARTITION BY id ORDER BY acquired)=1''')
             if processing=='SP':
                 c.execute("UPDATE observations SET version=i.version,processing=i.processing,batch_id=i.batch_id,frp=i.frp,confidence=i.confidence,fire_type=i.fire_type,daynight=i.daynight,scan=i.scan,track=i.track,department=i.department FROM incoming i WHERE observations.id=i.id AND observations.processing<>'SP'")
             loaded=c.execute('SELECT count(*) FROM observations').fetchone()[0]-before

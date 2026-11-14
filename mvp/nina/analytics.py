@@ -1,4 +1,4 @@
-import calendar
+import heapq
 import hashlib
 import json
 import statistics
@@ -55,15 +55,56 @@ def filters(s, start=None, end=None, source=None, platform=None):
         clauses.append('longitude BETWEEN ? AND ? AND latitude BETWEEN ? AND ?');args.extend([w,e,south,n])
     return ' AND '.join(clauses),args
 
-def selected_rows(s,start=None,end=None,source=None,platform=None):
+OBSERVATION_COLUMNS = (
+    'id','source','platform','acquired','latitude','longitude','frp','confidence',
+    'version','processing','daynight','fire_type','department','batch_id','scan','track',
+)
+POINT_COLUMNS = (
+    'id','source','platform','acquired','latitude','longitude','frp','confidence',
+    'daynight','scan','track',
+)
+
+
+def _selected_chunks(s,start=None,end=None,source=None,platform=None,
+                     columns=OBSERVATION_COLUMNS,chunk_size=8192):
+    """Lee bloques acotados y aplica el polígono exacto, incluyendo sus bordes.
+
+    El consumidor debe agotar o cerrar el generador en el mismo hilo, porque
+    la conexión mantiene el bloqueo de la revisión mientras está abierta.
+    """
+    if chunk_size<1: raise ValueError('El tamaño de bloque debe ser positivo')
+    if not columns or any(column not in OBSERVATION_COLUMNS for column in columns):
+        raise ValueError('Columnas de observación inválidas')
     where,args=filters(s,start,end,source,platform)
-    with database() as c: result=rows(c,'SELECT * FROM observations WHERE '+where,args)
-    if s.geometry:
-        g=shapely.geometry.shape(s.geometry)
-        if result:
-            keep=shapely.covers(g,shapely.points([r['longitude'] for r in result],[r['latitude'] for r in result]))
-            result=[r for r,k in zip(result,keep) if k]
-    return result
+    geometry=shapely.geometry.shape(s.geometry) if s.geometry else None
+    if geometry is not None:
+        shapely.prepare(geometry)
+        latitude_index=columns.index('latitude');longitude_index=columns.index('longitude')
+    with database() as connection:
+        cursor=connection.execute('SELECT '+','.join(columns)+' FROM observations WHERE '+where,args)
+        while chunk:=cursor.fetchmany(chunk_size):
+            if geometry is not None:
+                keep=shapely.covers(geometry,shapely.points(
+                    [row[longitude_index] for row in chunk],
+                    [row[latitude_index] for row in chunk],
+                ))
+                chunk=[row for row,inside in zip(chunk,keep) if inside]
+            if chunk: yield chunk
+
+
+def iter_selected_rows(s,start=None,end=None,source=None,platform=None,chunk_size=8192):
+    """Itera todas las detecciones seleccionadas sin cargarlas juntas en memoria.
+
+    Para una exportación HTTP, consumir en un hilo hasta un archivo temporal
+    y servir ese archivo. No trasladar este generador abierto entre hilos.
+    """
+    for chunk in _selected_chunks(s,start,end,source,platform,chunk_size=chunk_size):
+        for row in chunk: yield dict(zip(OBSERVATION_COLUMNS,row))
+
+
+def selected_rows(s,start=None,end=None,source=None,platform=None):
+    """Compatibilidad para consultas pequeñas; exportaciones usan el iterador."""
+    return list(iter_selected_rows(s,start,end,source,platform))
 
 def month_dates(year,month):
     start=date(year,month,1)
@@ -97,9 +138,10 @@ def analyze(s):
         with database() as c:
             for r in rows(c,'SELECT year(acquired) AS y,month(acquired) AS m,count(*) AS n FROM observations WHERE '+where+' GROUP BY y,m',args): grouped[(r['y'],r['m'])]=r['n']
     else:
-        for r in selected_rows(s,start,end):
-            k=(r['acquired'].year,r['acquired'].month)
-            grouped[k]=grouped.get(k,0)+1
+        for chunk in _selected_chunks(s,start,end,columns=('acquired','latitude','longitude')):
+            for acquired,_,_ in chunk:
+                k=(acquired.year,acquired.month)
+                grouped[k]=grouped.get(k,0)+1
     with database() as c:
         coverage=rows(c,'SELECT coverage_start,coverage_end,coverage_basis,spatial_scope,spatial_geometry FROM batches WHERE source=?',[s.source])
         revision=c.execute('SELECT md5(string_agg(id,\',\' ORDER BY id)) FROM batches').fetchone()[0]
@@ -108,20 +150,25 @@ def analyze(s):
         a,b=month_dates(y,m)
         if s.source=='modis' and s.platform=='Aqua' and a<date(2002,8,1): return False
         cursor=a
-        for x in sorted((x for x in coverage if x['coverage_start'] and x['coverage_end']),key=lambda x:x['coverage_start']):
+        for x in sorted((x for x in coverage if x['coverage_start'] and x['coverage_end']
+                         and x['coverage_basis']!='observed_dates_only'),key=lambda x:x['coverage_start']):
             if x['coverage_start']>cursor: continue
             cursor=max(cursor,x['coverage_end']+timedelta(days=1))
             if cursor>=b: return True
         return False
-    def partial(y,m):
+    def partial(y,m,declared_only=False):
         a,b=month_dates(y,m)
-        return any(x['coverage_start'] and x['coverage_end'] and x['coverage_start']<b and x['coverage_end']>=a for x in coverage)
+        return any(x['coverage_start'] and x['coverage_end'] and x['coverage_start']<b and x['coverage_end']>=a
+                   and (not declared_only or x['coverage_basis']!='observed_dates_only') for x in coverage)
     model=None
     if s.metric=='experimental':
         path=DATA/'models'/'benchmark.json'
         if path.exists(): model=json.loads(path.read_text()).get('models',{}).get(s.source)
     def value(y,m):
-        if not available(y,m): return grouped.get((y,m),0) if s.metric=='observed' and (partial(y,m) or (y,m) in grouped) else None
+        if not available(y,m):
+            # Las fechas mínima/máxima de registros no prueban integridad del archivo
+            # ni permiten inventar ceros para otras áreas dentro de esa ventana.
+            return grouped.get((y,m),0) if s.metric=='observed' and (partial(y,m,declared_only=True) or (y,m) in grouped) else None
         raw=grouped.get((y,m),0)
         if s.metric=='observed': return raw
         if not model or s.scope!='PER' or not 2018<=y<=2025 or s.geometry or s.department=='all' or s.fire_type!='all' or s.daynight!='all': return None
@@ -163,11 +210,26 @@ def get_analysis(identifier):
     if not row: return None
     return json.loads(row[0])
 
+@atomic_read
 def points_for_analysis(result, limit=10000):
+    """Muestra acotada por hash estable; total calculado antes del muestreo."""
+    if limit<1: raise ValueError('El límite de puntos debe ser positivo')
     s=Selection(**result['selection']);a,b=month_dates(s.selected_year,s.selected_month)
-    records=selected_rows(s,a,b)
-    # Deterministic sample, independent of acquisition ordering; export still contains all rows.
-    records.sort(key=lambda r:r['id'])
-    step=max(1,(len(records)+limit-1)//limit)
-    features=[{'type':'Feature','geometry':{'type':'Point','coordinates':[r['longitude'],r['latitude']]},'properties':{'id':r['id'],'source':r['source'],'platform':r['platform'],'date':str(r['acquired']),'frp':r['frp'],'confidence':r['confidence'],'daynight':r['daynight'],'scan':r['scan'],'track':r['track']}} for r in records[::step]]
-    return {'type':'FeatureCollection','features':features,'total':len(records),'shown':len(features),'sampling':'deterministic','synthetic':False}
+    if not s.geometry:
+        where,args=filters(s,a,b)
+        with database() as connection:
+            total=connection.execute('SELECT count(*) FROM observations WHERE '+where,args).fetchone()[0]
+            records=rows(connection,'SELECT '+','.join(POINT_COLUMNS)+
+                         ' FROM observations WHERE '+where+' ORDER BY id LIMIT ?',[*args,limit])
+    else:
+        total=0
+        def candidates():
+            nonlocal total
+            for chunk in _selected_chunks(s,a,b,columns=POINT_COLUMNS):
+                total+=len(chunk)
+                for row in chunk: yield row
+        # nsmallest mantiene como máximo limit candidatos, no todo el país.
+        sample=heapq.nsmallest(limit,candidates(),key=lambda row:row[0])
+        records=[dict(zip(POINT_COLUMNS,row)) for row in sample]
+    features=[{'type':'Feature','geometry':{'type':'Point','coordinates':[r['longitude'],r['latitude']]},'properties':{'id':r['id'],'source':r['source'],'platform':r['platform'],'date':str(r['acquired']),'frp':r['frp'],'confidence':r['confidence'],'daynight':r['daynight'],'scan':r['scan'],'track':r['track']}} for r in records]
+    return {'type':'FeatureCollection','features':features,'total':total,'shown':len(features),'sampling':'deterministic','synthetic':False}

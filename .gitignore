@@ -16,3 +16,14 @@ source/**
 .ipynb_checkpoints/
 # descargas crudas de FIRMS (nunca se commitean)
 *.zip
+
+# Archivos locales del MVP: datos, entornos y respaldos de la migración.
+/.nina-qa/
+/.vscode/
+/data/
+/data_abraham/
+/exa-results/
+/pytest-cache-files-*/
+*.log
+*.tsbuildinfo
+*.py[cod]

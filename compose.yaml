@@ -1,0 +1,15 @@
+services:
+  nina:
+    build: ./mvp
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      FIRMS_MAP_KEY: ${FIRMS_MAP_KEY:-}
+      EARTHDATA_USERNAME: ${EARTHDATA_USERNAME:-}
+      EARTHDATA_PASSWORD: ${EARTHDATA_PASSWORD:-}
+      NINA_LLM_BASE_URL: ${NINA_LLM_BASE_URL:-}
+      NINA_LLM_API_KEY: ${NINA_LLM_API_KEY:-}
+      NINA_LLM_MODEL: ${NINA_LLM_MODEL:-}
+    restart: unless-stopped

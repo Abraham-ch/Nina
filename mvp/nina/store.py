@@ -1,6 +1,7 @@
 import json
 import threading
 import hashlib
+import os
 from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -29,6 +30,9 @@ def code_revision():
 def database():
     with LOCK:
         con = duckdb.connect(str(DATA / 'nina.duckdb'))
+        con.execute('SET memory_limit = ?', [os.getenv('NINA_DUCKDB_MEMORY_LIMIT','2GB')])
+        con.execute('SET threads = ?', [int(os.getenv('NINA_DUCKDB_THREADS','2'))])
+        con.execute('SET preserve_insertion_order = false')
         try: yield con
         finally: con.close()
 
@@ -49,9 +53,7 @@ def initialize():
         c.execute("UPDATE batches SET spatial_scope='PER' WHERE spatial_scope IS NULL")
         c.execute('CREATE TABLE IF NOT EXISTS analyses(id VARCHAR PRIMARY KEY, selection VARCHAR, result VARCHAR, created_at VARCHAR)')
         c.execute('CREATE TABLE IF NOT EXISTS jobs(id VARCHAR PRIMARY KEY, kind VARCHAR, status VARCHAR, progress DOUBLE, message VARCHAR, result VARCHAR, updated_at VARCHAR)')
-        c.execute('CREATE INDEX IF NOT EXISTS observations_time ON observations(acquired)')
-        c.execute('CREATE INDEX IF NOT EXISTS observations_department ON observations(department)')
-        c.execute('CREATE INDEX IF NOT EXISTS observations_source_time ON observations(source,acquired)')
+        # Columnar scans and bounded ingestion avoid row indexes proportional to world volume.
 
 def rows(c, sql, args=None):
     cur = c.execute(sql, args or [])

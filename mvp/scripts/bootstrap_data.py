@@ -24,7 +24,7 @@ try:
     TLS = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 except ImportError:
     TLS = ssl.create_default_context()
-DATA = ROOT / 'data'
+from nina.config import DATA
 BASE = 'https://firms.modaps.eosdis.nasa.gov'
 
 def get(url, target=None):

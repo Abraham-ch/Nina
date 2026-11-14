@@ -1,5 +1,10 @@
 param([switch]$DownloadData)
 $ErrorActionPreference = 'Stop'
+$rootSetup = Join-Path (Split-Path $PSScriptRoot) 'setup-nina.ps1'
+if (Test-Path -LiteralPath $rootSetup) {
+    & $rootSetup -DownloadData:$DownloadData
+    exit $LASTEXITCODE
+}
 Set-Location -LiteralPath $PSScriptRoot
 if (-not (Test-Path -LiteralPath '.venv\Scripts\python.exe')) { python -m venv .venv; if ($LASTEXITCODE) { throw 'No se pudo crear el entorno Python' } }
 & .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
