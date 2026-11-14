@@ -1,10 +1,35 @@
-import {readFileSync,writeFileSync,mkdirSync,copyFileSync} from 'node:fs';
-import {feature} from 'topojson-client';
-const world=JSON.parse(readFileSync('../design/world-110m.topojson','utf8'));
-const countries=feature(world,world.objects.countries);
-countries.features=countries.features.map(f=>({...f,properties:{...f.properties,id:String(f.id),name:f.properties.name}}));
-mkdirSync('public/assets',{recursive:true});
-writeFileSync('public/assets/countries.geojson',JSON.stringify(countries));
-copyFileSync('../design/earth-gibs.jpg','public/assets/earth-reference.jpg');
-writeFileSync('public/assets/attribution.json',JSON.stringify({imagery:{name:'Blue Marble Next Generation',source:'NASA GIBS / ESDIS',url:'https://nasa-gibs.github.io/gibs-api-docs/',reference:true},countries:{source:'Natural Earth, world-atlas 2.0.2',resolution:'110m',license:'Public Domain',url:'https://www.naturalearthdata.com/about/terms-of-use/'},note:'Límites de referencia generalizados; las selecciones por país siguen esta geometría, salvo el archivo peruano identificado por su proveedor.'},null,2));
-console.log('Países y referencia NASA preparados.');
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs'
+
+import { feature } from 'topojson-client'
+const world = JSON.parse(readFileSync('../design/world-110m.topojson', 'utf8'))
+const countries = feature(world, world.objects.countries)
+countries.features = countries.features.map((f) => ({
+  ...f,
+  properties: { ...f.properties, id: String(f.id), name: f.properties.name },
+}))
+mkdirSync('public/assets', { recursive: true })
+writeFileSync('public/assets/countries.geojson', JSON.stringify(countries))
+copyFileSync('../design/earth-gibs.jpg', 'public/assets/earth-reference.jpg')
+writeFileSync(
+  'public/assets/attribution.json',
+  JSON.stringify(
+    {
+      imagery: {
+        name: 'Blue Marble Next Generation',
+        source: 'NASA GIBS / ESDIS',
+        url: 'https://nasa-gibs.github.io/gibs-api-docs/',
+        reference: true,
+      },
+      countries: {
+        source: 'Natural Earth, world-atlas 2.0.2',
+        resolution: '110m',
+        license: 'Public Domain',
+        url: 'https://www.naturalearthdata.com/about/terms-of-use/',
+      },
+      note: 'Límites de referencia generalizados; las selecciones por país siguen esta geometría, salvo el archivo peruano identificado por su proveedor.',
+    },
+    null,
+    2,
+  ),
+)
+console.log('Países y referencia NASA preparados.')

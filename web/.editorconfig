@@ -1,0 +1,3 @@
+# web/ follows .oxfmtrc.json (2-space indent); the rest of the repo keeps the root settings.
+[*.{ts,tsx,js,mjs,cjs,json,css,html}]
+indent_size = 2
