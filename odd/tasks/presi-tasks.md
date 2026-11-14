@@ -150,3 +150,15 @@
   intentos rechazados; `/api/acquisitions*` y `/api/sync` quedan cableados igual que `import`/`train` pero sus
   tests excluirían red, así que se cubren con `import` y `train`. **Queda pendiente** el tope de *filas* por
   exportación (`MAX_EXPORT_ROWS`) y el resto de advisories de L13.
+- **L18** · **Verificación independiente** (`gentle-ai-verify`) sobre `e374477` → **`pass`, 9/9 checks,
+  cero blockers**. Aislamiento entre usuarios de `/api/downloads` comprobado en ambos sentidos (intersección
+  de conjuntos vacía); `/api/audit` legible solo por `admin` y sin otro lector en `nina/`, `scripts/` ni
+  `web/src`; auditoría **sin filas** en peticiones rechazadas (409/422) y con fila `queued` en las aceptadas;
+  cuota leída **por petición** y **por usuario**; esquema aditivo `PROBLEMS: none`; `openapi.json`
+  byte-idéntico al regenerar. Spot check del padre: `56 passed` ✅.
+- **L19** · **Advisories del segundo verificador → van en el corte de la web** (los bytes verificados no se
+  tocan): (1) **`GET /api/status` es anónimo y ahora expone `batches[].created_by` con un UUID real** — es el
+  único hallazgo con cara de divulgación y conviene ocultarlo ahí; (2) `MAX_DOWNLOADS_PER_HOUR='abc'` produce
+  un `500` sin capturar (leer el valor con respaldo a valor por defecto); (3) `openapi.json` no documenta
+  `401`/`403` en ninguna ruta — estilo previo, no regresión; (4) `MAX_EXPORT_ROWS` sigue sin implementarse;
+  (5) `manifest`/`report` registran `rows=0` en `downloads`.
