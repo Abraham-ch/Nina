@@ -262,3 +262,22 @@ def test_burned_area_comes_from_mcd64a1_by_department_and_country(client):
     assert usa["status"] == "available" and usa["selected_month"]["burned_ha"] == 6.0
     drawn = reports.section_burned_area(connection, {"type": "polygon", "name": "x", "country": "Peru"}, 2025, 9)
     assert drawn["status"] == "not_available"
+
+
+def test_forest_outside_peru_comes_from_gfw_drivers(client):
+    import duckdb
+
+    folder = reports.CONTEXT / "forest_drivers"
+    folder.mkdir(parents=True, exist_ok=True)
+    connection = duckdb.connect()
+    connection.execute("CREATE TABLE g(level VARCHAR, country VARCHAR, unit VARCHAR, driver VARCHAR, year INT, "
+                       "tc_loss_ha DOUBLE)")
+    connection.executemany("INSERT INTO g VALUES ('country','México','México',?,?,?)",
+                           [(d, y, v) for y in (2023, 2024) for d, v in (("Wildfire", 40.0), ("Logging", 60.0))])
+    connection.execute(f"COPY g TO '{(folder / 'gfw_drivers.parquet').as_posix()}' (FORMAT PARQUET)")
+    forest = reports.section_forest_drivers(connection, {"type": "country", "country": "Mexico", "name": "Mexico"}, 2024)
+    assert forest["status"] == "available" and forest["source_kind"] == "gfw_drivers"
+    assert forest["selected_year"] == {"year": 2024, "loss_ha": 100.0, "loss_ha_with_fire": 40.0}
+    assert forest["by_driver"][0] == {"driver": "Logging", "loss_ha": 60.0}
+    drawn = reports.section_forest_drivers(connection, {"type": "polygon", "country": "Mexico", "name": "x"}, 2024)
+    assert drawn["status"] == "not_available"

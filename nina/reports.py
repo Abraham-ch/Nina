@@ -548,6 +548,58 @@ def unicodedata_fold(text: str) -> str:
     return " ".join(plain.upper().replace("-", " ").split())
 
 
+# Natural Earth names that differ from the Global Forest Watch (GADM) country names.
+GFW_NAMES = {
+    "United States of America": "United States", "Dem. Rep. Congo": "Democratic Republic of the Congo",
+    "Congo": "Republic of the Congo", "Central African Rep.": "Central African Republic",
+    "Bosnia and Herz.": "Bosnia and Herzegovina", "Dominican Rep.": "Dominican Republic",
+    "Eq. Guinea": "Equatorial Guinea", "S. Sudan": "South Sudan", "Solomon Is.": "Solomon Islands",
+    "eSwatini": "Swaziland", "N. Cyprus": "NorthernCyprus", "Mexico": "México",
+}
+
+
+def section_forest_drivers(connection, territory: dict[str, Any], year: int) -> dict[str, Any]:
+    """Tree-cover loss with its dominant driver for any country (Global Forest Watch statistics)."""
+    path = CONTEXT / "forest_drivers/gfw_drivers.parquet"
+    if not path.exists() or territory["type"] != "country":
+        return {"status": "not_available",
+                "reason": "tree-cover loss by driver is published by country and first-level unit"}
+    name = GFW_NAMES.get(territory["country"], territory["country"])
+    rows = connection.execute(
+        f"""SELECT year, sum(tc_loss_ha), sum(tc_loss_ha) FILTER (WHERE driver='Wildfire')
+        FROM read_parquet('{path.as_posix()}') WHERE level='country' AND country=? GROUP BY 1 ORDER BY 1""",
+        [name],
+    ).fetchall()
+    if not rows:
+        return {"status": "not_available", "reason": f"no tree-cover loss statistics for {territory['country']}"}
+    drivers = connection.execute(
+        f"""SELECT driver, sum(tc_loss_ha) FROM read_parquet('{path.as_posix()}')
+        WHERE level='country' AND country=? AND year=? GROUP BY 1 ORDER BY 2 DESC""",
+        [name, year],
+    ).fetchall()
+    by_year = [{"year": int(y), "loss_ha": float(t or 0), "loss_ha_with_fire": float(f or 0)} for y, t, f in rows]
+    selected = next((r for r in by_year if r["year"] == year), None)
+    manifest_path = CONTEXT / "forest_drivers/gfw_drivers.json"
+    manifest = load_json(manifest_path) if manifest_path.exists() else {}
+    return {
+        "status": "available",
+        "source_kind": "gfw_drivers",
+        "definition": "tree-cover loss (Hansen/UMD, canopy >= 30 %) by dominant driver (Global Forest Watch); "
+        "'wildfire' = 1 km cells where fire was the dominant driver of loss",
+        "caveats": ["Tree-cover loss is not deforestation.",
+                    "The driver is the dominant one per 1 km cell (Sims et al. 2025), not a hectare-by-hectare cause.",
+                    "The Hansen method changed in 2011-2012: do not read a trend across that break."],
+        "validation": "Global Forest Watch country statistics, version 2025 (CC BY 4.0)",
+        "source_version": manifest.get("product", "GFW tree-cover loss by driver"),
+        "forest_2000_ha": None,
+        "by_year": by_year,
+        "by_driver": [{"driver": d, "loss_ha": float(v or 0)} for d, v in drivers],
+        "selected_year": selected,
+        "last_year_available": by_year[-1]["year"],
+        "cross_check": None,
+    }
+
+
 def section_forest(connection, territory: dict[str, Any], year: int) -> dict[str, Any]:
     loss_path = CONTEXT / "forest_loss/forest_loss_cell_year.parquet"
     forest_path = CONTEXT / "forest_loss/forest_2000_cell.parquet"
@@ -573,7 +625,8 @@ def section_forest(connection, territory: dict[str, Any], year: int) -> dict[str
     selected = next((r for r in by_year if r["year"] == year), None)
     manifest = load_json(CONTEXT / "forest_loss/manifest.json") if (CONTEXT / "forest_loss/manifest.json").exists() else {}
     if not by_year:
-        return {"status": "not_available", "reason": "the forest loss layer covers Peru only"}
+        # Outside Peru: country statistics by dominant driver (Global Forest Watch).
+        return section_forest_drivers(connection, territory, year)
     return {
         "status": "available",
         "definition": "tree-cover loss (Hansen/UMD, canopy >= 30 % in 2000); 'with fire' = cell with "
@@ -781,6 +834,7 @@ TEXT = {
         "events_registry": "{year}: {events} significant fire events detected by satellite; {label}: {emergencies}.",
         "indeci_partial": " (INDECI records available through {through}.)",
         "forest": "Tree-cover loss {year}: {loss} ha, of which {fire} ha in cells with fire activity.",
+        "forest_gfw": "Tree-cover loss {year} (Global Forest Watch): {loss} ha, of which {fire} ha where wildfire was the dominant driver.",
         "burned": "Burned area {year} (MODIS MCD64A1, GWIS): {area} ha.",
         "burned_month": "Burned area in {month} {year} (MODIS MCD64A1, GWIS): {area} ha, rank {rank} of {of} for that month.",
         "climate": "Climate {period}: {drought} of {total} department(s) under drought conditions (low precipitation and high vapour-pressure deficit).",
@@ -798,6 +852,7 @@ TEXT = {
         "events_registry": "{year}: {events} evento(s) de incendio significativo(s) detectado(s) por satélite; {label}: {emergencies}.",
         "indeci_partial": " (registros de INDECI disponibles hasta {through}).",
         "forest": "Pérdida de cobertura arbórea {year}: {loss} ha, de las cuales {fire} ha en celdas con actividad de fuego.",
+        "forest_gfw": "Pérdida de cobertura arbórea {year} (Global Forest Watch): {loss} ha, de las cuales {fire} ha donde el incendio fue la causa dominante.",
         "burned": "Área quemada {year} (MODIS MCD64A1, GWIS): {area} ha.",
         "burned_month": "Área quemada en {month} de {year} (MODIS MCD64A1, GWIS): {area} ha, puesto {rank} de {of} para ese mes.",
         "climate": "Clima {period}: {drought} de {total} departamento(s) en condición de sequía (baja precipitación y alto déficit de presión de vapor).",
@@ -927,7 +982,8 @@ def summary_items(report: dict[str, Any]) -> list[tuple[str, str]]:
                                                        area=n(ba["selected_year"]["burned_ha"]))))
     fo = s["forest"]
     if fo["status"] == "available" and fo.get("selected_year"):
-        lines.append(("forest", t["forest"].format(year=fo["selected_year"]["year"], loss=n(fo["selected_year"]["loss_ha"]),
+        lines.append(("forest", t["forest_gfw" if fo.get("source_kind") == "gfw_drivers" else "forest"].format(
+                                        year=fo["selected_year"]["year"], loss=n(fo["selected_year"]["loss_ha"]),
                                         fire=n(fo["selected_year"]["loss_ha_with_fire"]))))
     cl = s["climate"]
     if cl["status"] == "available":

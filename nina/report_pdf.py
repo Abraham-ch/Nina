@@ -323,9 +323,10 @@ def build_pdf(report: dict[str, Any], image_paths: dict[str, Path] | None = None
     if forest or pictures:
         flow.append(PageBreak())
         if forest:
-            flow += section(f'{t["chart_forest"]} (ha)', f'{t["forest_definition"]} {t["forest_validation"]}', forest,
-                            [(rd.FIRE_DARK, t["legend_with_fire"]), ("#fdba74", t["legend_other"])],
-                            checks(forest) + [Paragraph("&bull; " + para(c), STYLES["note"]) for c in t["forest_caveats"]])
+            labels = rd.forest_labels(doc)
+            flow += section(f'{t["chart_forest"]} (ha)', f'{labels["definition"]} {labels["validation"]}'.strip(), forest,
+                            [(rd.FIRE_DARK, labels["fire"]), ("#fdba74", labels["other"])],
+                            checks(forest) + [Paragraph("&bull; " + para(c), STYLES["note"]) for c in labels["caveats"]])
         flow += pictures
 
     flow += [PageBreak(), Paragraph(para(t["part_annex"]).upper(), STYLES["part"])]

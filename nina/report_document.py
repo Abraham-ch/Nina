@@ -71,6 +71,11 @@ LABELS = {
         "q_unit": "Unit: active H3 cells (~5 km²) per day on a VIIRS S-NPP-equivalent scale; not a count of fires or burned area.",
         "forest_definition": "Tree-cover loss (Hansen/UMD, canopy ≥ 30 % in 2000). 'In cells with fire activity': cell with satellite fire activity in the same or the previous year.",
         "forest_validation": "Peru totals 2001–2024 within 0.3–0.6 % of Global Forest Watch.",
+        "forest_definition_gfw": "Tree-cover loss (Hansen/UMD, canopy ≥ 30 %) by dominant driver, from Global Forest Watch country statistics (version 2025, CC BY 4.0). 'Wildfire': 1 km cells where fire was the dominant driver.",
+        "legend_wildfire": "Wildfire as dominant driver", "legend_other_drivers": "Other drivers",
+        "forest_caveats_gfw": ["Tree-cover loss is not deforestation.",
+                               "The driver is the dominant one per 1 km cell (Sims et al. 2025), not a hectare-by-hectare cause.",
+                               "The Hansen method changed in 2011–2012: do not read a trend across that break."],
         "forest_caveats": ["Tree-cover loss is not deforestation: it includes fire-killed forest and plantation harvest.",
                            "Loss in cells with fire shows co-location, not causation.",
                            "The Hansen method changed in 2011–2012: do not read a trend across that break."],
@@ -144,6 +149,11 @@ LABELS = {
         "q_unit": "Unidad: celdas H3 activas (~5 km²) por día en escala equivalente a VIIRS S-NPP; no es número de incendios ni área quemada.",
         "forest_definition": "Pérdida de cobertura arbórea (Hansen/UMD, dosel ≥ 30 % en 2000). 'En celdas con actividad de fuego': celda con actividad de fuego satelital el mismo año o el anterior.",
         "forest_validation": "Totales del Perú 2001–2024 dentro de 0,3–0,6 % de Global Forest Watch.",
+        "forest_definition_gfw": "Pérdida de cobertura arbórea (Hansen/UMD, dosel ≥ 30 %) por causa dominante, según las estadísticas por país de Global Forest Watch (versión 2025, CC BY 4.0). 'Incendio': celdas de 1 km donde el fuego fue la causa dominante.",
+        "legend_wildfire": "Incendio como causa dominante", "legend_other_drivers": "Otras causas",
+        "forest_caveats_gfw": ["La pérdida de cobertura arbórea no es deforestación.",
+                               "La causa es la dominante en cada celda de 1 km (Sims et al. 2025), no la de cada hectárea.",
+                               "El método de Hansen cambió en 2011–2012: no se debe leer una tendencia a través de ese corte."],
         "forest_caveats": ["La pérdida de cobertura arbórea no es deforestación: incluye bosque muerto por fuego y cosecha de plantaciones.",
                            "La pérdida en celdas con fuego indica coincidencia, no causa.",
                            "El método de Hansen cambió en 2011–2012: no leer una tendencia a través de ese quiebre."],
@@ -637,6 +647,16 @@ def burned_chart(doc: Doc) -> str:
             + "".join(f'<p class="check">{esc(line)}</p>' for line in lines if line) + "</section>")
 
 
+def forest_labels(doc: Doc) -> dict[str, Any]:
+    """Texts of the forest section for its source: Hansen cells (Peru) or GFW drivers (other countries)."""
+    t, forest = doc.t, doc.r["sections"]["forest"]
+    if forest.get("source_kind") == "gfw_drivers":
+        return {"definition": t["forest_definition_gfw"], "validation": "", "fire": t["legend_wildfire"],
+                "other": t["legend_other_drivers"], "caveats": t["forest_caveats_gfw"]}
+    return {"definition": t["forest_definition"], "validation": t["forest_validation"], "fire": t["legend_with_fire"],
+            "other": t["legend_other"], "caveats": t["forest_caveats"]}
+
+
 def forest_chart(doc: Doc) -> str:
     t, forest = doc.t, doc.r["sections"]["forest"]
     if forest["status"] != "available" or not forest["by_year"]:
@@ -665,11 +685,12 @@ def forest_chart(doc: Doc) -> str:
                        f'<text x="{x + 5:.1f}" y="{y0 + 10}" font-size="10" fill="{INK}">{esc(t["method_break"])}</text>')
     out.append(x_labels([str(r["year"]) for r in rows], xs, y1 + 18, min_gap=42))
     out.append("</svg>")
-    legend = (f'<div class="legend"><span><i style="background:{FIRE_DARK}"></i>{esc(t["legend_with_fire"])}</span>'
-              f'<span><i style="background:#fdba74"></i>{esc(t["legend_other"])}</span></div>')
-    caveats = "".join(f"<li>{esc(c)}</li>" for c in t["forest_caveats"])
-    return (f'<section><h2>{esc(t["chart_forest"])} (ha)</h2><p class="note">{esc(t["forest_definition"])} '
-            f'{esc(t["forest_validation"])}</p>{"".join(out)}{legend}{cross_check(doc, "forest", "forest_cross")}'
+    labels = forest_labels(doc)
+    legend = (f'<div class="legend"><span><i style="background:{FIRE_DARK}"></i>{esc(labels["fire"])}</span>'
+              f'<span><i style="background:#fdba74"></i>{esc(labels["other"])}</span></div>')
+    caveats = "".join(f"<li>{esc(c)}</li>" for c in labels["caveats"])
+    return (f'<section><h2>{esc(t["chart_forest"])} (ha)</h2><p class="note">{esc(labels["definition"])} '
+            f'{esc(labels["validation"])}</p>{"".join(out)}{legend}{cross_check(doc, "forest", "forest_cross")}'
             f'<div class="note"><ul style="margin:1mm 0 0 4mm;padding:0">{caveats}</ul></div></section>')
 
 
