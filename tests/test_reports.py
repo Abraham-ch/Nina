@@ -162,12 +162,18 @@ def test_package_is_self_contained_and_cites_firms(client):
     report = test_client.post("/api/reports/territorial", json={"ubigeo": "25", "year": 2025, "month": 9}).json()
     document = test_client.get(f"/api/reports/territorial/{report['id']}/document").text
     assert "Download PDF" in document and f"/api/reports/territorial/{report['id']}/package" in document
+    assert f"/api/reports/territorial/{report['id']}/pdf" in document and "window.print" not in document
+    pdf = test_client.get(f"/api/reports/territorial/{report['id']}/pdf")
+    assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF") and len(pdf.content) > 5_000
+    assert 'attachment; filename="NINA_report_Ucayali_2025-09.pdf"' == pdf.headers["content-disposition"]
     response = test_client.get(f"/api/reports/territorial/{report['id']}/package")
     assert response.status_code == 200 and response.headers["content-type"] == "application/zip"
     assert "NINA_report_Ucayali_2025-09.zip" in response.headers["content-disposition"]
     archive = zipfile.ZipFile(io.BytesIO(response.content))
     names = set(archive.namelist())
-    assert {"README.txt", "report.html", "report.json", "monthly_activity.csv", "annual_series.csv",
+    assert archive.read("report.pdf").startswith(b"%PDF")
+    assert {"README.txt", "report.pdf", "report.html", "report.json", "monthly_activity.csv", "annual_series.csv",
             "events_by_year.csv", "forest_loss_by_year.csv", "climate_month.csv"} <= names
     readme = archive.read("README.txt").decode("utf-8")
     assert "FIRMS citation" in readme and report["dataset_id"] in readme and "never zero" in readme

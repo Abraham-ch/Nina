@@ -1350,6 +1350,47 @@
         }
       }
     },
+    "/api/reports/territorial/{identifier}/pdf": {
+      "get": {
+        "tags": [
+          "Territorial report"
+        ],
+        "summary": "Report Pdf",
+        "description": "The report as an A4 PDF, downloaded directly (no print dialog).",
+        "operationId": "report_pdf_api_reports_territorial__identifier__pdf_get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/territorial/{identifier}/package": {
       "get": {
         "tags": [
@@ -1471,6 +1512,43 @@
                 "schema": {
                   "$ref": "#/components/schemas/AnalystAnswer"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyst/stream": {
+      "post": {
+        "summary": "Ask Stream",
+        "description": "Same answer as POST /api/analyst, preceded by live progress as server-sent events.\n\nEvents (one JSON object per ``data:`` line): ``tool`` (name, state start/done), ``thinking`` (model turn),\n``verifying``, ``fallback`` (deterministic answer follows), then ``answer`` (the AnalystAnswer) or ``error``.",
+        "operationId": "ask_stream_api_analyst_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalystQuestion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },

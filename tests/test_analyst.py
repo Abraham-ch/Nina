@@ -277,3 +277,17 @@ def test_haiku_requests_carry_no_server_side_fallback():
     assert analyst.fallback_options("claude-sonnet-5-5")["fallbacks"] == "default"
     cost = analyst.question_cost({"input_tokens": 1_000_000, "output_tokens": 0}, "claude-haiku-5-5")
     assert abs(cost - 0.10) < 1e-9
+
+
+def test_stream_reports_progress_then_the_same_answer(client):
+    test_client, _ = client
+    body = {"question": "Is the trend real or a sensor artefact?", "language": "en", "context": CONTEXT}
+    with test_client.stream("POST", "/api/analyst/stream", json=body) as response:
+        assert response.status_code == 200 and response.headers["content-type"].startswith("text/event-stream")
+        events = [json.loads(line[6:]) for line in response.iter_lines() if line.startswith("data: ")]
+    kinds = [event["type"] for event in events]
+    assert kinds[-1] == "answer" and "tool" in kinds
+    started = [e["name"] for e in events if e["type"] == "tool" and e["state"] == "start"]
+    assert "territory_profile" in started
+    answer = events[-1]["answer"]
+    assert answer["engine"] == "deterministic" and answer["verification"]["passed"] and answer["visuals"]

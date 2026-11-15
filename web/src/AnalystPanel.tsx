@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Download,
   FileText,
+  Loader2,
   Map as MapIcon,
   Send,
   ShieldAlert,
@@ -13,9 +14,58 @@ import {
 import { useEffect, useRef, useState } from 'react'
 
 import AnalystVisualView from './AnalystVisual'
-import { analystStatus, askAnalyst, reportDocumentUrl, reportPackageUrl } from './api'
+import { analystStatus, askAnalystStream, reportDocumentUrl, reportPackageUrl } from './api'
 import { getLang, tr } from './i18n'
-import type { AnalystAction, AnalystAnswer, AnalystStatus, AnalystTurn, ReportRequest } from './types'
+import type {
+  AnalystAction,
+  AnalystAnswer,
+  AnalystEvent,
+  AnalystStatus,
+  AnalystTurn,
+  ReportRequest,
+} from './types'
+
+// What the user sees while NINA works: one line per real step, in the order they happen.
+const STEP_TEXT: Record<string, [string, string]> = {
+  territory_profile: ['Reading the territorial profile', 'Leyendo el perfil territorial'],
+  activity_series: ['Reading the monthly series', 'Leyendo la serie mensual'],
+  compare_departments: ['Comparing departments', 'Comparando departamentos'],
+  validation_summary: ['Reading the validation results', 'Leyendo los resultados de validación'],
+  method_notes: ['Reading the method notes', 'Leyendo las notas de método'],
+  find_territory: ['Finding the place', 'Buscando el lugar'],
+  calculate: ['Calculating', 'Calculando'],
+  show_visual: ['Drawing a chart from NINA data', 'Dibujando un gráfico con datos de NINA'],
+  propose_action: ['Preparing a button', 'Preparando un botón'],
+  web_search: ['Searching official sources', 'Buscando en fuentes oficiales'],
+}
+type Step = { key: string; text: string; done: boolean }
+function nextSteps(steps: Step[], event: AnalystEvent): Step[] {
+  const close = (list: Step[]) => list.map((s) => ({ ...s, done: true }))
+  if (event.type === 'tool') {
+    const text = STEP_TEXT[event.name] ? tr(...STEP_TEXT[event.name]) : event.name
+    if (event.state === 'start') return [...close(steps), { key: `${event.name}-${steps.length}`, text, done: false }]
+    const open = [...steps].reverse().find((s) => !s.done && s.key.startsWith(event.name))
+    if (open) return steps.map((s) => (s === open ? { ...s, done: true } : s))
+    return [...close(steps), { key: `${event.name}-${steps.length}`, text, done: true }]
+  }
+  if (event.type === 'thinking')
+    return [
+      ...close(steps),
+      {
+        key: `thinking-${event.step}`,
+        text: event.step === 1 ? tr('Planning the analysis', 'Planificando el análisis') : tr('Analysing the results', 'Analizando los resultados'),
+        done: false,
+      },
+    ]
+  if (event.type === 'verifying')
+    return [...close(steps), { key: 'verify', text: tr('Checking every figure against NINA data', 'Contrastando cada cifra con los datos de NINA'), done: false }]
+  if (event.type === 'fallback')
+    return [
+      ...close(steps),
+      { key: 'fallback', text: tr('Preparing the verified deterministic answer', 'Preparando la respuesta determinista verificada'), done: false },
+    ]
+  return steps
+}
 
 // Questions a specialist would ask first; the text sent follows the interface language.
 const PRESETS: [string, string][] = [
@@ -121,7 +171,9 @@ export default function AnalystPanel({
     [reply, setReply] = useState<AnalystAnswer | null>(null),
     [history, setHistory] = useState<AnalystTurn[]>([]),
     [question, setQuestion] = useState(''),
-    [asking, setAsking] = useState(false)
+    [asking, setAsking] = useState(false),
+    [steps, setSteps] = useState<Step[]>([]),
+    [pending, setPending] = useState('')
   const key = JSON.stringify(context)
   const current = useRef(key)
   current.current = key
@@ -139,9 +191,16 @@ export default function AnalystPanel({
   async function ask(text: string) {
     if (!context || asking) return
     setAsking(true)
+    setSteps([])
+    setPending(text)
     const sent = key
     try {
-      const answer = await askAnalyst({ question: text, language: getLang(), context, history })
+      const answer = await askAnalystStream(
+        { question: text, language: getLang(), context, history },
+        (event) => {
+          if (current.current === sent) setSteps((previous) => nextSteps(previous, event))
+        },
+      )
       if (current.current !== sent) return
       setReply(answer)
       setHistory((previous) =>
@@ -156,6 +215,7 @@ export default function AnalystPanel({
       onError(error instanceof Error ? error.message : String(error))
     } finally {
       setAsking(false)
+      setPending('')
     }
   }
 
@@ -269,7 +329,19 @@ export default function AnalystPanel({
           <Send size={17} />
         </button>
       </form>
-      {asking && <p role="status">{tr('Consulting NINA’s data…', 'Consultando los datos de NINA…')}</p>}
+      {asking && (
+        <div className="analyst-progress" role="status" aria-live="polite">
+          <p className="analyst-question">“{pending}”</p>
+          <ol>
+            {(steps.length ? steps : [{ key: 'start', text: tr('Starting', 'Iniciando'), done: false }]).map((step) => (
+              <li key={step.key} className={step.done ? 'done' : 'active'}>
+                {step.done ? <CheckCircle2 size={14} /> : <Loader2 size={14} className="spin" />}
+                {step.text}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       {reply && reply.facts.length > 0 && (
         <div className="answer-evidence">
           <h3>{tr('Facts behind the answer', 'Hechos que sostienen la respuesta')}</h3>

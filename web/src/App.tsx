@@ -798,10 +798,6 @@ export default function App() {
             )}
           </select>
         </label>
-        <button className="coordinates-button" onClick={() => setModal('area')}>
-          <Compass size={16} />
-          <span>{tr('Coordinates', 'Coordenadas')}</span>
-        </button>
         <div className="selection-meta">
           <span className="status-dot" />
           {selection.scope === 'PER'
@@ -821,6 +817,10 @@ export default function App() {
       </div>
       {extraFilters && (
         <div className="advanced-filters">
+          <button className="coordinates-button" onClick={() => setModal('area')}>
+            <Compass size={16} />
+            <span>{tr('Area by coordinates', 'Área por coordenadas')}</span>
+          </button>
           <label>
             {tr('Time of day', 'Horario')}
             <select
@@ -1010,9 +1010,9 @@ export default function App() {
                         {tr('Calendar', 'Calendario')}
                         <ArrowUpRight size={14} />
                       </button>
-                      <button onClick={() => setModal('explain')} disabled={!analysis}>
-                        <MessageSquareText size={15} />
-                        {tr('Explain', 'Explicar')}
+                      <button onClick={openAnalyst}>
+                        <Sparkles size={15} />
+                        {tr('Ask NINA', 'Pregúntale a NINA')}
                       </button>
                       <ReportButton body={reportBody()} onError={setError} />
                     </div>

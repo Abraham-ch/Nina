@@ -665,6 +665,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/territorial/{identifier}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report Pdf
+         * @description The report as an A4 PDF, downloaded directly (no print dialog).
+         */
+        get: operations["report_pdf_api_reports_territorial__identifier__pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/territorial/{identifier}/package": {
         parameters: {
             query?: never;
@@ -714,6 +734,29 @@ export interface paths {
         put?: never;
         /** Ask */
         post: operations["ask_api_analyst_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analyst/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Stream
+         * @description Same answer as POST /api/analyst, preceded by live progress as server-sent events.
+         *
+         *     Events (one JSON object per ``data:`` line): ``tool`` (name, state start/done), ``thinking`` (model turn),
+         *     ``verifying``, ``fallback`` (deterministic answer follows), then ``answer`` (the AnalystAnswer) or ``error``.
+         */
+        post: operations["ask_stream_api_analyst_stream_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2694,6 +2737,37 @@ export interface operations {
             };
         };
     };
+    report_pdf_api_reports_territorial__identifier__pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     report_package_api_reports_territorial__identifier__package_get: {
         parameters: {
             query?: never;
@@ -2796,6 +2870,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalystAnswer"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_stream_api_analyst_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalystQuestion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

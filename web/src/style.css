@@ -4118,3 +4118,47 @@ h1 > .experimental-tag {
   border-radius: 50%;
   vertical-align: -1px;
 }
+/* Analyst: live steps while NINA works, so the panel never looks frozen */
+.analyst-progress {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.analyst-question {
+  margin: 0 0 6px;
+  font-style: italic;
+  color: var(--muted);
+}
+.analyst-progress ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 0.84rem;
+}
+.analyst-progress li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.analyst-progress li.done {
+  color: var(--muted);
+}
+.analyst-progress li.active {
+  font-weight: 600;
+}
+.spin {
+  animation: nina-spin 0.9s linear infinite;
+}
+@keyframes nina-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

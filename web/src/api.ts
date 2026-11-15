@@ -2,6 +2,7 @@ import { tr, locale, getLang } from './i18n'
 import type {
   Analysis,
   AnalystAnswer,
+  AnalystEvent,
   AnalystQuestion,
   AnalystStatus,
   HarmonizedAnalysis,
@@ -182,6 +183,39 @@ export const createReport = (body: ReportRequest) => post<ReportCreated>('/repor
 export const reportDocumentUrl = (id: string) => `/api/reports/territorial/${id}/document`
 export const reportPackageUrl = (id: string) => `/api/reports/territorial/${id}/package`
 export const askAnalyst = (body: AnalystQuestion) => post<AnalystAnswer>('/analyst', body)
+/** The same question with live progress: each server-sent event goes to onEvent; resolves with the answer. */
+export async function askAnalystStream(
+  body: AnalystQuestion,
+  onEvent: (event: AnalystEvent) => void,
+): Promise<AnalystAnswer> {
+  const response = await fetch('/api/analyst/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok || !response.body) return askAnalyst(body)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+    let cut = buffer.indexOf('\n\n')
+    while (cut >= 0) {
+      const chunk = buffer.slice(0, cut)
+      buffer = buffer.slice(cut + 2)
+      cut = buffer.indexOf('\n\n')
+      const line = chunk.split('\n').find((l) => l.startsWith('data: '))
+      if (!line) continue
+      const event = JSON.parse(line.slice(6)) as AnalystEvent
+      if (event.type === 'answer') return event.answer
+      if (event.type === 'error') throw new Error(event.detail)
+      onEvent(event)
+    }
+    if (done) break
+  }
+  throw new Error(tr('The answer was interrupted', 'La respuesta se interrumpió'))
+}
 export const analystStatus = () => api<AnalystStatus>('/analyst')
 export const priorityTable = (year: number, month: number) =>
   post<PriorityTable>('/reports/priority', { year, month, language: getLang() })

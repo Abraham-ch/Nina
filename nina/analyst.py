@@ -16,7 +16,10 @@ damage or give operational instructions, and it says so when asked.
 from __future__ import annotations
 
 import ast
+import contextvars
 import json
+import queue
+import threading
 import operator
 import os
 import re
@@ -36,6 +39,15 @@ from .report_document import format_number
 from .reports import MONTH_NAMES, SIGNIFICANCE, PriorityRequest, ReportRequest, build_report, districts
 
 router = APIRouter()
+# Live progress of one question (tool calls, model turns, verification), read by /api/analyst/stream.
+PROGRESS: contextvars.ContextVar[Callable[[dict[str, Any]], None] | None] = contextvars.ContextVar("PROGRESS",
+                                                                                                  default=None)
+
+
+def progress(event: dict[str, Any]) -> None:
+    emit = PROGRESS.get()
+    if emit is not None:
+        emit(event)
 
 DEFAULT_MODEL = "claude-haiku-5-5"  # 31/31 on the evaluation at about 1/20 of the Sonnet 5.5 cost per question
 MAX_MODEL_STEPS = 10
@@ -364,6 +376,7 @@ class Session:
 
     def run(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         tool = TOOLS.get(name)
+        progress({"type": "tool", "name": name, "state": "start"})
         try:
             if tool is None:
                 raise ValueError(f"Unknown tool '{name}'")
@@ -373,6 +386,7 @@ class Session:
         except (TypeError, ValueError, ZeroDivisionError, SyntaxError) as error:
             output = {"error": str(error)}
         self.calls.append({"name": name, "input": arguments, "ok": "error" not in output, "output": output})
+        progress({"type": "tool", "name": name, "state": "done", "ok": "error" not in output})
         return output
 
     def call(self, name: str, **arguments: Any) -> dict[str, Any]:
@@ -1773,6 +1787,7 @@ def final_text(content: list[Any], session: Session) -> str:
 def record_searches(content: list[Any], session: Session) -> None:
     for block in content:
         if block.type == "server_tool_use" and block.name == "web_search":
+            progress({"type": "tool", "name": "web_search", "state": "done", "ok": True})
             session.calls.append({"name": "web_search", "input": dict(block.input or {}), "ok": True, "output": {}})
 
 
@@ -1828,7 +1843,8 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
     # writes the whole answer first and closes with a short sentence after the interface tool returns.
     drafts: list[str] = []
     try:
-        for _ in range(MAX_MODEL_STEPS):
+        for step in range(MAX_MODEL_STEPS):
+            progress({"type": "thinking", "step": step + 1})
             response = client.beta.messages.create(
                 model=model_name(),
                 max_tokens=16000,
@@ -1861,6 +1877,7 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
                 messages.append({"role": "user", "content": results})
                 continue
             text = "\n\n".join([*drafts, final_text(response.content, session)]).strip()
+            progress({"type": "verifying"})
             checked, unverified = session.verify(text)
             if text and not unverified:
                 return text, response.model, checked
@@ -2022,10 +2039,48 @@ def ask(request: AnalystQuestion) -> dict[str, Any]:
             notices = NOTICES[request.language]
             notice = notices.get(error.reason, notices["default"])
             cache = session.reports
+            progress({"type": "fallback", "reason": error.reason})
     session = Session(request, cache)
     text, intent = deterministic(session)
     checked, unverified = session.verify(text)
     return respond(session, text, "deterministic", None, intent, checked, unverified, manifest, notice)
+
+
+@router.post("/api/analyst/stream")
+def ask_stream(request: AnalystQuestion):
+    """Same answer as POST /api/analyst, preceded by live progress as server-sent events.
+
+    Events (one JSON object per ``data:`` line): ``tool`` (name, state start/done), ``thinking`` (model turn),
+    ``verifying``, ``fallback`` (deterministic answer follows), then ``answer`` (the AnalystAnswer) or ``error``.
+    """
+    from fastapi.encoders import jsonable_encoder
+    from fastapi.responses import StreamingResponse
+
+    events: queue.Queue[dict[str, Any]] = queue.Queue()
+
+    def work() -> None:
+        token = PROGRESS.set(events.put)
+        try:
+            events.put({"type": "answer", "answer": jsonable_encoder(AnalystAnswer(**ask(request)))})
+        except HTTPException as error:
+            events.put({"type": "error", "status": error.status_code, "detail": error.detail})
+        except Exception:  # noqa: BLE001 - reported to the client as a failed question
+            events.put({"type": "error", "status": 500, "detail": "The question could not be answered."})
+        finally:
+            PROGRESS.reset(token)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def stream():
+        yield ": nina analyst\n\n"
+        while True:
+            event = events.get()
+            yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+            if event["type"] in {"answer", "error"}:
+                return
+
+    return StreamingResponse(stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 DEFAULT_VISUAL = {"overview": "same_month_by_year", "trend": "annual_totals", "events": "events_by_year",
