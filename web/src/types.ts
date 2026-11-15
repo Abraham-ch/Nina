@@ -277,6 +277,8 @@ export type HarmonizedPoints = {
       activity: number
       calibration_validated: boolean
       observed_cell_days: number
+      first_day?: string
+      last_day?: string
     }
   }[]
 }

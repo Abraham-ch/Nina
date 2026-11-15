@@ -743,7 +743,7 @@ def points(identifier: str, limit: int = 5000):
         connection.execute(
             """CREATE TEMP TABLE monthly_points AS SELECT cell,latitude,longitude,
             sum(active_harmonized) AS activity,bool_and(calibration_validated) AS validated,
-            count(*) AS observed_cell_days FROM selected_activity
+            count(*) AS observed_cell_days,min(day) AS first_day,max(day) AS last_day FROM selected_activity
             JOIN selected_cells USING(cell)
             WHERE year(day)=? AND month(day)=? GROUP BY 1,2,3""",
             [selection.selected_year, selection.selected_month],
@@ -773,9 +773,11 @@ def points(identifier: str, limit: int = 5000):
                     "activity": activity,
                     "calibration_validated": validated,
                     "observed_cell_days": observed,
+                    "first_day": first.isoformat(),
+                    "last_day": last.isoformat(),
                 },
             }
-            for cell, lat, lon, activity, validated, observed in rows
+            for cell, lat, lon, activity, validated, observed, first, last in rows
         ],
     }
 

@@ -10,6 +10,7 @@ import {
   MapPin,
   MessageSquareText,
   Share2,
+  Sparkles,
   X,
   Check,
   SlidersHorizontal,
@@ -47,6 +48,7 @@ import DataPanel from './DataPanel'
 import Dialog from './Dialog'
 import Experiment from './Experiment'
 import ExperimentalTag from './ExperimentalTag'
+import { DAY_COLORS, DAY_RANGES } from './dayColors'
 import { tr, locale, getLang } from './i18n'
 import LangSwitch from './LangSwitch'
 import Priority from './Priority'
@@ -141,7 +143,9 @@ export default function App() {
     [inspected, setInspected] = useState<Point | null>(null),
     [viirs, setViirs] = useState('viirs-snpp'),
     [extraFilters, setExtraFilters] = useState(false),
-    [tour, setTour] = useState(false)
+    [tour, setTour] = useState(false),
+    // Atlas points: by sensor, or by day of the last detection in the month (FIRMS "time since detection").
+    [colorBy, setColorBy] = useState<'sensor' | 'day'>('day')
   const [user, setUser] = useState<User | null>(null),
     [accountOpen, setAccountOpen] = useState(false),
     [readiness, setReadiness] = useState<Readiness | null>(null),
@@ -185,6 +189,14 @@ export default function App() {
       .catch(() => setReadiness(null))
     refresh()
   }, [])
+  // First visit (no shared link): open on the harmonized record, the sensor-independent calendar,
+  // instead of a single instrument. A shared link keeps whatever it carries.
+  const openedHarmonized = useRef(linked.linked)
+  useEffect(() => {
+    if (!readiness?.available || openedHarmonized.current || selection.scope === 'world') return
+    openedHarmonized.current = true
+    change({ source: HARMONIZED, platform: 'all', metric: 'observed', year_start: 2002 })
+  }, [readiness?.available])
   useEffect(() => {
     if (
       !places ||
@@ -426,9 +438,7 @@ export default function App() {
         selected_year: 2025,
         selected_month: 9,
         year_end: 2025,
-        year_start: 2018,
-        source: 'modis',
-        platform: 'Aqua',
+        ...(isHarmonized ? { year_start: 2002 } : { year_start: 2018, source: 'modis', platform: 'Aqua' }),
       })
       return
     }
@@ -504,6 +514,12 @@ export default function App() {
     })
     setDrawing(false)
     setModal('')
+  }
+  // The analyst answers about the harmonized record: switch to it when it is available, then open the panel.
+  function openAnalyst() {
+    if (!isHarmonized && readiness?.available && selection.scope !== 'world') selectSource(`${HARMONIZED}:all`)
+    setIntro(false)
+    setModal('explain')
   }
   function selectSource(value: string) {
     const [source, platform] = value.split(':')
@@ -637,6 +653,10 @@ export default function App() {
           ))}
         </nav>
         <div className="header-actions">
+          <button className="ask-nina" onClick={openAnalyst}>
+            <Sparkles size={16} />
+            <span>{tr('Ask NINA', 'Pregúntale a NINA')}</span>
+          </button>
           <LangSwitch />
           <button
             className="tour-start"
@@ -841,6 +861,7 @@ export default function App() {
                 }
               >
                 <Globe
+                  colorBy={colorBy}
                   selection={selection}
                   layers={layers}
                   compare={tab === 'lab'}
@@ -1182,6 +1203,26 @@ export default function App() {
                     </>
                   )}
                 </span>
+                {tab === 'atlas' && (
+                  <span className="color-by">
+                    <button aria-pressed={colorBy === 'day'} onClick={() => setColorBy('day')}>
+                      {tr('Colour by day', 'Color por día')}
+                    </button>
+                    <button aria-pressed={colorBy === 'sensor'} onClick={() => setColorBy('sensor')}>
+                      {tr('by sensor', 'por sensor')}
+                    </button>
+                  </span>
+                )}
+                {tab === 'atlas' && colorBy === 'day' && (
+                  <span className="day-legend" aria-label={tr('Day of detection in the month', 'Día de detección en el mes')}>
+                    {DAY_COLORS.map((rgb, index) => (
+                      <span key={rgb}>
+                        <i style={{ background: `rgb(${rgb})` }} />
+                        {DAY_RANGES[index]}
+                      </span>
+                    ))}
+                  </span>
+                )}
                 <span>
                   {loading || !points || (tab === 'lab' && !labReady)
                     ? tr('Querying archive points…', 'Consultando puntos del archivo…')
@@ -1325,7 +1366,15 @@ export default function App() {
             }}
             onExport={() => setModal('export')}
             onAcquire={() => setTab('data')}
-            report={<ReportButton className="button outline" body={reportBody()} onError={setError} />}
+            report={
+              <>
+                <ReportButton className="button outline" body={reportBody()} onError={setError} />
+                <button className="button outline" onClick={openAnalyst}>
+                  <Sparkles size={16} />
+                  {tr('Ask NINA', 'Pregúntale a NINA')}
+                </button>
+              </>
+            }
           />
         )}
         {tab === 'priority' && (
