@@ -74,8 +74,10 @@ days of 24 years (no anomaly below 8 days). The world, July 2026, has `observed_
 its NOAA-20-filled days fall in countries without a validated bridge (`unvalidated_domain`). These are single local
 measurements, not a performance commitment.
 
-The assistant explains results, archive support and limits using facts computed by the server. **It is deterministic and
-does not use an external LLM.** The optional LLM adapter of the observations MVP is kept, but no provider is configured.
+The assistant explains results, archive support and limits using facts computed by the server. The analytical assistant
+(`/api/analyst`, [ANALYST.md](ANALYST.md)) is deterministic by default; with `ANTHROPIC_API_KEY` configured, Claude plans
+the tool calls and writes the answer, and an answer is shown only if each of its figures appears in the tool results.
+No key is configured in this delivery.
 Do not present this delivery as AI-based prediction.
 
 ## Pending scientific validation

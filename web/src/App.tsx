@@ -47,8 +47,10 @@ import DataPanel from './DataPanel'
 import Dialog from './Dialog'
 import Experiment from './Experiment'
 import ExperimentalTag from './ExperimentalTag'
-import { tr, locale } from './i18n'
+import { tr, locale, getLang } from './i18n'
 import LangSwitch from './LangSwitch'
+import Priority from './Priority'
+import ReportButton from './ReportButton'
 import Tour from './Tour'
 import type {
   Analysis,
@@ -66,11 +68,12 @@ import type {
   Regions,
   Selection,
   Readiness,
+  ReportRequest,
   Status,
   User,
 } from './types'
 const Globe = lazy(() => import('./Globe'))
-export type Tab = 'atlas' | 'calendar' | 'lab' | 'data'
+export type Tab = 'atlas' | 'calendar' | 'priority' | 'lab' | 'data'
 export type Modal = '' | 'evidence' | 'export' | 'explain' | 'area'
 const NOW = new Date()
 const DEFAULT: Selection = {
@@ -96,7 +99,7 @@ function readLink() {
       return {
         selection: { ...DEFAULT, ...value.selection } as Selection,
         place: String(value.place || 'PER'),
-        tab: (['atlas', 'calendar', 'lab', 'data'].includes(value.tab)
+        tab: (['atlas', 'calendar', 'priority', 'lab', 'data'].includes(value.tab)
           ? value.tab
           : 'atlas') as Tab,
         linked: true,
@@ -369,6 +372,24 @@ export default function App() {
             : selection.geometry,
     }
   }
+  // Territorial report of what is on screen: Peru, one of its regions, another country or a drawn
+  // area; the planet as a whole has no long history to compare with.
+  function reportBody(): ReportRequest | null {
+    if (selection.scope === 'world') return null
+    return {
+      country: selection.scope === 'PER' ? 'Peru' : country ? country.properties.name : 'world',
+      place_name: department
+        ? department.properties.name
+        : selection.scope === 'custom'
+          ? selection.area_label || null
+          : null,
+      geometry:
+        selection.scope === 'PER' ? department?.geometry || null : country ? null : selection.geometry,
+      year: selection.selected_year,
+      month: selection.selected_month,
+      language: getLang(),
+    }
+  }
   function choosePlace(id: string) {
     const worldPeriod =
       selection.selected_year < 2025 ||
@@ -561,6 +582,7 @@ export default function App() {
           {[
             ['atlas', 'Atlas'],
             ['calendar', tr('Calendar', 'Calendario')],
+            ['priority', tr('Priorities', 'Prioridades')],
             ['lab', tr('Lab', 'Laboratorio')],
           ].map(([id, name]) => (
             <button
@@ -896,6 +918,7 @@ export default function App() {
                         <MessageSquareText size={15} />
                         {tr('Explain', 'Explicar')}
                       </button>
+                      <ReportButton body={reportBody()} onError={setError} />
                     </div>
                   </div>
                 )
@@ -1263,6 +1286,21 @@ export default function App() {
             }}
             onExport={() => setModal('export')}
             onAcquire={() => setTab('data')}
+            report={<ReportButton className="button outline" body={reportBody()} onError={setError} />}
+          />
+        )}
+        {tab === 'priority' && (
+          <Priority
+            year={selection.selected_year}
+            month={selection.selected_month}
+            onChange={(year, month) =>
+              change({
+                selected_year: year,
+                selected_month: month,
+                year_start: Math.min(selection.year_start, year),
+                year_end: Math.max(selection.year_end, year),
+              })
+            }
           />
         )}
         {tab === 'data' && (
@@ -1319,6 +1357,7 @@ export default function App() {
         }}
         onShare={share}
         onError={setError}
+        context={reportBody()}
       />
       <Account
         open={accountOpen}

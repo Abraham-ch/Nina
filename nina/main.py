@@ -326,6 +326,8 @@ from .harmonized import router as harmonized_router
 app.include_router(harmonized_router)
 from .reports import router as reports_router
 app.include_router(reports_router)
+from .analyst import router as analyst_router
+app.include_router(analyst_router)
 
 dist=ROOT/'web'/'dist'
 if dist.exists(): app.mount('/',StaticFiles(directory=str(dist),html=True),name='web')

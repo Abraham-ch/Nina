@@ -11,24 +11,25 @@ from __future__ import annotations
 import hashlib
 import json
 import statistics
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import Any, Literal
 
 import shapely
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 from scipy.stats import kendalltau, theilslopes
 from shapely.geometry import mapping, shape
 
-from .config import DATA, SOURCE
+from .config import DATA, ROOT, SOURCE
 from .report_document import format_number
 from .harmonized import (
     CLIMATOLOGY_FIRST_YEAR,
     UNIT,
     HarmonizedSelection,
     compare,
+    country_shapes,
     load_json,
     month_to_date,
     monthly_calendar,
@@ -55,12 +56,30 @@ class ReportRequest(BaseModel):
         default=None, pattern=r"^\d{2}(\d{2}(\d{2})?)?$", description="Peru: 2, 4 or 6 digits"
     )
     geometry: dict | None = None
+    place_name: str | None = Field(default=None, max_length=120, description="Name shown for a polygon; "
+                                   "a Peruvian department name is resolved to its UBIGEO")
     year: int = Field(ge=2002, le=2100)
     month: int = Field(ge=1, le=12)
     language: Literal["en", "es"] = "en"
 
 
 # ---------------------------------------------------------------- territory
+
+# INEI writes names in capitals without accents; departments are shown with their usual spelling.
+DEPARTMENT_NAMES = {
+    "ANCASH": "Áncash", "APURIMAC": "Apurímac", "HUANUCO": "Huánuco", "JUNIN": "Junín",
+    "SAN MARTIN": "San Martín", "MADRE DE DIOS": "Madre de Dios", "LA LIBERTAD": "La Libertad",
+}
+LOWER_WORDS = {"de", "del", "la", "las", "los", "y", "el"}
+
+
+def display_name(name: str) -> str:
+    """'MADRE DE DIOS' -> 'Madre de Dios'; known departments keep their accents."""
+    key = _key(name)
+    if key in DEPARTMENT_NAMES:
+        return DEPARTMENT_NAMES[key]
+    words = name.strip().lower().split()
+    return " ".join(w if i and w in LOWER_WORDS else w[:1].upper() + w[1:] for i, w in enumerate(words))
 
 
 @lru_cache(maxsize=1)
@@ -74,25 +93,44 @@ def districts() -> list[tuple[dict[str, str], Any]]:
     ]
 
 
+def department_code(name: str | None) -> str | None:
+    """INEI department code for a department name (accents and the 'El'/'Region' prefixes ignored).
+
+    geoBoundaries keeps Lima Metropolitana and Lima Provincias apart; INEI's Lima (15) includes both,
+    so those two names are not resolved and keep their own outline.
+    """
+    key = _key(name or "").removeprefix("REGION ").removeprefix("EL ")
+    codes = {_key(p["department"]): p["ubigeo"][:2] for p, _ in districts()}
+    if key in {"LIMA", "MUNICIPALIDAD METROPOLITANA DE LIMA"}:
+        return None
+    return codes.get(key)
+
+
 def resolve_territory(request: ReportRequest) -> dict[str, Any]:
     """Name, type and polygon (if any) of the requested territory."""
+    if not request.ubigeo and request.place_name and request.country == "Peru":
+        code = department_code(request.place_name)
+        if code:
+            request = request.model_copy(update={"ubigeo": code})
     if request.ubigeo:
         matches = [(p, g) for p, g in districts() if p["ubigeo"].startswith(request.ubigeo)]
         if not matches:
             raise HTTPException(422, "Unknown UBIGEO; the district layer is missing or the code does not exist")
         first = matches[0][0]
         level = {2: "department", 4: "province", 6: "district"}[len(request.ubigeo)]
+        department, province = display_name(first["department"]), display_name(first["province"])
         name = {
-            "department": first["department"],
-            "province": f"{first['province']} ({first['department']})",
-            "district": f"{first['district']} ({first['province']}, {first['department']})",
+            "department": department,
+            "province": f"{province} ({department})",
+            "district": f"{display_name(first['district'])} ({province}, {department})",
         }[level]
         polygon = shapely.union_all([g for _, g in matches]).buffer(0)
-        return {"type": level, "name": name.title(), "ubigeo": request.ubigeo, "country": "Peru",
+        return {"type": level, "name": name, "ubigeo": request.ubigeo, "country": "Peru",
                 "polygon": polygon, "ubigeos": sorted(p["ubigeo"] for p, _ in matches)}
     if request.geometry:
         polygon = shapely.make_valid(shape(request.geometry))
-        return {"type": "polygon", "name": "Custom area", "ubigeo": None, "country": request.country,
+        return {"type": "polygon", "name": request.place_name or "Custom area", "ubigeo": None,
+                "country": request.country,
                 "polygon": polygon, "ubigeos": None}
     return {"type": "country", "name": request.country, "ubigeo": None, "country": request.country,
             "polygon": None, "ubigeos": None}
@@ -115,10 +153,12 @@ def harmonized_selection(request: ReportRequest, territory: dict[str, Any]) -> H
 
 
 def trend(years: list[int], values: list[float]) -> dict[str, Any]:
-    """Theil–Sen slope (% of the median per year) and Mann–Kendall p-value."""
+    """Theil–Sen slope (% of the median per year), its line, and the Mann–Kendall p-value."""
     if len(years) < 8 or statistics.median(values) <= 0:
-        return {"slope_pct_per_year": None, "p_value": None, "significant": False, "direction": "insufficient"}
-    slope = theilslopes(values, years)[0] / statistics.median(values) * 100
+        return {"slope_pct_per_year": None, "p_value": None, "significant": False, "direction": "insufficient",
+                "line": None}
+    fit = theilslopes(values, years)
+    slope = fit[0] / statistics.median(values) * 100
     p_value = float(kendalltau(years, values).pvalue)
     significant = p_value < SIGNIFICANCE
     return {
@@ -126,16 +166,41 @@ def trend(years: list[int], values: list[float]) -> dict[str, Any]:
         "p_value": round(p_value, 4),
         "significant": significant,
         "direction": ("increase" if slope > 0 else "decrease") if significant else "no_trend",
+        "line": {"slope": float(fit[0]), "intercept": float(fit[1])},
     }
 
 
-def section_current(months: list[dict], selected: dict, current: dict | None) -> dict[str, Any]:
+def seasonal_profile(months: list[dict], year: int) -> list[dict[str, Any]]:
+    """For each calendar month: the selected year's value and the band of the other eligible years."""
+    profile = []
+    for month in range(1, 13):
+        history = [m["value"] for m in months if m["month"] == month and m["year"] != year
+                   and m["eligible_for_climatology"]]
+        this = next((m for m in months if (m["year"], m["month"]) == (year, month)), None)
+        band = statistics.quantiles(history, n=10, method="inclusive") if len(history) >= 2 else None
+        profile.append({
+            "month": month,
+            "value": this["value"] if this else None,
+            "status": this["status"] if this else "not_available",
+            "median": statistics.median(history) if history else None,
+            "p10": band[0] if band else None,
+            "p90": band[-1] if band else None,
+            "years": len(history),
+        })
+    return profile
+
+
+def section_current(months: list[dict], selected: dict, current: dict | None, year: int) -> dict[str, Any]:
     index = months.index(selected)
     strip = [
         {k: m[k] for k in ["year", "month", "value", "status", "anomaly_percent", "rank", "rank_of"]}
         for m in months[max(0, index - 11): index + 1]
     ]
-    return {"status": "available", "month": selected, "month_to_date": current, "last_12_months": strip}
+    calendar_matrix = [
+        {k: m[k] for k in ["year", "month", "value", "status", "anomaly_percent"]} for m in months
+    ]
+    return {"status": "available", "month": selected, "month_to_date": current, "last_12_months": strip,
+            "profile": seasonal_profile(months, year), "calendar": calendar_matrix}
 
 
 def section_history(connection, months: list[dict], year: int) -> dict[str, Any]:
@@ -247,7 +312,7 @@ def section_events(connection, territory: dict[str, Any], year: int, language: s
             sample = next((p for u, p in names.items() if u.startswith(code)), None)
             label = code
             if sample:
-                label = {2: sample["department"], 4: sample["province"], 6: sample["district"]}[level].title()
+                label = display_name({2: sample["department"], 4: sample["province"], 6: sample["district"]}[level])
             top.append({"code": code, "name": label, "events": events, "emergencies": emergencies})
     years = sorted(set(detected) | set(reported))
     def emergencies_in(year_: int) -> int | None:
@@ -398,6 +463,74 @@ def _key(text: str) -> str:
     return " ".join(plain.upper().split())
 
 
+GIBS_WMS = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
+JPEG_MAGIC = bytes([0xFF, 0xD8])
+SNPP_FIRST, SNPP_LAST = date(2012, 1, 20), date(2026, 11, 2)
+VIIRS_TRUE_COLOUR_FIRST = date(2015, 11, 24)  # first day of VIIRS corrected reflectance in GIBS
+
+
+NOAA20_IMAGERY = ["VIIRS_NOAA20_CorrectedReflectance_TrueColor", "VIIRS_NOAA20_Thermal_Anomalies_375m_All"]
+SNPP_IMAGERY = ["VIIRS_SNPP_CorrectedReflectance_TrueColor", "VIIRS_SNPP_Thermal_Anomalies_375m_All"]
+MODIS_IMAGERY = ["MODIS_Terra_CorrectedReflectance_TrueColor", "MODIS_Combined_Thermal_Anomalies_All"]
+NOAA20_IMAGERY_FIRST = date(2018, 1, 5)
+MIN_IMAGE_BYTES = 15_000  # smaller JPEGs from GIBS are blank tiles (no granule that day)
+
+
+def gibs_layer_sets(day: date) -> list[list[str]]:
+    """Candidate layer sets for a day, best first: a sensor may lack imagery on a given day
+    (S-NPP had gaps in mid-2024 and ended on 2 Nov 2026), so the next one is tried."""
+    sets = []
+    if day >= NOAA20_IMAGERY_FIRST:
+        sets.append(NOAA20_IMAGERY)
+    if VIIRS_TRUE_COLOUR_FIRST <= day <= SNPP_LAST:
+        sets.append(SNPP_IMAGERY)
+    sets.append(MODIS_IMAGERY)
+    return sets
+
+
+def gibs_layers(day: date) -> list[str]:
+    return gibs_layer_sets(day)[0]
+
+
+def territory_shape(territory: dict[str, Any]) -> Any:
+    if territory["polygon"] is not None:
+        return territory["polygon"]
+    path = ROOT / "web/public/assets/countries.geojson"
+    shapes = dict(country_shapes(str(path), path.stat().st_mtime_ns))
+    return shapes.get(territory["country"])
+
+
+def section_imagery(connection, territory: dict[str, Any], year: int, month: int) -> dict[str, Any]:
+    """Real NASA GIBS imagery of the most active day of the month and 60 days earlier."""
+    outline_shape = territory_shape(territory)
+    if outline_shape is None or outline_shape.is_empty:
+        return {"status": "not_available", "reason": "no outline for this territory"}
+    peak = connection.execute(
+        """SELECT day, sum(active_harmonized) FROM selected_activity WHERE year(day)=? AND month(day)=?
+        GROUP BY 1 ORDER BY 2 DESC NULLS LAST, 1 LIMIT 1""",
+        [year, month],
+    ).fetchone()
+    after = peak[0] if peak else date(year, month, 15)
+    after = after if isinstance(after, date) else date.fromisoformat(str(after)[:10])
+    before = after - timedelta(days=60)
+    west, south, east, north = outline_shape.bounds
+    pad_x, pad_y = (east - west) * 0.06 + 0.05, (north - south) * 0.06 + 0.05
+    bbox = [west - pad_x, south - pad_y, east + pad_x, north + pad_y]
+    simple = outline_shape.simplify(max(bbox[2] - bbox[0], bbox[3] - bbox[1]) / 250, preserve_topology=True)
+    parts = list(simple.geoms) if hasattr(simple, "geoms") else [simple]
+    parts = sorted((g for g in parts if g.geom_type == "Polygon"), key=lambda g: -g.area)[:12]
+    return {
+        "status": "available",
+        "source": "NASA GIBS (Worldview) corrected reflectance with thermal anomalies; real imagery, may "
+        "show clouds or smoke",
+        "bbox": [round(v, 4) for v in bbox],
+        "outline": [[[round(x, 4), round(y, 4)] for x, y in g.exterior.coords] for g in parts],
+        "after": {"date": after.isoformat(), "layers": gibs_layers(after), "candidates": gibs_layer_sets(after),
+                  "peak_activity": peak[1] if peak else None},
+        "before": {"date": before.isoformat(), "layers": gibs_layers(before), "candidates": gibs_layer_sets(before)},
+    }
+
+
 def section_quality(selected: dict, manifest: dict) -> dict[str, Any]:
     return {
         "status": "available",
@@ -445,6 +578,63 @@ TEXT = {
         "climate": "Clima {period}: {drought} de {total} departamento(s) en condición de sequía (baja precipitación y alto déficit de presión de vapor).",
     },
 }
+
+
+MONTH_NAMES = {
+    "en": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+           "November", "December"],
+    "es": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "setiembre", "octubre",
+           "noviembre", "diciembre"],
+}
+HEADLINE = {
+    "en": {
+        "record": "{month} {year} was the highest {month} in {n} years: {anomaly} % above the median.",
+        "above": "{month} {year} was above the normal range: {anomaly} % against the median (rank {rank} of {n}).",
+        "below": "{month} {year} was below the normal range: {anomaly} % against the median (rank {rank} of {n}).",
+        "normal": "{month} {year} was within the normal range ({anomaly} % against the median).",
+        "mtd": "{month} {year} so far: {value} against {median} for the same days of other years.",
+        "none": "{month} {year} has no comparable value yet.",
+    },
+    "es": {
+        "record": "{month} de {year} fue el {month} más alto en {n} años: {anomaly} % sobre la mediana.",
+        "above": "{month} de {year} estuvo por encima del rango normal: {anomaly} % respecto de la mediana "
+        "(puesto {rank} de {n}).",
+        "below": "{month} de {year} estuvo por debajo del rango normal: {anomaly} % respecto de la mediana "
+        "(puesto {rank} de {n}).",
+        "normal": "{month} de {year} estuvo dentro del rango normal ({anomaly} % respecto de la mediana).",
+        "mtd": "{month} de {year} hasta ahora: {value} frente a {median} en los mismos días de otros años.",
+        "none": "{month} de {year} aún no tiene un valor comparable.",
+    },
+}
+
+
+def headline(report: dict[str, Any]) -> dict[str, Any]:
+    """One-sentence verdict; 'normal' means inside the p10–p90 band of the other years."""
+    language = report["language"]
+    month = report["sections"]["current"]["month"]
+    name = MONTH_NAMES[language][report["period"]["month"] - 1]
+    words = HEADLINE[language]
+    base = {"month": name, "year": report["period"]["year"]}
+    if month["value"] is not None and month["anomaly_percent"] is not None:
+        anomaly = format_number(month["anomaly_percent"], language, 0, sign=True)
+        values = {**base, "anomaly": anomaly, "rank": month["rank"], "n": month["rank_of"]}
+        if month["rank"] == 1:
+            kind = "record"
+        elif month["historical_p90"] is not None and month["value"] > month["historical_p90"]:
+            kind = "above"
+        elif month["historical_p10"] is not None and month["value"] < month["historical_p10"]:
+            kind = "below"
+        else:
+            kind = "normal"
+        text = words[kind].format(**values)
+        return {"kind": kind, "text": text[0].upper() + text[1:]}
+    current = report["sections"]["current"]["month_to_date"]
+    if current and current["value"] is not None and current["historical_median"] is not None:
+        text = words["mtd"].format(**base, value=format_number(current["value"], language),
+                                   median=format_number(current["historical_median"], language))
+        return {"kind": "in_progress", "text": text[0].upper() + text[1:]}
+    text = words["none"].format(**base)
+    return {"kind": "not_available", "text": text[0].upper() + text[1:]}
 
 
 def summary(report: dict[str, Any]) -> list[str]:
@@ -519,12 +709,13 @@ def build_report(request: ReportRequest) -> dict[str, Any]:
         if selected["value"] is None and selected["valid_region_days"] > 0 and not selected["data_gap"]:
             current = month_to_date(connection, selection, number_countries, as_of_year=as_of_year)
         sections = {
-            "current": section_current(months, selected, current),
+            "current": section_current(months, selected, current, request.year),
             "history": section_history(connection, months, request.year),
             "events": section_events(connection, territory, request.year, request.language),
             "forest": section_forest(connection, territory, request.year),
             "climate": section_climate(territory, request.year, request.month, connection),
             "quality": section_quality(selected, manifest),
+            "imagery": section_imagery(connection, territory, request.year, request.month),
         }
     payload = {"request": request.model_dump(), "dataset_id": manifest["id"], "version": REPORT_VERSION}
     identifier = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:24]
@@ -545,12 +736,86 @@ def build_report(request: ReportRequest) -> dict[str, Any]:
         "legal": manifest["legal"],
         "request": request.model_dump(),
     }
+    report["headline"] = headline(report)
     report["summary"] = summary(report)
     report["summary_mode"] = "template"
     cache = DATA / "jobs/reports"
     cache.mkdir(parents=True, exist_ok=True)
     (cache / f"{identifier}.json").write_text(json.dumps(report, ensure_ascii=False, default=str), encoding="utf-8")
     return report
+
+
+class PriorityRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    year: int = Field(ge=2002, le=2100)
+    month: int = Field(ge=1, le=12)
+    language: Literal["en", "es"] = "en"
+
+
+def priority_row(code: str, name: str, report: dict[str, Any]) -> dict[str, Any]:
+    s = report["sections"]
+    month, season = s["current"]["month"], s["history"].get("season_jul_oct") or {}
+    events = (s["events"].get("selected_year") or {}) if s["events"]["status"] == "available" else {}
+    forest = (s["forest"].get("selected_year") or {}) if s["forest"]["status"] == "available" else {}
+    climate = (s["climate"].get("selected_month") or []) if s["climate"]["status"] == "available" else []
+    flags = [c["drought"] for c in climate if c["drought"] is not None]
+    return {
+        "code": code,
+        "name": name,
+        "report_id": report["id"],
+        "month_value": month["value"],
+        "month_anomaly": month["anomaly_percent"],
+        "month_rank": month["rank"],
+        "month_rank_of": month["rank_of"],
+        "month_status": month["status"],
+        "season_rank": season.get("rank"),
+        "season_rank_of": season.get("rank_of"),
+        "season_anomaly": season.get("anomaly_percent"),
+        "trend_harmonized": s["history"]["trend_harmonized"]["slope_pct_per_year"],
+        "trend_harmonized_direction": s["history"]["trend_harmonized"]["direction"],
+        "trend_raw": s["history"]["trend_raw_pixels"]["slope_pct_per_year"],
+        "significant_events": events.get("significant_events"),
+        "emergencies": events.get("emergencies"),
+        "forest_loss_ha": forest.get("loss_ha"),
+        "forest_loss_with_fire_ha": forest.get("loss_ha_with_fire"),
+        "drought": (any(flags) if flags else None),
+    }
+
+
+@router.post("/api/reports/priority")
+def priority(request: PriorityRequest) -> dict[str, Any]:
+    """Peruvian departments side by side, each indicator in its own column (no composite score)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    manifest, _ = published()
+    departments = sorted({(p["ubigeo"][:2], p["department"]) for p, _ in districts()})
+    if not departments:
+        raise HTTPException(409, "The district layer is not built")
+    cache = DATA / "jobs/priority" / f"{manifest['id']}-{request.year}-{request.month:02d}-{request.language}.json"
+    if cache.exists():
+        return load_json(cache)
+
+    def one(item: tuple[str, str]) -> dict[str, Any]:
+        code, name = item
+        report = build_report(ReportRequest(ubigeo=code, year=request.year, month=request.month,
+                                            language=request.language))
+        return priority_row(code, display_name(name), report)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        rows = list(pool.map(one, departments))
+    result = {
+        "dataset_id": manifest["id"],
+        "year": request.year,
+        "month": request.month,
+        "level": "department",
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "rows": rows,
+        "note": "Each indicator is reported separately and can be sorted; NINA does not combine them into "
+        "a single score. Significant events: at least 5 active cell-days (VIIRS era). Emergencies: INDECI records.",
+    }
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(result, ensure_ascii=False, default=str), encoding="utf-8")
+    return result
 
 
 @router.post("/api/reports/territorial")
@@ -568,6 +833,47 @@ def stored(identifier: str) -> dict[str, Any]:
 @router.get("/api/reports/territorial/{identifier}")
 def get_report(identifier: str) -> dict[str, Any]:
     return stored(identifier)
+
+
+@router.get("/api/reports/territorial/{identifier}/imagery/{which}")
+def report_imagery(identifier: str, which: Literal["before", "after"]) -> FileResponse:
+    """GIBS image for the report (cached); 503 when NASA GIBS cannot be reached."""
+    from .remote import nasa_client
+
+    report = stored(identifier)
+    imagery = report["sections"].get("imagery") or {}
+    if imagery.get("status") != "available":
+        raise HTTPException(404, "No imagery for this report")
+    west, south, east, north = imagery["bbox"]
+    width = 640
+    height = max(200, min(900, round(width * (north - south) / max(east - west, 1e-6))))
+    shot = imagery[which]
+    folder = DATA / "tiles/reports"
+    folder.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha256(json.dumps([imagery["bbox"], shot["date"], width]).encode()).hexdigest()[:20]
+    path = folder / f"{key}.jpg"
+    if not path.exists():
+        content = None
+        try:
+            with nasa_client(60) as client:
+                for layers in shot.get("candidates") or [shot["layers"]]:
+                    params = {"SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.1.1", "LAYERS": ",".join(layers),
+                              "STYLES": "", "FORMAT": "image/jpeg", "WIDTH": width, "HEIGHT": height,
+                              "SRS": "EPSG:4326", "BBOX": f"{west},{south},{east},{north}", "TIME": shot["date"]}
+                    response = client.get(GIBS_WMS, params=params)
+                    body = response.content
+                    if (response.status_code == 200 and body.startswith(JPEG_MAGIC)
+                            and MIN_IMAGE_BYTES <= len(body) <= 6_000_000):
+                        content = body
+                        break
+        except Exception:
+            raise HTTPException(503, "NASA GIBS imagery temporarily unavailable") from None
+        if content is None:
+            raise HTTPException(503, "NASA GIBS has no imagery for that day")
+        temporary = path.with_suffix(".tmp")
+        temporary.write_bytes(content)
+        temporary.replace(path)
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @router.get("/api/reports/territorial/{identifier}/document", response_class=HTMLResponse)

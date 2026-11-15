@@ -81,6 +81,9 @@ Nina/
 │   ├── analytics.py          # analysis: calendar, comparison, evidence, exports
 │   ├── science.py            # exploratory calibration (Poisson / simple factor)
 │   ├── harmonized.py         # /api/harmonized/* routes: read the packages/nina Parquet product (no calibration)
+│   ├── reports.py            # territorial report and department priority table (/api/reports/*)
+│   ├── report_document.py    # printable A4 report (HTML + inline SVG)
+│   ├── analyst.py            # analytical assistant with tools and figure verification (/api/analyst)
 │   └── assistant.py          # deterministic assistant + optional LLM adapter
 ├── web/                      # React + Vite + TS + CesiumJS (npm, package-lock.json)
 │   ├── src/                  # App, Globe, Calendar, DataPanel, Dialog, Experiment, Tour, i18n, landing/, api.ts, types.ts, export.ts
@@ -538,6 +541,9 @@ Source of truth: **`openapi.json`** (generated with `scripts/export_openapi.py`)
 | GET      | `/api/jobs`, `/api/jobs/{id}`                                              | Background jobs                                   |
 | POST     | `/api/import`, `/api/sync`, `/api/acquisitions`, `/api/acquisitions/month` | FIRMS import and acquisition                      |
 | GET      | `/api/experiments/substitution`                                            | Aqua substitution experiment                      |
+| POST/GET | `/api/reports/territorial`, `…/{id}`, `…/{id}/document`, `…/{id}/imagery/{which}` | Territorial technical report               |
+| POST     | `/api/reports/priority`                                                    | Peru's departments side by side (no score)        |
+| GET/POST | `/api/analyst`                                                             | Analytical assistant with verified figures        |
 
 ### 12.1 Exported hotspot CSV (target)
 

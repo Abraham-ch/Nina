@@ -1,11 +1,17 @@
 import { tr, locale, getLang } from './i18n'
 import type {
   Analysis,
+  AnalystAnswer,
+  AnalystQuestion,
+  AnalystStatus,
   HarmonizedAnalysis,
   HarmonizedPoints,
   HarmonizedReply,
   Points,
+  PriorityTable,
   Reply,
+  ReportCreated,
+  ReportRequest,
   Selection,
 } from './types'
 export async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -171,3 +177,10 @@ const ES_NAMES: Record<string, string> = {
 }
 /** Country names come from Natural Earth in English; Spanish gets the common exonyms. */
 export const translatedName = (name: string) => tr(name, ES_NAMES[name] || name)
+// Territorial evidence report: the printable document is served by the API itself.
+export const createReport = (body: ReportRequest) => post<ReportCreated>('/reports/territorial', body)
+export const reportDocumentUrl = (id: string) => `/api/reports/territorial/${id}/document`
+export const askAnalyst = (body: AnalystQuestion) => post<AnalystAnswer>('/analyst', body)
+export const analystStatus = () => api<AnalystStatus>('/analyst')
+export const priorityTable = (year: number, month: number) =>
+  post<PriorityTable>('/reports/priority', { year, month, language: getLang() })

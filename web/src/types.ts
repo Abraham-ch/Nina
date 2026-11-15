@@ -286,3 +286,74 @@ export type HarmonizedReply = {
   dataset_id: string
   references: string[]
 }
+// Territorial evidence report (POST /api/reports/territorial). Only the fields the interface uses.
+export type ReportRequest = {
+  country: string
+  ubigeo?: string | null
+  geometry?: Geometry | null
+  place_name?: string | null
+  year: number
+  month: number
+  language: 'en' | 'es'
+}
+// Analytical assistant (POST /api/analyst): answers are checked against the tool results.
+export type AnalystTurn = { role: 'user' | 'assistant'; content: string }
+export type AnalystQuestion = {
+  question: string
+  language: 'en' | 'es'
+  context: ReportRequest
+  history: AnalystTurn[]
+}
+export type AnalystAnswer = {
+  answer: string
+  engine: 'deterministic' | 'claude'
+  model: string | null
+  intent: string
+  abstained: boolean
+  facts: { label: string; value: string; tool: string }[]
+  tools: { name: string; input: Record<string, unknown>; ok: boolean }[]
+  verification: { checked: number; unverified: string[]; passed: boolean }
+  report_id: string | null
+  dataset_id: string
+  validation_status: 'validated' | 'experimental'
+  notice: string | null
+}
+export type AnalystStatus = { engine: 'deterministic' | 'claude'; model: string | null }
+export type ReportCreated = {
+  id: string
+  headline: { kind: string; text: string }
+  summary: string[]
+  territory: { type: string; name: string; ubigeo: string | null; country: string; cells: number }
+  validation_status: string
+}
+// Department priority table (POST /api/reports/priority): each indicator in its own column.
+export type PriorityRow = {
+  code: string
+  name: string
+  report_id: string
+  month_value: number | null
+  month_anomaly: number | null
+  month_rank: number | null
+  month_rank_of: number
+  month_status: string
+  season_rank: number | null
+  season_rank_of: number | null
+  season_anomaly: number | null
+  trend_harmonized: number | null
+  trend_harmonized_direction: string
+  trend_raw: number | null
+  significant_events: number | null
+  emergencies: number | null
+  forest_loss_ha: number | null
+  forest_loss_with_fire_ha: number | null
+  drought: boolean | null
+}
+export type PriorityTable = {
+  dataset_id: string
+  year: number
+  month: number
+  level: string
+  generated_at: string
+  rows: PriorityRow[]
+  note: string
+}

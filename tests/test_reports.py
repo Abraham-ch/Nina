@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nina import harmonized, reports
+from nina import analyst, harmonized, reports
 
 POLYGON = {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]}
 
@@ -94,6 +94,7 @@ def client(tmp_path, monkeypatch):
     app = FastAPI()
     app.include_router(harmonized.router)
     app.include_router(reports.router)
+    app.include_router(analyst.router)
     with TestClient(app) as test_client:
         yield test_client, context
     reports.districts.cache_clear()
@@ -106,6 +107,7 @@ def test_department_report_combines_all_sections(client):
     assert response.status_code == 200
     report = response.json()
     assert report["territory"]["name"] == "Ucayali" and report["territory"]["type"] == "department"
+    assert reports.display_name("MADRE DE DIOS") == "Madre de Dios" and reports.display_name("ANCASH") == "Áncash"
     sections = report["sections"]
     assert sections["current"]["month"]["value"] == 150 and sections["current"]["month"]["rank"] == 1
     assert sections["history"]["trend_harmonized"]["direction"] == "increase"
@@ -142,7 +144,7 @@ def test_document_is_printable_cites_firms_and_formats_spanish_numbers(client):
     assert document.status_code == 200 and "<svg" in document.text
     assert "FIRMS citation" in document.text and "Informe técnico territorial" in document.text
     assert test_client.get("/api/reports/territorial/" + "z" * 24).status_code == 404
-    assert reports.format_number(20909.5, "es", 1) == "20 909,5"
+    assert reports.format_number(20909.5, "es", 1) == "20,909.5"  # CLDR es-PE, as in the web UI
     assert reports.format_number(20909.5, "en", 1) == "20,909.5"
 
 
