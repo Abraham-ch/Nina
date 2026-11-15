@@ -48,6 +48,7 @@ def main() -> int:
     if args.engine == "deterministic":
         os.environ["NINA_ANALYST_ENGINE"] = "deterministic"
 
+    from nina import analyst
     from nina.analyst import AnalystQuestion, ask, engine_name
     from nina.config import DATA
 
@@ -58,7 +59,23 @@ def main() -> int:
     rows = []
     for item in items:
         started = time.perf_counter()
-        result = ask(AnalystQuestion(question=item["question"], language=item["language"], context=spec["context"]))
+        sessions: list = []
+        original = analyst.Session.__init__
+
+        def tracked(self, *a, _orig=original, _seen=sessions, **k):
+            _orig(self, *a, **k)
+            _seen.append(self)
+
+        analyst.Session.__init__ = tracked
+        try:
+            result = ask(AnalystQuestion(question=item["question"], language=item["language"], context=spec["context"]))
+        finally:
+            analyst.Session.__init__ = original
+        usage: dict[str, int] = {}
+        for session in sessions:
+            for key, value in session.usage.items():
+                usage[key] = usage.get(key, 0) + value
+        cost = analyst.question_cost(usage, result["model"] or analyst.model_name()) if usage else None
         elapsed = time.perf_counter() - started
         called = {tool["name"] for tool in result["tools"]}
         if item["abstain"]:
@@ -70,7 +87,9 @@ def main() -> int:
             "seconds": round(elapsed, 2), "traced": result["verification"]["passed"],
             "unverified": result["verification"]["unverified"], "abstention_ok": abstention_ok,
             "tools_ok": item["abstain"] or set(item["tools"]) <= called, "tools": sorted(called),
-            "answer": result["answer"],
+            "answer": result["answer"], "usage": usage, "cost_usd": cost,
+            # An answerable question needs an explanation, not only a chart or a button.
+            "substantive": item["abstain"] or len(result["answer"]) >= 250,
         })
         print(f"{item['id']:<24} {result['engine']:<13} {elapsed:5.1f}s traced={rows[-1]['traced']!s:<5} "
               f"abstention={abstention_ok!s:<5} tools={sorted(called)}")
@@ -80,8 +99,11 @@ def main() -> int:
 
     summary = {
         "engine": engine, "items": len(rows), "traced": share("traced"), "abstention": share("abstention_ok"),
-        "tools": share("tools_ok"), "fell_back": sum(r["engine"] != engine for r in rows),
+        "tools": share("tools_ok"), "substantive": share("substantive"), "fell_back": sum(r["engine"] != engine for r in rows),
         "median_seconds": statistics.median(r["seconds"] for r in rows) if rows else None,
+        "model": os.getenv("NINA_ANALYST_MODEL") or "claude-sonnet-5-5",
+        "cost_usd_total": round(sum(r["cost_usd"] or 0 for r in rows), 4),
+        "cost_usd_median_per_question": round(statistics.median(r["cost_usd"] or 0 for r in rows), 5) if rows else None,
     }
     folder = DATA / "reports"
     folder.mkdir(parents=True, exist_ok=True)
@@ -90,7 +112,7 @@ def main() -> int:
     path.write_text(json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))
     print(f"Written: {path}")
-    return 0 if summary["traced"] == 1.0 and summary["abstention"] == 1.0 else 1
+    return 0 if summary["traced"] == 1.0 and summary["abstention"] == 1.0 and summary["substantive"] == 1.0 else 1
 
 
 if __name__ == "__main__":
