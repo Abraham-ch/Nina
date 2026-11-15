@@ -8,4 +8,5 @@ shapely>=2,<3
 python-multipart>=0.0.20,<1
 python-dotenv>=1,<2
 truststore>=0.10,<1
+anthropic>=1.17,<2
 pytest>=8,<10

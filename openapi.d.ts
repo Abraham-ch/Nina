@@ -591,6 +591,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Priority
+         * @description Peruvian departments side by side, each indicator in its own column (no composite score).
+         */
+        post: operations["priority_api_reports_priority_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/territorial": {
         parameters: {
             query?: never;
@@ -625,6 +645,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/territorial/{identifier}/imagery/{which}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report Imagery
+         * @description GIBS image for the report (cached); 503 when NASA GIBS cannot be reached.
+         */
+        get: operations["report_imagery_api_reports_territorial__identifier__imagery__which__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/territorial/{identifier}/document": {
         parameters: {
             query?: never;
@@ -636,6 +676,24 @@ export interface paths {
         get: operations["report_document_api_reports_territorial__identifier__document_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analyst": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analyst Status */
+        get: operations["analyst_status_api_analyst_get"];
+        put?: never;
+        /** Ask */
+        post: operations["ask_api_analyst_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -674,6 +732,136 @@ export interface components {
             geometry?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** AnalystAnswer */
+        AnalystAnswer: {
+            /** Answer */
+            answer: string;
+            /**
+             * Engine
+             * @enum {string}
+             */
+            engine: "deterministic" | "claude";
+            /** Model */
+            model?: string | null;
+            /**
+             * Intent
+             * @description Question type recognised by the deterministic classifier
+             */
+            intent: string;
+            /**
+             * Abstained
+             * @description True when the question is outside what NINA can answer
+             */
+            abstained: boolean;
+            /** Facts */
+            facts: components["schemas"]["AnalystFact"][];
+            /** Tools */
+            tools: components["schemas"]["AnalystToolCall"][];
+            verification: components["schemas"]["AnalystVerification"];
+            /** Report Id */
+            report_id?: string | null;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Validation Status
+             * @enum {string}
+             */
+            validation_status: "validated" | "experimental";
+            /** Notice */
+            notice?: string | null;
+        };
+        /**
+         * AnalystContext
+         * @description Territory and period on the user's screen (the body of a territorial report request).
+         */
+        AnalystContext: {
+            /**
+             * Country
+             * @default Peru
+             */
+            country: string;
+            /** Ubigeo */
+            ubigeo?: string | null;
+            /** Geometry */
+            geometry?: {
+                [key: string]: unknown;
+            } | null;
+            /** Place Name */
+            place_name?: string | null;
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+        };
+        /** AnalystFact */
+        AnalystFact: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Tool */
+            tool: string;
+        };
+        /** AnalystQuestion */
+        AnalystQuestion: {
+            /** Question */
+            question: string;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "es";
+            context: components["schemas"]["AnalystContext"];
+            /** History */
+            history?: components["schemas"]["AnalystTurn"][];
+        };
+        /** AnalystStatus */
+        AnalystStatus: {
+            /**
+             * Engine
+             * @enum {string}
+             */
+            engine: "deterministic" | "claude";
+            /** Model */
+            model?: string | null;
+        };
+        /** AnalystToolCall */
+        AnalystToolCall: {
+            /** Name */
+            name: string;
+            /** Input */
+            input: {
+                [key: string]: unknown;
+            };
+            /** Ok */
+            ok: boolean;
+        };
+        /** AnalystTurn */
+        AnalystTurn: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Content */
+            content: string;
+        };
+        /** AnalystVerification */
+        AnalystVerification: {
+            /**
+             * Checked
+             * @description Figures and dates found in the answer
+             */
+            checked: number;
+            /**
+             * Unverified
+             * @description Figures that no tool result of this question contains
+             */
+            unverified: string[];
+            /** Passed */
+            passed: boolean;
         };
         /** ArchiveMonth */
         ArchiveMonth: {
@@ -993,6 +1181,19 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** PriorityRequest */
+        PriorityRequest: {
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "es";
+        };
         /** Question */
         Question: {
             /** Analysis Id */
@@ -1054,6 +1255,11 @@ export interface components {
             geometry?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Place Name
+             * @description Name shown for a polygon; a Peruvian department name is resolved to its UBIGEO
+             */
+            place_name?: string | null;
             /** Year */
             year: number;
             /** Month */
@@ -2233,6 +2439,41 @@ export interface operations {
             };
         };
     };
+    priority_api_reports_priority_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriorityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_report_api_reports_territorial_post: {
         parameters: {
             query?: never;
@@ -2301,6 +2542,38 @@ export interface operations {
             };
         };
     };
+    report_imagery_api_reports_territorial__identifier__imagery__which__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
+                which: "before" | "after";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     report_document_api_reports_territorial__identifier__document_get: {
         parameters: {
             query?: never;
@@ -2319,6 +2592,59 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyst_status_api_analyst_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystStatus"];
+                };
+            };
+        };
+    };
+    ask_api_analyst_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalystQuestion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystAnswer"];
                 };
             };
             /** @description Validation Error */

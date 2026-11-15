@@ -113,7 +113,15 @@ when displayed.
 If the dataset changes, an earlier analysis returns **409** and must be regenerated. If a published file fails its hash
 check, the API returns **503**. Always keep `dataset_id` to tie calendar, map and download together.
 
-## Evidence-based assistant
+## Analytical assistant and territorial report
+
+`POST /api/analyst` answers technical questions about the on-screen territory and month with tools over the harmonized
+record, the territorial report and the validation results; every figure in an answer is checked against the tool
+results. It is deterministic by default and uses Claude only when `ANTHROPIC_API_KEY` is configured on the server. See
+[ANALYST.md](ANALYST.md). The territorial report (`POST /api/reports/territorial`, `POST /api/reports/priority`) is
+described in [TERRITORIAL_REPORT.md](TERRITORIAL_REPORT.md).
+
+## Evidence-based assistant (compatibility)
 
 `POST /api/harmonized/assistant`
 

@@ -3805,3 +3805,137 @@ h1 > .experimental-tag {
   background: #ffaa32;
   box-shadow: 0 0 6px #ffaa32;
 }
+
+/* Territorial report and priorities (feat/territorial-report) */
+.section-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.brief-actions {
+  flex-wrap: wrap;
+}
+.priority-page .calendar-controls select {
+  background: #edf0e6;
+  border: 1px solid #bdcdb7;
+  color: #3a5a3e;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+.priority-table table {
+  margin-top: 8px;
+}
+.priority-table th[scope='row'] {
+  color: #2e4a35;
+  font-weight: 500;
+  font-size: 12px;
+  border-bottom: 1px solid #dce4d2;
+  padding: 11px 12px;
+}
+.priority-table td {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.priority-table .sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 0;
+  text-align: left;
+}
+.priority-table .sort[aria-sort='ascending'],
+.priority-table .sort[aria-sort='descending'] {
+  color: #2e4a35;
+}
+.priority-table .chip {
+  display: inline-block;
+  min-width: 52px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-weight: 600;
+  color: #fff;
+}
+.priority-table .chip.up {
+  background: #b2182b;
+}
+.priority-table .chip.down {
+  background: #2166ac;
+}
+.priority-table .chip.flat {
+  background: #8a978d;
+}
+.priority-table .trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+}
+.priority-table .trend.increase {
+  color: #b2182b;
+}
+.priority-table .trend.decrease {
+  color: #2166ac;
+}
+.priority-table .muted {
+  color: #9aa79a;
+}
+.priority-table .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.priority-note {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #758372;
+  margin-top: 16px;
+  max-width: 900px;
+}
+
+/* Analytical assistant */
+.analyst-answer p {
+  font-size: 14px;
+  color: #3b5f37;
+  line-height: 1.85;
+  margin: 0 0 10px;
+}
+.analyst-answer ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #3b5f37;
+  line-height: 1.75;
+}
+.analyst-check,
+.analyst-notice {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  margin: 8px 0 0;
+}
+.analyst-check.ok {
+  color: #4f7d3f;
+}
+.analyst-check.warn,
+.analyst-notice {
+  color: #9a5b1d;
+}
+.analyst-tools {
+  font-size: 11px;
+  color: #829473;
+  margin-top: 4px;
+}
+.analyst-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  margin-top: 14px;
+}

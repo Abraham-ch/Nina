@@ -1165,6 +1165,50 @@
         }
       }
     },
+    "/api/reports/priority": {
+      "post": {
+        "tags": [
+          "Territorial report"
+        ],
+        "summary": "Priority",
+        "description": "Peruvian departments side by side, each indicator in its own column (no composite score).",
+        "operationId": "priority_api_reports_priority_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriorityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Priority Api Reports Priority Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/territorial": {
       "post": {
         "tags": [
@@ -1252,6 +1296,60 @@
         }
       }
     },
+    "/api/reports/territorial/{identifier}/imagery/{which}": {
+      "get": {
+        "tags": [
+          "Territorial report"
+        ],
+        "summary": "Report Imagery",
+        "description": "GIBS image for the report (cached); 503 when NASA GIBS cannot be reached.",
+        "operationId": "report_imagery_api_reports_territorial__identifier__imagery__which__get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          },
+          {
+            "name": "which",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "before",
+                "after"
+              ],
+              "type": "string",
+              "title": "Which"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/territorial/{identifier}/document": {
       "get": {
         "tags": [
@@ -1277,6 +1375,60 @@
               "text/html": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyst": {
+      "get": {
+        "summary": "Analyst Status",
+        "operationId": "analyst_status_api_analyst_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalystStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Ask",
+        "operationId": "ask_api_analyst_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalystQuestion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalystAnswer"
                 }
               }
             }
@@ -1366,6 +1518,336 @@
         },
         "type": "object",
         "title": "Acquisition"
+      },
+      "AnalystAnswer": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "deterministic",
+              "claude"
+            ],
+            "title": "Engine"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "intent": {
+            "type": "string",
+            "title": "Intent",
+            "description": "Question type recognised by the deterministic classifier"
+          },
+          "abstained": {
+            "type": "boolean",
+            "title": "Abstained",
+            "description": "True when the question is outside what NINA can answer"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/AnalystFact"
+            },
+            "type": "array",
+            "title": "Facts"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AnalystToolCall"
+            },
+            "type": "array",
+            "title": "Tools"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/AnalystVerification"
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          },
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "validation_status": {
+            "type": "string",
+            "enum": [
+              "validated",
+              "experimental"
+            ],
+            "title": "Validation Status"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "engine",
+          "intent",
+          "abstained",
+          "facts",
+          "tools",
+          "verification",
+          "dataset_id",
+          "validation_status"
+        ],
+        "title": "AnalystAnswer"
+      },
+      "AnalystContext": {
+        "properties": {
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Country",
+            "default": "Peru"
+          },
+          "ubigeo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{2}(\\d{2}(\\d{2})?)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubigeo"
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geometry"
+          },
+          "place_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Name"
+          },
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2002.0,
+            "title": "Year"
+          },
+          "month": {
+            "type": "integer",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "month"
+        ],
+        "title": "AnalystContext",
+        "description": "Territory and period on the user's screen (the body of a territorial report request)."
+      },
+      "AnalystFact": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value",
+          "tool"
+        ],
+        "title": "AnalystFact"
+      },
+      "AnalystQuestion": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es"
+            ],
+            "title": "Language",
+            "default": "en"
+          },
+          "context": {
+            "$ref": "#/components/schemas/AnalystContext"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/AnalystTurn"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "History"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "context"
+        ],
+        "title": "AnalystQuestion"
+      },
+      "AnalystStatus": {
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "deterministic",
+              "claude"
+            ],
+            "title": "Engine"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "engine"
+        ],
+        "title": "AnalystStatus"
+      },
+      "AnalystToolCall": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "input": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "input",
+          "ok"
+        ],
+        "title": "AnalystToolCall"
+      },
+      "AnalystTurn": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "AnalystTurn"
+      },
+      "AnalystVerification": {
+        "properties": {
+          "checked": {
+            "type": "integer",
+            "title": "Checked",
+            "description": "Figures and dates found in the answer"
+          },
+          "unverified": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unverified",
+            "description": "Figures that no tool result of this question contains"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checked",
+          "unverified",
+          "passed"
+        ],
+        "title": "AnalystVerification"
       },
       "ArchiveMonth": {
         "properties": {
@@ -2147,6 +2629,38 @@
         ],
         "title": "PointsResponse"
       },
+      "PriorityRequest": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2002.0,
+            "title": "Year"
+          },
+          "month": {
+            "type": "integer",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es"
+            ],
+            "title": "Language",
+            "default": "en"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "year",
+          "month"
+        ],
+        "title": "PriorityRequest"
+      },
       "Question": {
         "properties": {
           "analysis_id": {
@@ -2302,6 +2816,19 @@
               }
             ],
             "title": "Geometry"
+          },
+          "place_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Name",
+            "description": "Name shown for a polygon; a Peruvian department name is resolved to its UBIGEO"
           },
           "year": {
             "type": "integer",

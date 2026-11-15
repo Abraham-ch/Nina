@@ -1,5 +1,5 @@
 import { ArrowUpRight, Download } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { fmt, months, shortMonths, pct, HARMONIZED } from './api'
 import { tr, locale } from './i18n'
@@ -148,6 +148,7 @@ export default function Calendar({
   onOpenMap,
   onExport,
   onAcquire,
+  report,
 }: {
   label: string
   analysis: Analysis | null
@@ -158,6 +159,7 @@ export default function Calendar({
   onOpenMap: () => void
   onExport: () => void
   onAcquire: () => void
+  report?: ReactNode
 }) {
   const isHarmonized = selection.source === HARMONIZED
   const firstYear =
@@ -207,10 +209,13 @@ export default function Calendar({
             {tr(', month by month.', ', mes a mes.')}
           </p>
         </div>
-        <button className="button outline" onClick={onExport} disabled={!analysis}>
-          <Download size={16} />
-          {tr('Export', 'Exportar')}
-        </button>
+        <div className="section-actions">
+          {report}
+          <button className="button outline" onClick={onExport} disabled={!analysis}>
+            <Download size={16} />
+            {tr('Export', 'Exportar')}
+          </button>
+        </div>
       </div>
       <div className="calendar-context">
         <div>

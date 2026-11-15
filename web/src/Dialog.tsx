@@ -11,11 +11,21 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import AnalystPanel from './AnalystPanel'
 import { analysisPath, fmt, months, post, replyFromHarmonized, sourceName } from './api'
 import type { Modal } from './App'
 import { seasonSVG } from './export'
 import { getLang, tr } from './i18n'
-import type { Analysis, Geometry, HarmonizedReply, Health, Reply, Selection, User } from './types'
+import type {
+  Analysis,
+  Geometry,
+  HarmonizedReply,
+  Health,
+  Reply,
+  ReportRequest,
+  Selection,
+  User,
+} from './types'
 type Props = {
   harmonized: boolean
   modal: Modal
@@ -30,6 +40,7 @@ type Props = {
   onDraw: () => void
   onShare: () => void
   onError: (s: string) => void
+  context: ReportRequest | null
 }
 // Preset questions: the label follows the interface language; the text sent is the one the assistant engine recognizes.
 const PRESETS: [string, string][] = [
@@ -52,6 +63,7 @@ export default function Dialog({
   onDraw,
   onShare,
   onError,
+  context,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null),
     [role, setRole] = useState('gestion'),
@@ -356,6 +368,14 @@ export default function Dialog({
             <Share2 size={16} />
             {tr('Copy the investigation link', 'Copiar enlace de la investigación')}
           </button>
+        </div>
+      ) : modal === 'explain' && harmonized ? (
+        <div className="dialog-body explanation">
+          <AnalystPanel
+            context={context}
+            onError={onError}
+            onEvidence={analysis ? () => onModal('evidence') : undefined}
+          />
         </div>
       ) : modal === 'explain' ? (
         <div className="dialog-body explanation">

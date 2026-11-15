@@ -91,4 +91,19 @@ Fire forecasting, spread modelling, causal attribution of individual fires, tact
 | Climate | `nina.io.climate` | `source/context/climate/climate_department_month.parquet` (26 units × 2001–2025) | Reproduces the Amazon droughts of 2005, 2023 and 2024 in Aug–Sep; 2016 not visible in Aug–Sep (drought centred in Brazil, Oct–Mar) |
 
 API: `POST /api/reports/territorial` with `{"ubigeo": "25", "year": 2024, "month": 9, "language": "es"}` (or `country`,
-or `geometry`); `GET /api/reports/territorial/{id}/document` returns the printable page. A report takes 0.5–2 s.
+or `geometry`, or `place_name` with a Peruvian department name); `GET /api/reports/territorial/{id}/document` returns
+the printable page. A report takes 0.5–2 s.
+
+Delivered with the report (branch `feat/territorial-report`):
+
+| Piece | Where | Status |
+|---|---|---|
+| Printable A4 document (KPI cards, seasonal band, year × month heatmap, indexed trend raw vs harmonized, events vs emergencies, forest loss, climate table, quality) | `nina/report_document.py` | Done |
+| Before/after imagery from NASA GIBS (peak day of the month and 60 days earlier; NOAA-20 → S-NPP → MODIS layer fallback; blank-tile check) | `GET /api/reports/territorial/{id}/imagery/{before\|after}` | Done |
+| Priority table of Peru's 25 departments, one column per indicator, no composite score | `POST /api/reports/priority`, tab "Priorities" | Done |
+| "Technical report" buttons in the atlas brief and the calendar | `web/src/ReportButton.tsx` | Done |
+| Analytical assistant with tools and figure verification | `/api/analyst`, [ANALYST.md](ANALYST.md) | Done (deterministic engine evaluated; model engine pending a key) |
+| PDF renderer and ZIP download | — | Pending (the browser prints the page to PDF) |
+
+Department names sent from the map are resolved to INEI districts, while the map draws geoBoundaries outlines; values
+can differ by a few percent between the two (Ucayali, September 2024: 4,582 on the map, 4,491 in the report).

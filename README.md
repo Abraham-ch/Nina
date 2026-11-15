@@ -67,6 +67,8 @@ Import the team's global archive from `source/` (with the server stopped or into
 - Exploratory Poisson and simple-factor calibrations, with held-out years and regions.
 - Substitution experiment: reveal the held-out Aqua reference and the error of an estimate. Case validated as software on the Peruvian archive, without claiming a final scientific harmonization.
 - Local assistant that queries the results and answers with facts and references. There is an optional adapter for a compatible LLM provider; the figures stay under the server's control.
+- Analytical assistant for the harmonized record (`/api/analyst`): tools over the territorial report, the department comparison and the validation results; every figure in an answer is checked against the tool results. Deterministic by default, Claude when `ANTHROPIC_API_KEY` is set ([docs/ANALYST.md](docs/ANALYST.md)).
+- Territorial technical report (printable A4) and a priority table of Peru's departments ([docs/TERRITORIAL_REPORT.md](docs/TERRITORIAL_REPORT.md)).
 - Recent global download and per-area monthly download through MAP_KEY, as background jobs in windows of up to five days. Product, dates and scope are verified; partial months keep their state.
 - Import of FIRMS CSVs by geographic scope and spatial reconciliation of standard/provisional products. Reads and exports keep a consistent revision during local ingestion.
 - Guided tour to present the problem, compare observers and review a real experiment; platform guide for newcomers; shareable links with the analysis configuration.
