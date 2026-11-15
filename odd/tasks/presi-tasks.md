@@ -86,7 +86,7 @@
 
 | ID | Spec | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1 (+ A1, A2) | inline | **"Terminado cuando" cumplido** (visitante no importa ni exporta · analista ve su historial · admin ve la auditoría); pendiente `MAX_EXPORT_ROWS` y los advisories de L13/L19 | `c6721fc`, `d879306`, `003a86a` |
+| T1 | S1 (+ A1, A2) | inline | **S1 completa**: `MAX_EXPORT_ROWS` implementado y los advisories de seguridad cerrados; solo quedan menores (`rows=0` en `manifest`/`report`, detalle del servidor sin traducir, clase muerta) | `c6721fc`, `d879306`, `003a86a`, `c78fb0f`, `5bf79b7`, `0245a72` |
 | T2 | S2 (+ A1, A2) | inline | pendiente | — |
 | T3 | S3 (+ A1, A2) | inline | pendiente | — |
 
@@ -219,3 +219,15 @@
   vigente en `90d2ed6`**, que es la que se usó para escribir el trabajo. **El contenido es el mismo**,
   solo cambió el idioma: no se re-escriben los `S#` (no sería *verbatim* de ninguna de las dos fuentes),
   pero quien compare contra el `WORK_PLAN.md` actual debe saber que está viendo una traducción.
+- **L33** · **`MAX_EXPORT_ROWS` + advisories de seguridad** en `0245a72`. **RED observado**: 6 tests
+  nuevos fallando (`200 == 413`, `created_by` a la vista, `attach()` sin `secure`, 200k < 600k,
+  `ValueError` con `'abc'`, `openapi` sin `401`); los 2 tests de regresión ya pasaban (el límite por
+  debajo del tope y los hashes escritos a 200k). **GREEN**: `72 passed` (64 + 8), build `✓ built in
+  4.12s`, `oxfmt --check` limpio. **165 líneas autorizadas** (147 + 18, sin `openapi.json`).
+  Cerrado: cuota de filas por exportación con `413` y mensaje con el tope · `GET /api/status` ya no
+  proyecta `created_by` (`SELECT * EXCLUDE`), el valor sigue en la base y **cero lectores** en
+  `web/src` · cookie `Secure` condicionada al esquema de la petición · PBKDF2 **200k → 600k** (OWASP
+  2023) con test de que los hashes viejos siguen verificando · `MAX_DOWNLOADS_PER_HOUR='abc'` cae al
+  valor por defecto en vez de un `500` · las 8 rutas protegidas declaran `401`/`403` en `openapi.json`.
+  **`Risk: item 2`** (cookie `Secure` y rondas de PBKDF2) **e `item 3`** (se retiró el campo
+  `batches[].created_by` de la respuesta de `/api/status`; era el leak y no tenía ningún lector).
