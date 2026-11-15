@@ -14,7 +14,7 @@ const TEAM: { name: string; role: [en: string, es: string]; photo?: string }[] =
     photo: '/assets/members/ac.jpg',
   },
   {
-    name: 'Steve Luzquiños',
+    name: 'Anthony Luzquiños',
     role: ['Backend: API, accounts, exports', 'Backend: API, cuentas, exportaciones'],
     photo: '/assets/members/al.jpg',
   },
