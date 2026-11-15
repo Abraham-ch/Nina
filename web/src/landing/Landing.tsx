@@ -31,6 +31,8 @@ function indicators(e: PeruEvidence) {
     lead: since ? daysBetween(since, DECREE) : null,
     top: top.map((d) => title(d.department)),
     topShare: top.reduce((s, d) => s + d.detected_share, 0),
+    topReported: top.reduce((s, d) => s + d.reported_share, 0),
+    cost: e.human_cost ?? null,
   }
 }
 
@@ -238,60 +240,69 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         evidence &&
         (() => {
           const k = indicators(evidence),
-            night = data.night / data.detections
+            night = data.night / data.detections,
+            sept = k.cost?.september_2024,
+            before = k.cost?.before_decree_2024,
+            n = (v: number) => v.toLocaleString(locale())
           const items = [
-            {
-              figure: tr(`#${k.rank}`, `${k.rank}.º`),
-              sub: tr(`of ${k.years} Septembers`, `de ${k.years} septiembres`),
-              title: tr(
-                'September 2024, measured against every September since 2003',
-                'septiembre de 2024, medido frente a cada septiembre desde 2003',
-              ),
-              q: tr('When to prevent?', '¿Cuándo prevenir?'),
-              body: tr(
-                'One consistent record across satellites places each season against its own history, so campaigns, burning restrictions and brigades can be planned before the peak.',
-                'Un registro coherente entre satélites sitúa cada temporada frente a su propia historia, para planificar campañas, restricciones de quemas y brigadas antes del pico.',
-              ),
-            },
+            ...(sept
+              ? [
+                  {
+                    figure: String(sept.deaths),
+                    sub: tr('lives lost', 'vidas perdidas'),
+                    title: tr(
+                      `in Peru's forest fires of September 2024; ${n(sept.homeless)} people lost their homes and ${n(sept.affected)} were affected`,
+                      `en los incendios forestales del Perú en septiembre de 2024; ${n(sept.homeless)} personas perdieron su casa y ${n(sept.affected)} resultaron afectadas`,
+                    ),
+                    q: tr('What is at stake?', '¿Qué está en juego?'),
+                    body: tr(
+                      `Behind every point of light seen from space there are families, crops and forest. These are INDECI's own records for that month (${n(sept.emergencies)} emergencies in ${sept.departments} regions), and they are a floor: not every fire is reported.`,
+                      `Detrás de cada punto de luz visto desde el espacio hay familias, cultivos y bosque. Son los registros del propio INDECI para ese mes (${n(sept.emergencies)} emergencias en ${sept.departments} regiones), y son un piso: no todo incendio se reporta.`,
+                    ),
+                  },
+                ]
+              : []),
             {
               figure: String(k.lead ?? '—'),
-              sub: tr('days ahead', 'días antes'),
+              sub: tr('days earlier', 'días antes'),
               title: tr(
                 k.since
-                  ? `from ${day(k.since)} the season stood above every year since 2003, before the 18 September decree`
-                  : 'before the 18 September decree',
+                  ? `from ${day(k.since)} the satellites showed the worst season since 2003. The emergency was declared on 18 September${before ? `; by then ${before.deaths} people had died` : ''}`
+                  : 'before the 18 September emergency decree',
                 k.since
-                  ? `desde el ${day(k.since)} la temporada superaba a todos los años desde 2003, antes del decreto del 18 de septiembre`
-                  : 'antes del decreto del 18 de septiembre',
+                  ? `desde el ${day(k.since)} los satélites mostraban la peor temporada desde 2003. La emergencia se declaró el 18 de septiembre${before ? `; para entonces ya habían muerto ${before.deaths} personas` : ''}`
+                  : 'antes del decreto de emergencia del 18 de septiembre',
               ),
-              q: tr('How early can we know?', '¿Con cuánta anticipación se puede saber?'),
+              q: tr('Could it have been seen sooner?', '¿Se pudo ver antes?'),
               body: tr(
-                'Comparing the last 14 days with the same dates in history gives an objective, shareable signal to escalate in time.',
-                'Comparar los últimos 14 días con las mismas fechas de la historia da una señal objetiva y compartible para escalar a tiempo.',
-              ),
-            },
-            {
-              figure: share(k.topShare),
-              title: tr(
-                `of the activity detected in 2024, in ${k.top.join(', ')}`,
-                `de la actividad detectada en 2024, en ${k.top.join(', ')}`,
-              ),
-              q: tr('Where to prioritize?', '¿Dónde priorizar?'),
-              body: tr(
-                'Detected activity shows where prevention, environmental education and brigades reach the most fire, wherever it happens.',
-                'La actividad detectada muestra dónde la prevención, la educación ambiental y las brigadas alcanzan más fuego, ocurra donde ocurra.',
+                'The signal was in the data; what was missing was one consistent record to compare it with. Comparing the last 14 days with the same dates in every year since 2003 makes it visible and shareable.',
+                'La señal estaba en los datos; lo que faltaba era un registro coherente con qué compararla. Comparar los últimos 14 días con las mismas fechas de cada año desde 2003 la hace visible y compartible.',
               ),
             },
             {
               figure: `+${k.anomaly} %`,
+              sub: tr('more fire than a normal September', 'más fuego que un septiembre normal'),
               title: tr(
-                'September 2024 above the 2012–2023 median, same instrument',
-                'septiembre de 2024 sobre la mediana 2012–2023, mismo instrumento',
+                `September 2024 was the worst of the ${k.years} Septembers since 2003`,
+                `septiembre de 2024 fue el peor de los ${k.years} septiembres desde 2003`,
               ),
-              q: tr('How much does the pressure grow?', '¿Cuánto crece la presión?'),
+              q: tr('How exceptional was it?', '¿Qué tan excepcional fue?'),
               body: tr(
-                'It sizes the capacity needed in high season, including smoke-related care in public health.',
-                'Dimensiona la capacidad que hace falta en temporada alta, incluida la atención por humo en salud pública.',
+                'It sizes the brigades, budget and smoke-related health care a season like this demands, before it peaks.',
+                'Dimensiona las brigadas, el presupuesto y la atención de salud por humo que exige una temporada así, antes del pico.',
+              ),
+            },
+            {
+              figure: share(k.topShare),
+              sub: tr(`of the fire, but ${share(k.topReported)} of the reports`, `del fuego, pero el ${share(k.topReported)} de los reportes`),
+              title: tr(
+                `in 2024 in ${k.top.join(', ')}: where it burns most is where it is reported least`,
+                `en 2024 en ${k.top.join(', ')}: donde más arde es donde menos se reporta`,
+              ),
+              q: tr('Where to prioritize?', '¿Dónde priorizar?'),
+              body: tr(
+                'The fire seen from space shows where prevention and brigades are needed, even where no one files a report.',
+                'El fuego visto desde el espacio muestra dónde hacen falta prevención y brigadas, incluso donde nadie presenta un reporte.',
               ),
             },
           ]
@@ -316,8 +327,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                     </p>
                     <h2 id="landing-impact-title">
                       {tr(
-                        'From a thermal pixel to a prevention decision',
-                        'Del píxel térmico a una decisión de prevención',
+                        'September 2024: the warning was already in the sky',
+                        'Septiembre de 2024: la advertencia ya estaba en el cielo',
                       )}
                     </h2>
                   </div>

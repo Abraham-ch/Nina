@@ -7,7 +7,8 @@ references, and writes one JSON with every figure quoted in the problem statemen
 - September 2024 against the record (rank, anomaly, and a retrospective 14-day replay);
 - detected (NINA) versus reported (INDECI emergencies), by year and by department;
 - agreement with INPE's single-satellite series (an independent cross-sensor check);
-- a hindcast of "early season predicts September", to show what NINA does *not* claim.
+- a hindcast of "early season predicts September", to show what NINA does *not* claim;
+- the human cost of September 2024 (INDECI forest-fire emergencies: deaths, injured, homeless, affected).
 
 Usage (from the repository root, server environment):
     .venv/Scripts/python.exe scripts/evidence/peru_case.py
@@ -250,10 +251,40 @@ def prediction_hindcast(con) -> dict:
     }
 
 
+def human_cost(emergencies: Path) -> dict:
+    """People harmed by forest fires as INDECI recorded them (cleaned table used by the territorial report).
+
+    Counts are as reported to SINPAD; they are a floor (not every event is reported), never an estimate.
+    """
+    con = duckdb.connect()
+    path = str(emergencies).replace("'", "''")
+    con.execute(f"CREATE VIEW e AS SELECT * FROM read_parquet('{path}')")
+    columns = ("count(*) AS emergencies, count(DISTINCT department) AS departments, coalesce(sum(deaths),0) AS deaths, "
+               "coalesce(sum(injured),0) AS injured, coalesce(sum(homeless),0) AS homeless, "
+               "coalesce(sum(affected),0) AS affected")
+
+    def row(where: str) -> dict:
+        cursor = con.execute(f"SELECT {columns} FROM e WHERE {where}")
+        names = [d[0] for d in cursor.description]
+        return dict(zip(names, cursor.fetchall()[0]))
+
+    span = con.execute("SELECT min(year), max(year) FROM e").fetchall()[0]
+    return {
+        "source": "INDECI SINPAD, forest-fire emergencies (source/context/indeci/forest_fire_emergencies.parquet)",
+        "september_2024": row("year = 2024 AND month = 9"),
+        "before_decree_2024": {"from": "2024-09-01", "until_exclusive": DECLARATION.isoformat(),
+                               **row(f"day >= '2024-09-01' AND day < '{DECLARATION.isoformat()}'")},
+        "year_2024": row("year = 2024"),
+        "all_years": {"first_year": span[0], "last_year": span[1], **row("true")},
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--indeci", type=Path, default=ROOT / "source/downloads/national/indeci/BD_2003-2025_EMERGENCIAS.csv")
     parser.add_argument("--inpe", type=Path, default=ROOT / "source/downloads/national/inpe/peru.json")
+    parser.add_argument("--emergencies", type=Path,
+                        default=ROOT / "source/context/indeci/forest_fire_emergencies.parquet")
     args = parser.parse_args()
     folder, manifest = product_folder()
     con = duckdb.connect()
@@ -277,6 +308,8 @@ def main() -> None:
         result["detected_vs_reported"] = detected_vs_reported(con, args.indeci)
     if args.inpe.exists():
         result["inpe_agreement"] = inpe_agreement(con, args.inpe)
+    if args.emergencies.exists():
+        result["human_cost"] = human_cost(args.emergencies)
     out = ROOT / "data/reports" / f"peru_evidence_{manifest['id']}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")

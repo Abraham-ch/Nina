@@ -25,7 +25,25 @@ export type PeruEvidence = {
     detected_growth_2019_2023_vs_2003_2007: number
     departments_2024: { department: string; detected_share: number; reported_share: number }[]
   }
-  inpe_agreement: { annual_pearson_2012_2025: number }
+  inpe_agreement: {
+    annual_pearson_2012_2025: number
+    top_septembers_inpe?: number[]
+    top_septembers_nina?: number[]
+  }
+  human_cost?: {
+    september_2024: HumanCount
+    before_decree_2024: HumanCount
+    year_2024: HumanCount
+    all_years: HumanCount & { first_year: number; last_year: number }
+  }
+}
+type HumanCount = {
+  emergencies: number
+  departments: number
+  deaths: number
+  injured: number
+  homeless: number
+  affected: number
 }
 
 // Global summary built by scripts/evidence/world_evidence.py from the 0.5.0 run.
@@ -65,22 +83,25 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
     top = [...dvr.departments_2024].sort((a, b) => b.detected_share - a.detected_share).slice(0, 3),
     topDetected = top.reduce((s, d) => s + d.detected_share, 0),
     topReported = top.reduce((s, d) => s + d.reported_share, 0),
-    names = top.map((d) => title(d.department)).join(', ')
+    names = top.map((d) => title(d.department)).join(', '),
+    inpeTop = e.inpe_agreement.top_septembers_inpe ?? [],
+    ninaTop = e.inpe_agreement.top_septembers_nina ?? [],
+    sameTop = inpeTop.filter((y) => ninaTop.includes(y)).length
   const cards = [
     {
-      figure: `×${number(jump.raw_pixels, 1)} → ×${number(jump.harmonized, 2)}`,
-      head: tr('The record broke in 2012', 'El registro se rompió en 2012'),
+      figure: `×${number(jump.raw_pixels, 1)} → ×${number(jump.harmonized, 1)}`,
+      head: tr('A fake jump in 2012', 'Un salto falso en 2012'),
       body: tr(
-        `When VIIRS arrived, Peru's September detections jumped ×${number(jump.raw_pixels, 1)} in raw pixels (2012–2023 against 2003–2011): a change of instrument, not of fire. After harmonization the same comparison gives ×${number(jump.harmonized, 2)}. It breaks again now: S-NPP stopped on 2 November 2026 and MODIS follows.`,
-        `Cuando llegó VIIRS, las detecciones de septiembre en el Perú saltaron ×${number(jump.raw_pixels, 1)} en píxeles crudos (2012–2023 frente a 2003–2011): un cambio de instrumento, no de fuego. Tras la armonización, la misma comparación da ×${number(jump.harmonized, 2)}. Se rompe otra vez ahora: S-NPP se detuvo el 2 de noviembre de 2026 y MODIS le sigue.`,
+        `When the new satellite (VIIRS) arrived in 2012, Peru's September fire seemed to multiply ×${number(jump.raw_pixels, 1)} overnight: a sharper camera, not more fire. In NINA's record the same comparison gives ×${number(jump.harmonized, 1)}. And it breaks again now: one VIIRS satellite stopped on 2 November 2026 and MODIS is retiring.`,
+        `Cuando llegó el satélite nuevo (VIIRS) en 2012, el fuego de septiembre en el Perú pareció multiplicarse ×${number(jump.raw_pixels, 1)} de un día para otro: una cámara más fina, no más fuego. En el registro de NINA la misma comparación da ×${number(jump.harmonized, 1)}. Y se rompe otra vez ahora: un satélite VIIRS se detuvo el 2 de noviembre de 2026 y MODIS se retira.`,
       ),
     },
     {
-      figure: tr(
-        `#${sept.rank_2003_2025} of ${sept.years_compared}`,
-        `${sept.rank_2003_2025}.º de ${sept.years_compared}`,
+      figure: `+${number(sept.anomaly_vs_median_snpp_only_2012_2023)} %`,
+      head: tr(
+        `September 2024, the worst in ${sept.years_compared} years`,
+        `Septiembre de 2024, el peor en ${sept.years_compared} años`,
       ),
-      head: tr('September 2024, read in time', 'Septiembre de 2024, leído a tiempo'),
       body: tr(
         `The highest September since 2003, ${number(sept.anomaly_vs_median_snpp_only_2012_2023)} % above the 2012–2023 median (previous record: ${sept.previous_record[1]}).${peru ? ` On 18 September, the day of the emergency decree, the previous 14 days were ${number(peru.on_declaration_day.ratio_to_median, 1)}× the median${peru.above_previous_max_continuously_since ? ` and had been above every year since ${day(peru.above_previous_max_continuously_since)}` : ''}.` : ''}${amazonas ? ` Amazonas was at ${number(amazonas.on_declaration_day.ratio_to_median, 1)}×.` : ''} ${records.length} departments set a September record.`,
         `El septiembre más alto desde 2003, ${number(sept.anomaly_vs_median_snpp_only_2012_2023)} % por encima de la mediana 2012–2023 (récord anterior: ${sept.previous_record[1]}).${peru ? ` El 18 de septiembre, día del decreto de emergencia, los 14 días previos estaban a ${number(peru.on_declaration_day.ratio_to_median, 1)}× la mediana${peru.above_previous_max_continuously_since ? ` y superaban a todos los años desde el ${day(peru.above_previous_max_continuously_since)}` : ''}.` : ''}${amazonas ? ` Amazonas estaba a ${number(amazonas.on_declaration_day.ratio_to_median, 1)}×.` : ''} ${records.length} departamentos marcaron récord de septiembre.`,
@@ -88,18 +109,18 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
     },
     {
       figure: `${share(topDetected)} / ${share(topReported)}`,
-      head: tr('Detected is not reported', 'Detectado no es reportado'),
+      head: tr('Where it burns most, it is reported least', 'Donde más arde, menos se reporta'),
       body: tr(
-        `Reported forest-fire emergencies (INDECI) grew ×${number(dvr.reported_growth_2019_2023_vs_2003_2007)} between 2003–2007 and 2019–2023, while detected activity changed ×${number(dvr.detected_growth_2019_2023_vs_2003_2007, 2)}. In 2024, ${names} held ${share(topDetected)} of the activity detected in Peru and ${share(topReported)} of the reported emergencies.`,
-        `Las emergencias por incendio forestal reportadas (INDECI) crecieron ×${number(dvr.reported_growth_2019_2023_vs_2003_2007)} entre 2003–2007 y 2019–2023, mientras la actividad detectada cambió ×${number(dvr.detected_growth_2019_2023_vs_2003_2007, 2)}. En 2024, ${names} concentraron el ${share(topDetected)} de la actividad detectada en el Perú y el ${share(topReported)} de las emergencias reportadas.`,
+        `In 2024, ${names} had ${share(topDetected)} of the fire seen from space over Peru, but only ${share(topReported)} of the emergencies reported to INDECI. Nationally, reports grew ×${number(dvr.reported_growth_2019_2023_vs_2003_2007)} between 2003–2007 and 2019–2023 while the fire seen from space stayed level (×${number(dvr.detected_growth_2019_2023_vs_2003_2007, 1)}).`,
+        `En 2024, ${names} tuvieron el ${share(topDetected)} del fuego visto desde el espacio sobre el Perú, pero solo el ${share(topReported)} de las emergencias reportadas al INDECI. A nivel nacional, los reportes crecieron ×${number(dvr.reported_growth_2019_2023_vs_2003_2007)} entre 2003–2007 y 2019–2023 mientras el fuego visto desde el espacio se mantuvo estable (×${number(dvr.detected_growth_2019_2023_vs_2003_2007, 1)}).`,
       ),
     },
     {
-      figure: `r = ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)}`,
-      head: tr('Checked against another instrument', 'Contrastado con otro instrumento'),
+      figure: inpeTop.length ? `${sameTop} / ${inpeTop.length}` : `r = ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)}`,
+      head: tr("Brazil's space agency agrees", 'La agencia espacial de Brasil coincide'),
       body: tr(
-        `INPE's series (MODIS Aqua only) and NINA's agree year to year with r = ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)} in 2012–2025. NINA is not a forecast: July–August anticipates an above-normal September ${share(e.prediction_hindcast.national_hit_rate)} of the time, against ${share(e.prediction_hindcast.chance_level)} by chance.`,
-        `La serie del INPE (solo MODIS Aqua) y la de NINA coinciden año a año con r = ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)} en 2012–2025. NINA no es un pronóstico: julio–agosto anticipa un septiembre por encima de lo normal el ${share(e.prediction_hindcast.national_hit_rate)} de las veces, frente al ${share(e.prediction_hindcast.chance_level)} por azar.`,
+        `INPE, with a single satellite and its own method, ranks ${inpeTop.length ? `the same worst Septembers for Peru (${inpeTop.join(', ')})` : 'the years the same way'}; year to year the two series agree at ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)} out of 1. NINA is not a forecast: it reads the record, it does not predict the next season.`,
+        `El INPE, con un solo satélite y su propio método, ordena ${inpeTop.length ? `los mismos peores septiembres del Perú (${inpeTop.join(', ')})` : 'los años del mismo modo'}; año a año ambas series coinciden en ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)} sobre 1. NINA no es un pronóstico: lee el registro, no predice la próxima temporada.`,
       ),
     },
   ]
