@@ -152,6 +152,36 @@ def test_los_errores_que_no_son_de_validacion_conservan_su_status(client):
     assert c.post('/api/sync', json={'start': '2026-01-01'}).status_code in (401, 409)
 
 
+def test_el_mensaje_sigue_el_idioma_de_la_interfaz(client):
+    """WORK_PLAN §10, T2: el mensaje va 'in the interface language'."""
+    c, _ = client
+    en = rechazo(c.post('/api/analyses', json=seleccion(selected_month=13)), 'month_range')
+    assert 'month' in en['detail'].lower(), en
+    es = rechazo(
+        c.post(
+            '/api/analyses',
+            json=seleccion(selected_month=13),
+            headers={'Accept-Language': 'es-PE,es;q=0.9'},
+        ),
+        'month_range',
+    )
+    assert 'mes' in es['detail'].lower(), es
+    # El `code` es un contrato: no cambia de idioma.
+    assert es['code'] == en['code'] == 'month_range'
+    assert es['title'] != en['title']
+    assert es['status'] == en['status'] == 422
+
+
+def test_cada_regla_propia_conserva_su_mensaje_concreto(client):
+    """Ninguna regla cae en un 'Entrada inválida' genérico."""
+    c, _ = client
+    rechazo(c.post('/api/analyses', json=seleccion(scope='custom')), 'geometry_required')
+    cuerpo = rechazo(
+        c.post('/api/analyses', json=seleccion(department='ZZ-NO-EXISTE')), 'department_unknown'
+    )
+    assert 'department' in cuerpo['detail'].lower(), cuerpo
+
+
 def test_openapi_documenta_el_422_como_problem_json():
     """El contrato dice `code`; el 422 por defecto de FastAPI decía `{detail: [...]}`."""
     import json

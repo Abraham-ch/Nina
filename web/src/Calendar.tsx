@@ -1,9 +1,9 @@
 import { ArrowUpRight, Download } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { fmt, months, shortMonths, pct } from './api'
+import { fmt, months, shortMonths, pct, HARMONIZED } from './api'
 import { tr, locale } from './i18n'
-import type { Analysis, Month, Selection } from './types'
+import type { Analysis, HarmonizedAnalysis, Month, Selection } from './types'
 
 const shades = [
   '#f5eee2',
@@ -24,6 +24,10 @@ function cellStyle(month: Month | undefined, maximum: number) {
   }
 }
 export function Trend({ analysis }: { analysis: Analysis | null }) {
+  const harmonized = analysis?.selection.source === HARMONIZED
+  const unit = harmonized
+    ? tr('equivalent active cell-days', 'celdas-día activas equivalentes')
+    : tr('detections', 'detecciones')
   const ref = useRef<HTMLDivElement>(null),
     [width, setWidth] = useState(640)
   useEffect(() => {
@@ -80,7 +84,9 @@ export function Trend({ analysis }: { analysis: Analysis | null }) {
           </g>
         ))}
         <text x={48} y={15} fill="#65716d" fontSize={11}>
-          {tr('Detections / month', 'Detecciones / mes')}
+          {harmonized
+            ? tr('Equivalent active cell-days / month', 'Celdas-día activas equivalentes / mes')
+            : tr('Detections / month', 'Detecciones / mes')}
         </text>
         <path
           d={line('historical_median')}
@@ -100,7 +106,7 @@ export function Trend({ analysis }: { analysis: Analysis | null }) {
                 fill="#b8733d"
               >
                 <title>
-                  {MONTHS[i]}: {fmt(m.value)} {tr('detections', 'detecciones')}
+                  {MONTHS[i]}: {fmt(m.value)} {unit}
                 </title>
               </circle>
             )}
@@ -117,10 +123,15 @@ export function Trend({ analysis }: { analysis: Analysis | null }) {
         </span>
         <span>
           <i className="dashed" />
-          {tr(
-            'Median of the same month, up to 10 previous years',
-            'Mediana del mismo mes, hasta 10 años previos',
-          )}
+          {harmonized
+            ? tr(
+                'Median of the same month in the other eligible years',
+                'Mediana del mismo mes en los demás años elegibles',
+              )
+            : tr(
+                'Median of the same month, up to 10 previous years',
+                'Mediana del mismo mes, hasta 10 años previos',
+              )}
         </span>
       </div>
     </div>
@@ -128,7 +139,9 @@ export function Trend({ analysis }: { analysis: Analysis | null }) {
 }
 
 export default function Calendar({
+  label,
   analysis,
+  harmonized,
   selection,
   loading,
   onChange,
@@ -136,7 +149,9 @@ export default function Calendar({
   onExport,
   onAcquire,
 }: {
+  label: string
   analysis: Analysis | null
+  harmonized: HarmonizedAnalysis | null
   selection: Selection
   loading: boolean
   onChange: (s: Partial<Selection>) => void
@@ -144,7 +159,12 @@ export default function Calendar({
   onExport: () => void
   onAcquire: () => void
 }) {
-  const firstYear = selection.scope === 'PER' ? 2000 : 2025
+  const isHarmonized = selection.source === HARMONIZED
+  const firstYear =
+    isHarmonized && selection.scope !== 'world' ? 2002 : selection.scope === 'PER' ? 2000 : 2025
+  const unit = isHarmonized
+    ? tr('equivalent active cell-days', 'celdas-día activas equivalentes')
+    : tr('detections', 'detecciones')
   const MONTHS = months(),
     SHORT = shortMonths()
   const years = Array.from(
@@ -164,7 +184,7 @@ export default function Calendar({
           month?.value == null ? 'no-data' : month.status === 'partial_archive' ? 'partial' : ''
         }
         aria-pressed={selection.selected_year === y && selection.selected_month === m}
-        aria-label={`${MONTHS[m - 1]} ${y}: ${month?.value == null ? tr('no data available', 'sin datos disponibles') : fmt(month.value) + ' ' + tr('detections', 'detecciones') + (month.status === 'partial_archive' ? tr(', partial archive', ', archivo parcial') : '')}`}
+        aria-label={`${MONTHS[m - 1]} ${y}: ${month?.value == null ? tr('no data available', 'sin datos disponibles') : fmt(month.value) + ' ' + unit + (month.status === 'partial_archive' ? tr(', partial archive', ', archivo parcial') : '')}`}
         onClick={() => onChange({ selected_year: y, selected_month: m })}
       >
         <span className="mobile-month">{SHORT[m - 1]}</span>
@@ -183,7 +203,7 @@ export default function Calendar({
           <h1>{tr('The fire calendar.', 'El calendario del fuego.')}</h1>
           <p>
             {tr('The story of ', 'La historia de ')}
-            <strong>{analysis?.area_name || tr('your selection', 'tu selección')}</strong>
+            <strong>{label}</strong>
             {tr(', month by month.', ', mes a mes.')}
           </p>
         </div>
@@ -200,7 +220,11 @@ export default function Calendar({
           </strong>
         </div>
         <div>
-          <span>{tr('Archive detections', 'Detecciones del archivo')}</span>
+          <span>
+            {isHarmonized
+              ? tr('Harmonized activity', 'Actividad armonizada')
+              : tr('Archive detections', 'Detecciones del archivo')}
+          </span>
           <strong>{fmt(analysis?.selected.value)}</strong>
         </div>
         <div>
@@ -253,19 +277,23 @@ export default function Calendar({
           className="text-link"
           onClick={() =>
             onChange(
-              selection.scope === 'PER'
-                ? { year_start: 2000 }
-                : {
-                    year_start: 2025,
-                    year_end: 2026,
-                    selected_year: Math.max(2025, Math.min(2026, selection.selected_year)),
-                  },
+              isHarmonized && selection.scope !== 'world'
+                ? { year_start: 2002 }
+                : selection.scope === 'PER'
+                  ? { year_start: 2000 }
+                  : {
+                      year_start: 2025,
+                      year_end: 2026,
+                      selected_year: Math.max(2025, Math.min(2026, selection.selected_year)),
+                    },
             )
           }
         >
-          {selection.scope === 'PER'
-            ? tr('Open from 2000', 'Abrir desde 2000')
-            : tr('Global period 2025–2026', 'Período mundial 2025–2026')}
+          {isHarmonized && selection.scope !== 'world'
+            ? tr('Open from 2002', 'Abrir desde 2002')
+            : selection.scope === 'PER'
+              ? tr('Open from 2000', 'Abrir desde 2000')
+              : tr('Global period 2025–2026', 'Período mundial 2025–2026')}
         </button>
         <span className="calendar-state">
           {loading
@@ -274,10 +302,15 @@ export default function Calendar({
               ? tr('Partial month · comparison omitted', 'Mes parcial · comparación omitida')
               : analysis?.selected.value == null
                 ? tr('No archive for this month', 'Sin archivo para este mes')
-                : tr(
-                    'Observed archive · coverage not corrected',
-                    'Archivo observado · cobertura no corregida',
-                  )}
+                : isHarmonized
+                  ? tr(
+                      'Harmonized MODIS + VIIRS series · experimental',
+                      'Serie armonizada MODIS + VIIRS · experimental',
+                    )
+                  : tr(
+                      'Observed archive · coverage not corrected',
+                      'Archivo observado · cobertura no corregida',
+                    )}
         </span>
       </div>
       <div className="calendar-table">
@@ -342,36 +375,48 @@ export default function Calendar({
         </span>
         <span>
           0<i className="heat-scale" />
-          {fmt(maximum)} {tr('detections · logarithmic scale', 'detecciones · escala logarítmica')}
+          {fmt(maximum)} {unit} · {tr('logarithmic scale', 'escala logarítmica')}
         </span>
       </div>
-      {(analysis?.selected.value == null || analysis?.selected.status === 'partial_archive') && (
-        <div className="archive-prompt">
-          <div>
-            <strong>
-              {analysis?.selected.value == null
-                ? tr(
-                    'This month is not in your archive yet.',
-                    'Este mes todavía no está en tu archivo.',
-                  )
-                : tr(
-                    'The completeness of this month is not verified.',
-                    'La integridad de este mes no está verificada.',
-                  )}
-            </strong>
-            <p>
-              {tr(
-                'You can add this month from FIRMS for this area. Availability is checked before downloading.',
-                'Puedes incorporar el mes de FIRMS para esta área. La disponibilidad se verifica antes de descargar.',
-              )}
-            </p>
-          </div>
-          <button className="button dark" onClick={onAcquire}>
-            {tr('Add data', 'Incorporar datos')}
-            <ArrowUpRight size={16} />
-          </button>
+      {harmonized && (
+        <div className="harmonized-note" role="note">
+          <p>
+            {tr(
+              `Method ${harmonized.method_version}, dataset ${harmonized.dataset_id}. The unit is VIIRS-equivalent active cell-days: comparable activity across sensors, not a number of fires or burned area. A hatched month has no valid support; it is not zero.`,
+              `Método ${harmonized.method_version}, conjunto ${harmonized.dataset_id}. La unidad son celdas-día activas equivalentes VIIRS: actividad comparable entre sensores, no número de incendios ni área quemada. Un mes rayado no tiene soporte válido; no es cero.`,
+            )}
+          </p>
+          <p className="harmonized-legal">{harmonized.legal}</p>
         </div>
       )}
+      {!isHarmonized &&
+        (analysis?.selected.value == null || analysis?.selected.status === 'partial_archive') && (
+          <div className="archive-prompt">
+            <div>
+              <strong>
+                {analysis?.selected.value == null
+                  ? tr(
+                      'This month is not in your archive yet.',
+                      'Este mes todavía no está en tu archivo.',
+                    )
+                  : tr(
+                      'The completeness of this month is not verified.',
+                      'La integridad de este mes no está verificada.',
+                    )}
+              </strong>
+              <p>
+                {tr(
+                  'You can add this month from FIRMS for this area. Availability is checked before downloading.',
+                  'Puedes incorporar el mes de FIRMS para esta área. La disponibilidad se verifica antes de descargar.',
+                )}
+              </p>
+            </div>
+            <button className="button dark" onClick={onAcquire}>
+              {tr('Add data', 'Incorporar datos')}
+              <ArrowUpRight size={16} />
+            </button>
+          </div>
+        )}
       <section className="season-section">
         <div>
           <span className="kicker">

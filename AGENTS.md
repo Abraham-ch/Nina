@@ -80,11 +80,13 @@ Nina/
 │   ├── remote.py             # FIRMS client (MAP_KEY) and GIBS imagery; credentials only on the server
 │   ├── analytics.py          # analysis: calendar, comparison, evidence, exports
 │   ├── science.py            # exploratory calibration (Poisson / simple factor)
+│   ├── harmonized.py         # /api/harmonized/* routes: read the packages/nina Parquet product (no calibration)
 │   └── assistant.py          # deterministic assistant + optional LLM adapter
 ├── web/                      # React + Vite + TS + CesiumJS (npm, package-lock.json)
 │   ├── src/                  # App, Globe, Calendar, DataPanel, Dialog, Experiment, Tour, i18n, landing/, api.ts, types.ts, export.ts
 │   ├── public/assets/        # countries (Natural Earth), attribution, reference image, landing summary
 │   └── scripts/              # asset preparation (Cesium, geography)
+├── packages/nina/            # offline harmonization pipeline (H3 + uv, Python 3.12); see ADR 0002–0004
 ├── scripts/                  # bootstrap_data, import_global, sync_global, verify_*, export_openapi, inventory_l2, build_landing_data…
 ├── tests/                    # pytest
 ├── design/ · nina-demo.html  # design direction and static demo
@@ -118,8 +120,9 @@ Nina/
 - Reference files for the target method (gaps, sensor lifecycle, input schema, legal texts):
   `docs/reference/`.
 - Generated files (`openapi.json`, `web/dist/`) are not edited by hand.
-- Technologies from the earlier plan that are **not** used (PostGIS, Redis, MinIO, Martin, Prefect, H3, pnpm/Turborepo, uv):
-  they are only added with an ADR that justifies the change against the MVP.
+- Technologies from the earlier plan that are **not** used (PostGIS, Redis, MinIO, Martin, Prefect, pnpm/Turborepo):
+  they are only brought in with an ADR that justifies the change against the MVP. **H3 and uv** are used only in
+  `packages/nina/` (ADR 0002 and 0004); the server does not import that package, it only reads its Parquet output.
 
 ---
 

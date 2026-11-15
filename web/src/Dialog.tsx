@@ -11,12 +11,13 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { fmt, months, post, sourceName } from './api'
+import { analysisPath, fmt, months, post, replyFromHarmonized, sourceName } from './api'
 import type { Modal } from './App'
 import { seasonSVG } from './export'
-import { tr } from './i18n'
-import type { Analysis, Geometry, Health, Reply, Selection, User } from './types'
+import { getLang, tr } from './i18n'
+import type { Analysis, Geometry, HarmonizedReply, Health, Reply, Selection, User } from './types'
 type Props = {
+  harmonized: boolean
   modal: Modal
   onModal: (m: Modal) => void
   label: string
@@ -38,6 +39,7 @@ const PRESETS: [string, string][] = [
   ['Prepare a report', 'Prepara un informe'],
 ]
 export default function Dialog({
+  harmonized,
   modal,
   onModal,
   label,
@@ -75,11 +77,20 @@ export default function Dialog({
     setAsking(true)
     const id = analysis.id
     try {
-      const answer = await post<Reply>('/assistant', {
-        analysis_id: id,
-        question: text,
-        role,
-      })
+      // The harmonized assistant is deterministic and answers in the interface language.
+      const answer = harmonized
+        ? replyFromHarmonized(
+            await post<HarmonizedReply>('/harmonized/assistant', {
+              analysis_id: id,
+              question: text,
+              language: getLang(),
+            }),
+          )
+        : await post<Reply>('/assistant', {
+            analysis_id: id,
+            question: text,
+            role,
+          })
       if (currentAnalysis.current === id) {
         setReply(answer)
         setQuestion('')
@@ -248,38 +259,69 @@ export default function Dialog({
             </div>
           ) : (
             <div className="export-list">
-              {[
-                [
-                  'series',
-                  tr('Monthly calendar', 'Calendario mensual'),
-                  tr(
-                    'CSV · values, median and archive status',
-                    'CSV · valores, mediana y estado del archivo',
-                  ),
-                ],
-                [
-                  'detections',
-                  tr('Original observations', 'Observaciones originales'),
-                  tr(
-                    'CSV · every row for the area and month',
-                    'CSV · todas las filas del área y mes',
-                  ),
-                ],
-                [
-                  'manifest',
-                  tr('Evidence and provenance', 'Evidencia y procedencia'),
-                  tr(
-                    'JSON · selection, revisions, hashes and limits',
-                    'JSON · selección, revisiones, hashes y límites',
-                  ),
-                ],
-                [
-                  'report',
-                  tr('Analysis report', 'Informe del análisis'),
-                  tr('TXT · verified figures and sources', 'TXT · cifras verificadas y fuentes'),
-                ],
-              ].map(([id, title, detail]) => (
-                <a key={id} href={`/api/analyses/${analysis?.id}/exports/${id}`}>
+              {(harmonized
+                ? [
+                    [
+                      'series',
+                      tr('Harmonized monthly series', 'Serie mensual armonizada'),
+                      tr(
+                        'CSV · value, median, status, unit and FIRMS citation',
+                        'CSV · valor, mediana, estado, unidad y cita FIRMS',
+                      ),
+                    ],
+                    [
+                      'package',
+                      tr('Complete package', 'Paquete completo'),
+                      tr(
+                        'ZIP · series, every cell-day of the month, manifest and README',
+                        'ZIP · serie, cada celda-día del mes, manifiesto y README',
+                      ),
+                    ],
+                    [
+                      'manifest',
+                      tr('Evidence and provenance', 'Evidencia y procedencia'),
+                      tr(
+                        'JSON · selection, method version, limits and references',
+                        'JSON · selección, versión del método, límites y referencias',
+                      ),
+                    ],
+                  ]
+                : [
+                    [
+                      'series',
+                      tr('Monthly calendar', 'Calendario mensual'),
+                      tr(
+                        'CSV · values, median and archive status',
+                        'CSV · valores, mediana y estado del archivo',
+                      ),
+                    ],
+                    [
+                      'detections',
+                      tr('Original observations', 'Observaciones originales'),
+                      tr(
+                        'CSV · every row for the area and month',
+                        'CSV · todas las filas del área y mes',
+                      ),
+                    ],
+                    [
+                      'manifest',
+                      tr('Evidence and provenance', 'Evidencia y procedencia'),
+                      tr(
+                        'JSON · selection, revisions, hashes and limits',
+                        'JSON · selección, revisiones, hashes y límites',
+                      ),
+                    ],
+                    [
+                      'report',
+                      tr('Analysis report', 'Informe del análisis'),
+                      tr(
+                        'TXT · verified figures and sources',
+                        'TXT · cifras verificadas y fuentes',
+                      ),
+                    ],
+                  ]
+              ).map(([id, title, detail]) => (
+                <a key={id} href={`/api${analysisPath(harmonized)}/${analysis?.id}/exports/${id}`}>
                   <Download size={19} />
                   <span>
                     <strong>{title}</strong>
@@ -445,10 +487,15 @@ export default function Dialog({
             <div>
               <dt>{tr('Harmonization', 'Armonización')}</dt>
               <dd>
-                {tr(
-                  'Original observations; correction for observation opportunities pending',
-                  'Observaciones originales; corrección por oportunidades pendiente',
-                )}
+                {harmonized
+                  ? tr(
+                      `Experimental MODIS + VIIRS series, method ${analysis?.software_revision}; not scientifically validated`,
+                      `Serie experimental MODIS + VIIRS, método ${analysis?.software_revision}; sin validación científica`,
+                    )
+                  : tr(
+                      'Original observations; correction for observation opportunities pending',
+                      'Observaciones originales; corrección por oportunidades pendiente',
+                    )}
               </dd>
             </div>
             <div>
@@ -484,7 +531,10 @@ export default function Dialog({
               <ArrowUpRight size={15} />
             </a>
           ))}
-          <a className="button dark" href={`/api/analyses/${analysis?.id}/exports/manifest`}>
+          <a
+            className="button dark"
+            href={`/api${analysisPath(harmonized)}/${analysis?.id}/exports/manifest`}
+          >
             <FileJson size={16} />
             {tr('Download record', 'Descargar expediente')}
           </a>

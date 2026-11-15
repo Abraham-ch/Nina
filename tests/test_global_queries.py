@@ -73,7 +73,7 @@ def test_empty_world_selection_and_invalid_sample_limit(isolated_database):
     result={'selection':selection().model_dump()}
     assert analytics.points_for_analysis(result)['features']==[]
     assert analytics.points_for_analysis(result)['total']==0
-    with pytest.raises(ValueError,match='positivo'):
+    with pytest.raises(ValueError,match='positive'):
         analytics.points_for_analysis(result,limit=0)
 
 

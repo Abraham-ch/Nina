@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 
 import { locale, tr } from '../i18n'
 import LangSwitch from '../LangSwitch'
+import Evidence, { day, share, title, type PeruEvidence } from './Evidence'
+import Team from './Team'
 import { createScene, weekLabel, type Countries, type LandingData, type Week } from './scene'
 
 import './landing.css'
@@ -10,32 +12,25 @@ const fmt = { format: (n: number) => n.toLocaleString(locale()) }
 const clamp = (v: number) => Math.min(1, Math.max(0, v))
 const pct = (v: number) => `${Math.round(v * 100)} %`
 
-/** Indicators derived only from the real summary (one observer, one period); nothing is estimated or extrapolated. */
-function indicators(d: LandingData) {
-  const full = d.weeks.filter((w) => !w.partial),
-    total = d.detections
-  const season =
-    d.weeks
-      .filter((w) => {
-        const m = new Date(w.week + 'T00:00:00Z').getUTCMonth()
-        return m >= 6 && m <= 9
-      })
-      .reduce((s, w) => s + w.count, 0) / total
-  const sorted = full.map((w) => w.count).sort((a, b) => b - a)
-  let acc = 0,
-    half = 0
-  while (acc < total / 2 && half < sorted.length) acc += sorted[half++]
-  const median = [...sorted].reverse()[Math.floor(sorted.length / 2)] || 1
-  const top = d.departments.slice(0, 3)
+// Day of the emergency decree for Amazonas, San Martín and Ucayali (DS 097-2024-PCM, docs/PROBLEM.md §1.2).
+const DECREE = '2024-09-18'
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000)
+
+/** Indicators from the harmonized archive (docs/PROBLEM.md, read from peru-evidence.json): what the record makes possible. */
+function indicators(e: PeruEvidence) {
+  const peru = e.replay_2024.find((r) => r.label === 'Peru')
+  const since = peru?.above_previous_max_continuously_since ?? null
+  const top = [...e.detected_vs_reported.departments_2024]
+    .sort((a, b) => b.detected_share - a.detected_share)
+    .slice(0, 3)
   return {
-    season,
-    half,
-    weeks: full.length,
-    ratio: d.peak_count / median,
-    night: d.night / total,
-    top,
-    topShare: top.reduce((s, x) => s + x.count, 0) / total,
-    regions: d.departments.length,
+    rank: e.september_2024.rank_2003_2025,
+    years: e.september_2024.years_compared,
+    anomaly: Math.round(e.september_2024.anomaly_vs_median_snpp_only_2012_2023),
+    since,
+    lead: since ? daysBetween(since, DECREE) : null,
+    top: top.map((d) => title(d.department)),
+    topShare: top.reduce((s, d) => s + d.detected_share, 0),
   }
 }
 
@@ -77,6 +72,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
   const [focus, setFocus] = useState(-1)
   const focusRef = useRef(-1)
   const [data, setData] = useState<LandingData | null>(null)
+  const [evidence, setEvidence] = useState<PeruEvidence | null>(null)
   const [week, setWeek] = useState<Week | null>(null)
 
   useEffect(() => {
@@ -87,9 +83,13 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       fetch('/assets/landing-peru.json')
         .then((r) => (r.ok ? (r.json() as Promise<LandingData>) : null))
         .catch(() => null),
-    ]).then(([countries, peruData]) => {
+      fetch('/assets/peru-evidence.json')
+        .then((r) => (r.ok ? (r.json() as Promise<PeruEvidence>) : null))
+        .catch(() => null),
+    ]).then(([countries, peruData, peruEvidence]) => {
       if (!alive || !canvas.current) return
       setData(peruData)
+      setEvidence(peruEvidence)
       scene = createScene(canvas.current, countries, peruData, {
         // World → Peru while the Peru section scrolls up; hotspots appear on arrival; the closing section dims the scene.
         progress() {
@@ -230,48 +230,58 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       </section>
 
       {data &&
+        evidence &&
         (() => {
-          const k = indicators(data)
+          const k = indicators(evidence),
+            night = data.night / data.detections
           const items = [
             {
-              figure: pct(k.season),
+              figure: tr(`#${k.rank}`, `${k.rank}.º`),
+              sub: tr(`of ${k.years} Septembers`, `de ${k.years} septiembres`),
               title: tr(
-                'of detections fall between July and October',
-                'de las detecciones cae entre julio y octubre',
+                'September 2024, measured against every September since 2003',
+                'septiembre de 2024, medido frente a cada septiembre desde 2003',
               ),
               q: tr('When to prevent?', '¿Cuándo prevenir?'),
               body: tr(
-                'A seasonal calendar to schedule campaigns, burning restrictions and brigade readiness before the peak, not during it.',
-                'Un calendario estacional para programar campañas, restricciones de quemas y preparación de brigadas antes del pico, no durante.',
+                'One consistent record across satellites places each season against its own history, so campaigns, burning restrictions and brigades can be planned before the peak.',
+                'Un registro coherente entre satélites sitúa cada temporada frente a su propia historia, para planificar campañas, restricciones de quemas y brigadas antes del pico.',
               ),
             },
             {
-              figure: String(k.half),
-              sub: tr(`of ${k.weeks} weeks`, `de ${k.weeks} semanas`),
-              title: tr('hold half of all activity', 'concentran la mitad de toda la actividad'),
-              q: tr('How long is the critical window?', '¿Cuánto dura la ventana crítica?'),
-              body: tr(
-                'Risk piles up in a few weeks: that is where concentrating surveillance and risk communication pays off most.',
-                'El riesgo se acumula en pocas semanas: ahí rinde más concentrar vigilancia y comunicación de riesgo.',
-              ),
-            },
-            {
-              figure: pct(k.topShare),
+              figure: String(k.lead ?? '—'),
+              sub: tr('days ahead', 'días antes'),
               title: tr(
-                `in ${k.top.map((t) => t.name).join(', ')}`,
-                `en ${k.top.map((t) => t.name).join(', ')}`,
+                k.since
+                  ? `from ${day(k.since)} the season stood above every year since 2003, before the 18 September decree`
+                  : 'before the 18 September decree',
+                k.since
+                  ? `desde el ${day(k.since)} la temporada superaba a todos los años desde 2003, antes del decreto del 18 de septiembre`
+                  : 'antes del decreto del 18 de septiembre',
+              ),
+              q: tr('How early can we know?', '¿Con cuánta anticipación se puede saber?'),
+              body: tr(
+                'Comparing the last 14 days with the same dates in history gives an objective, shareable signal to escalate in time.',
+                'Comparar los últimos 14 días con las mismas fechas de la historia da una señal objetiva y compartible para escalar a tiempo.',
+              ),
+            },
+            {
+              figure: share(k.topShare),
+              title: tr(
+                `of the activity detected in 2024, in ${k.top.join(', ')}`,
+                `de la actividad detectada en 2024, en ${k.top.join(', ')}`,
               ),
               q: tr('Where to prioritize?', '¿Dónde priorizar?'),
               body: tr(
-                `Of ${k.regions} regions with detections, three hold this share: an objective basis to guide environmental education and preventive investment.`,
-                `De ${k.regions} regiones con detecciones, tres reúnen esta proporción: una base objetiva para orientar educación ambiental e inversión preventiva.`,
+                'Detected activity shows where prevention, environmental education and brigades reach the most fire, wherever it happens.',
+                'La actividad detectada muestra dónde la prevención, la educación ambiental y las brigadas alcanzan más fuego, ocurra donde ocurra.',
               ),
             },
             {
-              figure: `×${k.ratio.toFixed(0)}`,
+              figure: `+${k.anomaly} %`,
               title: tr(
-                'the peak week against the typical week',
-                'la semana pico frente a la semana típica',
+                'September 2024 above the 2012–2023 median, same instrument',
+                'septiembre de 2024 sobre la mediana 2012–2023, mismo instrumento',
               ),
               q: tr('How much does the pressure grow?', '¿Cuánto crece la presión?'),
               body: tr(
@@ -411,8 +421,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                 </div>
                 <p className="landing-caveat">
                   {tr(
-                    `Indicators computed from the ${fmt.format(data.detections)} real detections in Peru. Scope: one year (${data.first_date} → ${data.last_date}) and a single observer (VIIRS NOAA-20); ${pct(k.night)} of the detections were at night. They are context indicators for planning, not for tactical response. Comparing years and detecting anomalies requires the harmonized MODIS + VIIRS historical archive, under development in NINA.`,
-                    `Indicadores calculados con las ${fmt.format(data.detections)} detecciones reales del Perú. Alcance: un año (${data.first_date} → ${data.last_date}) y un solo observador (VIIRS NOAA-20); el ${pct(k.night)} de las detecciones fue nocturno. Son indicadores de contexto para planificar, no de respuesta táctica. Comparar años y detectar anomalías requiere el archivo histórico armonizado MODIS + VIIRS, en desarrollo en NINA.`,
+                    `Indicators from the harmonized MODIS + VIIRS archive for Peru (method ${evidence.method_version}, experimental), unit: VIIRS-equivalent active cell-days; a retrospective reading, not a tested alert. The animation behind them shows one year of real VIIRS NOAA-20 detections (${data.first_date} → ${data.last_date}, ${fmt.format(data.detections)} detections, ${pct(night)} at night). They are context indicators for planning, not for tactical response.`,
+                    `Indicadores del archivo armonizado MODIS + VIIRS del Perú (método ${evidence.method_version}, experimental), en celdas-día activas equivalentes VIIRS; es una lectura retrospectiva, no una alerta probada. La animación de fondo muestra un año de detecciones reales VIIRS NOAA-20 (${data.first_date} → ${data.last_date}, ${fmt.format(data.detections)} detecciones, el ${pct(night)} nocturnas). Son indicadores de contexto para planificar, no de respuesta táctica.`,
                   )}
                 </p>
               </section>
@@ -420,8 +430,12 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           )
         })()}
 
+      <Evidence e={evidence} />
+
+      <Team />
+
       <section
-        ref={data ? undefined : outro}
+        ref={data && evidence ? undefined : outro}
         className="landing-outro"
         aria-labelledby="landing-outro-title"
       >

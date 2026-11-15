@@ -2,6 +2,8 @@
 
 Global atlas with CesiumJS, a React/TypeScript interface, a FastAPI API and DuckDB queries. It uses real NASA FIRMS data and NASA GIBS cartography. The territory and period selection connects the viewer, the calendar, the comparison and the evidence. [Global status of 0.3](docs/GLOBAL_STATUS.md), [scope and processing](docs/GLOBAL_SCOPE.md).
 
+**The problem NINA solves, with its evidence: [docs/PROBLEM.md](docs/PROBLEM.md).** Harmonization pipeline and backend: [status, validation and limits](docs/BACKEND_STATUS.md). UX/UI integration: [harmonized product contract](docs/HARMONIZED_CONTRACT.md). The method lives in [`packages/nina/`](packages/nina/README.md) and runs offline; the server only reads its output ([ADR 0004](docs/adr/0004-offline-harmonization-pipeline.md)).
+
 Project for the **NASA Space Apps Challenge**: harmonize MODIS and VIIRS fire detections to answer whether a fire season is really unusual.
 
 ## Open the application

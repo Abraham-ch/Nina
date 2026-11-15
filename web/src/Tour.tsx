@@ -85,14 +85,6 @@ const steps = (): Step[] => [
       'Exporta los focos y los agregados en CSV, con la cita de NASA FIRMS y los filtros usados. Recuerda: son datos de contexto histórico, no para decisiones tácticas o a escala local.',
     ),
   },
-  {
-    target: '.story-start',
-    title: tr('10 · A guided story', '10 · Una historia guiada'),
-    body: tr(
-      '“Expedition” walks you through a real question: did the fire change, or the observer? You can come back to this guide at any time with the “Guide” button.',
-      '«Expedición» te lleva por una pregunta real: ¿cambió el fuego o cambió el observador? Puedes volver a esta guía cuando quieras con el botón «Guía».',
-    ),
-  },
 ]
 
 export default function Tour({ onClose }: { onClose: () => void }) {

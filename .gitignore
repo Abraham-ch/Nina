@@ -27,9 +27,13 @@ pytest-cache-files-*/
 !/source/**/.gitkeep
 /data_abraham/
 *.zip
+*.tgz
 
 # Verificaciones locales y artefactos de diseño
 /.nina-qa/
 /exa-results/
 design/gibs-capabilities.xml
 design/nina-design-preview.html
+
+# Data packages shared with the team by Drive (never committed)
+/team-share/

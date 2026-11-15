@@ -41,7 +41,7 @@ async def lifespan(app):
     yield
     POOL.shutdown(wait=False,cancel_futures=True)
 
-app=FastAPI(title='NINA · Atlas del fuego',version='0.3.0',lifespan=lifespan)
+app=FastAPI(title='NINA · Fire atlas',version='0.3.0',lifespan=lifespan)
 instalar(app)
 
 # Las rutas con `require()` rechazan por rol; se documentan aquí porque FastAPI
@@ -61,9 +61,9 @@ async def local_origin(request: Request,call_next):
 
 def existing(identifier):
     result=get_analysis(identifier)
-    if not result: raise HTTPException(404,'Análisis no encontrado')
+    if not result: raise HTTPException(404,'Analysis not found')
     with database() as c: revision=c.execute("SELECT md5(string_agg(id,',' ORDER BY id)) FROM batches").fetchone()[0]
-    if result['data_revision']!=revision or result.get('software_revision')!=code_revision(): raise HTTPException(409,'Los datos o el software se actualizaron. Vuelve a generar el análisis antes de exportar o preguntar.')
+    if result['data_revision']!=revision or result.get('software_revision')!=code_revision(): raise HTTPException(409,'The data or the software changed. Generate the analysis again before exportar o preguntar.')
     return result
 
 def set_job(identifier,state,progress,message,result=None):
@@ -104,12 +104,12 @@ def me(user:dict=Depends(require())):
 
 @app.get('/api/downloads',responses=PROTEGIDO)
 def downloads(user:dict=Depends(require('analista','admin'))):
-    """T1: historial propio de descargas ("Mis descargas"). Cada usuario solo ve las suyas."""
+    """T1: the user's own download history ("My downloads"). Each user only sees their own."""
     return downloads_for(user['id'])
 
 @app.get('/api/audit',responses=PROTEGIDO)
 def audit(user:dict=Depends(require('admin'))):
-    """T1: quién importó, sincronizó o entrenó, y cuándo. Visible solo para `admin`."""
+    """T1: who imported, synced or trained, and when. Visible only to `admin`."""
     return audit_entries()
 
 @app.get('/api/health')
@@ -133,8 +133,8 @@ def places():
 @app.get('/api/imagery/blue-marble/{z}/{x}/{y}.jpg')
 def imagery(z:int,x:int,y:int):
     try: path=imagery_tile(z,x,y)
-    except ValueError: raise HTTPException(404,'Tesela no disponible')
-    except Exception: raise HTTPException(503,'Imagen de NASA GIBS temporalmente no disponible')
+    except ValueError: raise HTTPException(404,'Tile not available')
+    except Exception: raise HTTPException(503,'NASA GIBS imagery temporarily unavailable')
     return FileResponse(path,media_type='image/jpeg',headers={'Cache-Control':'public, max-age=604800'})
 
 @app.get('/api/status')
@@ -167,7 +167,7 @@ def comparison(identifier:str,viirs:Literal['viirs-snpp','viirs-jpss1','viirs-jp
         layers.append({'source':source,'platform':platform,'selected':other['selected'],
                        'points':points_for_analysis(other,limit=8000),'analysis_id':other['id']})
     return {'layers':layers,'synthetic':False,'harmonized':False,
-            'note':'Conteos brutos del mismo período y área. Las pasadas no son simultáneas; sus diferencias no prueban un cambio real del fuego.'}
+            'note':'Raw counts for the same period and area. The overpasses are not simultaneous; their differences do not prove a real change in fire.'}
 
 @app.get('/api/analyses/{identifier}/evidence')
 @atomic_read
@@ -175,7 +175,7 @@ def evidence(identifier:str):
     result=existing(identifier)
     with database() as c: batches=rows(c,'SELECT filename,source,sha256,bytes,rows_loaded,rejected,url,imported_at,coverage_start,coverage_end,coverage_basis,processing,spatial_scope,spatial_geometry FROM batches ORDER BY source,coverage_start')
     scope=result['selection'].get('scope','PER')
-    geometry_provenance=json.loads((DATA/'boundaries'/'provenance.json').read_text()) if scope=='PER' and (DATA/'boundaries'/'provenance.json').exists() else {'crs':'WGS84 / EPSG:4326','selection':'world' if scope=='world' else 'GeoJSON de la selección; los países usan Natural Earth 110m','reference':'https://www.naturalearthdata.com/about/terms-of-use/','license':'Public Domain (Natural Earth)'}
+    geometry_provenance=json.loads((DATA/'boundaries'/'provenance.json').read_text()) if scope=='PER' and (DATA/'boundaries'/'provenance.json').exists() else {'crs':'WGS84 / EPSG:4326','selection':'world' if scope=='world' else 'GeoJSON of the selection; countries use Natural Earth 110m','reference':'https://www.naturalearthdata.com/about/terms-of-use/','license':'Public Domain (Natural Earth)'}
     return {'analysis':result,'batches':batches,'software_version':'0.3.0','synthetic':False,'geometry_provenance':geometry_provenance}
 
 def csv_output(data):
@@ -191,11 +191,11 @@ def export(identifier:str,kind:Literal['series','detections','manifest','report'
     tope_filas=max_export_rows()
     if downloads_last_hour(user['id'])>=max_downloads_per_hour():
         tope=max_downloads_per_hour()
-        raise HTTPException(429,f'Alcanzaste el máximo de {tope} descargas por hora. Vuelve más tarde o pide aumentar el límite.')
+        raise HTTPException(429,f'You reached the maximum of {tope} downloads per hour. Come back later or ask for a higher limit.')
     def guardar(count):
         record_download(user['id'],identifier,kind,count,result['selection'],result.get('data_revision'))
     def demas_filas():
-        return HTTPException(413,f'La exportación supera el máximo de {tope_filas} filas. Reduce el período o pide aumentar el límite.')
+        return HTTPException(413,f'The export exceeds the maximum of {tope_filas} rows. Shorten the period or ask for a higher limit.')
     filas=0
     if kind=='series':
         filas=len(result['months'])
@@ -224,8 +224,8 @@ def export(identifier:str,kind:Literal['series','detections','manifest','report'
         from fastapi.encoders import jsonable_encoder
         payload=json.dumps(jsonable_encoder(evidence(identifier)),ensure_ascii=False,indent=2);mime='application/json';suffix='json'
     else:
-        answer=respond(result,'prepara un informe')['answer']
-        payload='NINA · Informe de observaciones\n\n'+answer+'\n\n'+'\n'.join(result['limitations'])+'\n\nAnálisis: '+identifier+'\nFuentes:\n'+'\n'.join(result['references']);mime='text/plain';suffix='txt'
+        answer=respond(result,'prepare a report')['answer']
+        payload='NINA · Observations report\n\n'+answer+'\n\n'+'\n'.join(result['limitations'])+'\n\nAnalysis: '+identifier+'\nSources:\n'+'\n'.join(result['references']);mime='text/plain';suffix='txt'
     guardar(filas)
     return Response(payload,media_type=mime+';charset=utf-8',headers={'Content-Disposition':f'attachment; filename="NINA_{identifier}_{kind}.{suffix}"'})
 
@@ -253,22 +253,22 @@ def jobs():
 @app.get('/api/jobs/{identifier}')
 def job(identifier:str):
     with database() as c: found=rows(c,'SELECT * FROM jobs WHERE id=?',[identifier])
-    if not found: raise HTTPException(404,'Trabajo no encontrado')
+    if not found: raise HTTPException(404,'Job not found')
     return found[0]
 
 @app.post('/api/import',responses=PROTEGIDO)
 async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','viirs-jpss1','viirs-jpss2']=Form(...),coverage_start:date|None=Form(None),coverage_end:date|None=Form(None),spatial_scope:Literal['PER','world','custom']=Form('PER'),spatial_geometry:str|None=Form(None),user:dict=Depends(require('admin'))):
-    if coverage_start and coverage_end and coverage_start>coverage_end: raise HTTPException(422,'Rango de cobertura inválido')
+    if coverage_start and coverage_end and coverage_start>coverage_end: raise HTTPException(422,'Invalid coverage range')
     try:
         geometry=json.loads(spatial_geometry) if spatial_geometry else None
         Selection(scope=spatial_scope,geometry=geometry)
-    except (ValueError,TypeError): raise HTTPException(422,'Geometría del archivo inválida')
+    except (ValueError,TypeError): raise HTTPException(422,'Invalid file geometry')
     path=RAW/('upload_'+uuid.uuid4().hex+'.csv');size=0
     try:
         with path.open('wb') as out:
             while chunk:=await file.read(1024*1024):
                 size+=len(chunk)
-                if size>200_000_000: raise HTTPException(413,'Máximo 200 MB por archivo')
+                if size>200_000_000: raise HTTPException(413,'Maximum 200 MB per file')
                 out.write(chunk)
     except Exception:
         path.unlink(missing_ok=True);raise
@@ -290,7 +290,7 @@ class Sync(BaseModel):
 @app.post('/api/sync',responses=PROTEGIDO)
 def sync(body:Sync,user:dict=Depends(require('admin'))):
     key=os.getenv('FIRMS_MAP_KEY')
-    if not key: raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor para activar datos recientes.')
+    if not key: raise HTTPException(409,'Set FIRMS_MAP_KEY in .env and restart the server to enable recent data.')
     record_audit(user,'sync',body.source,'queued')
     return submit('sync_nrt',lambda:acquire([body.source],body.start,body.days,'PER'))
 
@@ -309,9 +309,9 @@ class Acquisition(BaseModel):
 
 @app.post('/api/acquisitions',responses=PROTEGIDO)
 def acquisition(body:Acquisition,user:dict=Depends(require('admin'))):
-    if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
+    if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Set FIRMS_MAP_KEY in .env and restart the server')
     try: Selection(scope=body.scope,geometry=body.geometry)
-    except ValueError as error: raise HTTPException(422,'Geometría o ámbito inválidos')
+    except ValueError as error: raise HTTPException(422,'Invalid geometry or scope')
     record_audit(user,'acquire',f'{len(body.products)} productos','queued')
     return submit('acquire_'+body.scope,lambda:acquire(body.products,body.start,body.days,body.scope,body.geometry))
 
@@ -329,11 +329,14 @@ class ArchiveMonth(BaseModel):
 
 @app.post('/api/acquisitions/month',responses=PROTEGIDO)
 def archive_month(body:ArchiveMonth,user:dict=Depends(require('admin'))):
-    if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
+    if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Set FIRMS_MAP_KEY in .env and restart the server')
     try: Selection(scope=body.scope,geometry=body.geometry)
-    except ValueError: raise HTTPException(422,'Geometría o ámbito inválidos')
+    except ValueError: raise HTTPException(422,'Invalid geometry or scope')
     record_audit(user,'acquire_month',f'{body.product} {body.year}-{body.month:02d}','queued')
     return submit('archive_month',lambda progress:acquire_month(body.product,body.year,body.month,body.scope,body.geometry,progress),with_progress=True)
+
+from .harmonized import router as harmonized_router
+app.include_router(harmonized_router)
 
 dist=ROOT/'web'/'dist'
 if dist.exists(): app.mount('/',StaticFiles(directory=str(dist),html=True),name='web')
