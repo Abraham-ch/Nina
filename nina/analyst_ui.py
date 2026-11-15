@@ -22,6 +22,7 @@ VISUAL_KINDS = {
     "jump of raw counts that the harmonization removes",
     "events_by_year": "satellite fire events per year next to registered emergencies or incidents",
     "forest_loss_by_year": "Hansen/UMD tree-cover loss per year, total and co-located with fire (Peru)",
+    "burned_area_by_year": "MODIS MCD64A1 burned area per year (GWIS), for a country or a Peruvian department",
     "department_ranking": "table of Peru's departments for one month (activity, anomaly, rank, events, emergencies)",
     "validation_strata": "table of the validation strata (biomes) of one country: MODIS bias and Spearman, the "
     "NOAA-20 noise ceiling and the status",
@@ -42,6 +43,8 @@ TEXT = {
         "annual_totals": "Harmonized versus raw annual totals, {place}",
         "events_by_year": "Fire events and registered cases per year, {place}",
         "forest_loss_by_year": "Tree-cover loss per year, {place}",
+        "burned_area_by_year": "Burned area per year (MODIS MCD64A1), {place}",
+        "burned": "Burned area (ha)", "source_burned": "MODIS MCD64A1 c6.1 burned area aggregated by GWIS (JRC/Copernicus), CC BY 4.0; independent of NINA's hotspots",
         "department_ranking": "Peru's departments, {month_name} {year}",
         "validation_strata": "Validation strata of {country}",
         "climate_departments": "Climate context by department, {month_name} {year}",
@@ -72,6 +75,8 @@ TEXT = {
         "annual_totals": "Totales anuales armonizados frente a crudos, {place}",
         "events_by_year": "Eventos de incendio y casos registrados por año, {place}",
         "forest_loss_by_year": "Pérdida de cobertura arbórea por año, {place}",
+        "burned_area_by_year": "Área quemada por año (MODIS MCD64A1), {place}",
+        "burned": "Área quemada (ha)", "source_burned": "Área quemada MODIS MCD64A1 c6.1 agregada por GWIS (JRC/Copernicus), CC BY 4.0; independiente de los focos de NINA",
         "department_ranking": "Departamentos del Perú, {month_name} de {year}",
         "validation_strata": "Estratos de validación de {country}",
         "climate_departments": "Contexto climático por departamento, {month_name} de {year}",
@@ -226,6 +231,18 @@ def forest_loss_by_year(identifier: str, report: dict[str, Any], language: str) 
                   series=[VisualSeries(name=t["loss"], values=[r(row["loss_ha"], 0) for row in rows]),
                           VisualSeries(name=t["loss_fire"], values=[r(row["loss_ha_with_fire"], 0) for row in rows])],
                   highlight=str(report["period"]["year"]), source=t["source_forest"])
+
+
+def burned_area_by_year(identifier: str, report: dict[str, Any], language: str) -> dict[str, Any] | None:
+    t = TEXT[language]
+    burned = report["sections"].get("burned_area") or {}
+    if burned.get("status") != "available":
+        return None
+    rows = burned["by_year"]
+    return visual(identifier, "burned_area_by_year", language, {"place": burned["unit"]}, type="chart", chart="bar",
+                  unit="ha", categories=[str(r["year"]) for r in rows],
+                  series=[VisualSeries(name=t["burned"], values=[r(row["burned_ha"], 0) for row in rows])],
+                  highlight=str(report["period"]["year"]), note=burned.get("note"), source=t["source_burned"])
 
 
 def department_ranking(identifier: str, table: dict[str, Any], rows: list[dict[str, Any]], language: str,

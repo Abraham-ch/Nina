@@ -303,7 +303,7 @@ def build_pdf(report: dict[str, Any], image_paths: dict[str, Path] | None = None
     flow += [Spacer(1, 6), Paragraph(para(t["scope"]), STYLES["note"])]
 
     trend, events = rd.trend_chart(doc), rd.events_chart(doc)
-    if trend or events:
+    if trend or events or rd.burned_chart(doc):
         flow += [PageBreak(), Paragraph(para(t["part_evidence"]).upper(), STYLES["part"])]
         flow += section(t["chart_trend"], t["chart_trend_note"], trend,
                         [(rd.FIRE, t["legend_harmonized"]), (rd.RAW, t["legend_raw"])])
@@ -311,6 +311,12 @@ def build_pdf(report: dict[str, Any], image_paths: dict[str, Path] | None = None
             label = s["events"].get("emergencies_label") or t["legend_emergencies"]
             flow += section(t["chart_events"], t["chart_events_note"], events,
                             [(rd.FIRE, t["legend_events"]), (rd.BLUE, label)], checks(events))
+
+    burned = rd.burned_chart(doc)
+    if burned:
+        unit = (s.get("burned_area") or {}).get("unit", "")
+        flow += section(f'{t["chart_burned"]} (ha)', rd.fill(t["chart_burned_note"], unit=unit), burned, None,
+                        checks(burned))
 
     forest = rd.forest_chart(doc)
     pictures = imagery_block(doc, image_paths or {})

@@ -40,6 +40,10 @@ LABELS = {
         "legend_events": "Detected fire events", "legend_emergencies": "INDECI emergencies",
         "chart_subdivisions": "By subdivision, {y}",
         "chart_forest": "Tree-cover loss and fire activity",
+        "chart_burned": "Burned area per year (MODIS MCD64A1)",
+        "chart_burned_note": "Area burned according to the MODIS MCD64A1 burned-area product (500 m), aggregated by GWIS (JRC/Copernicus) for {unit}. It is independent of the hotspots NINA harmonizes and often misses fires much smaller than one pixel (~25 ha).",
+        "burned_month": "{month} {year}: {area} ha burned, rank {rank} of {of} for that month (median of the other years {median} ha).",
+        "burned_ends": "The burned-area table ends in {end}; the analysed month is not covered yet.",
         "legend_with_fire": "In cells with fire activity", "legend_other": "Other loss",
         "method_break": "method change", "chart_climate": "Climatic conditions",
         "col_department": "Department", "col_precip": "Rainfall percentile", "col_vpd": "Air dryness (VPD z)",
@@ -105,6 +109,10 @@ LABELS = {
         "legend_events": "Incendios detectados", "legend_emergencies": "Emergencias INDECI",
         "chart_subdivisions": "Por subdivisión, {y}",
         "chart_forest": "Pérdida de cobertura arbórea y actividad de fuego",
+        "chart_burned": "Área quemada por año (MODIS MCD64A1)",
+        "chart_burned_note": "Área quemada según el producto MODIS MCD64A1 (500 m), agregada por GWIS (JRC/Copernicus) para {unit}. Es independiente de los focos que NINA armoniza y suele omitir incendios mucho menores que un píxel (~25 ha).",
+        "burned_month": "{month} de {year}: {area} ha quemadas, puesto {rank} de {of} para ese mes (mediana de los demás años {median} ha).",
+        "burned_ends": "La tabla de área quemada termina en {end}; el mes analizado aún no está cubierto.",
         "legend_with_fire": "En celdas con actividad de fuego", "legend_other": "Resto de la pérdida",
         "method_break": "cambio de método", "chart_climate": "Condiciones climáticas",
         "col_department": "Departamento", "col_precip": "Percentil de lluvia", "col_vpd": "Sequedad del aire (DPV z)",
@@ -593,6 +601,42 @@ def key_points(doc: Doc) -> str:
             + "".join(f"<li>{esc(line)}</li>" for line in lines) + "</ul></div>")
 
 
+def burned_chart(doc: Doc) -> str:
+    t, burned = doc.t, doc.r["sections"].get("burned_area") or {}
+    if burned.get("status") != "available" or not burned.get("by_year"):
+        return ""
+    rows = burned["by_year"]
+    width, height, x0, x1, y0, y1 = 680, 220, 64, 668, 18, 186
+    top = nice_max(max(r["burned_ha"] for r in rows))
+    group = (x1 - x0) / len(rows)
+    bar = group * 0.7
+    selected_year = doc.r["period"]["year"]
+    out = [f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{esc(t["chart_burned"])}">',
+           y_axis(doc, top, x0, x1, y0, y1)]
+    xs = []
+    for i, r in enumerate(rows):
+        centre = x0 + group * (i + 0.5)
+        xs.append(centre)
+        h = (y1 - y0) * r["burned_ha"] / top
+        colour = FIRE_DARK if r["year"] == selected_year else "#fdba74"
+        out.append(f'<rect x="{centre - bar / 2:.1f}" y="{y1 - h:.1f}" width="{bar:.1f}" height="{h:.1f}" fill="{colour}" rx="1"/>')
+    out.append(x_labels([str(r["year"]) for r in rows], xs, y1 + 18, min_gap=42))
+    out.append("</svg>")
+    lines = []
+    month = burned.get("selected_month")
+    if month:
+        lines.append(fill(t["burned_month"], month=t["months_long"][month["month"] - 1], year=month["year"],
+                          area=doc.n(month["burned_ha"]), rank=month["rank"], of=month["rank_of"],
+                          median=doc.n(month["median_other_years_ha"])))
+    else:
+        lines.append(fill(t["burned_ends"], end=burned["coverage"][1]))
+    note = fill(t["chart_burned_note"], unit=burned["unit"])
+    if burned.get("scope") == "department" and doc.r["territory"]["type"] in {"province", "district"}:
+        note += " " + burned["note"].split(". ")[-1]
+    return (f'<section><h2>{esc(t["chart_burned"])} (ha)</h2><p class="note">{esc(note)}</p>{"".join(out)}'
+            + "".join(f'<p class="check">{esc(line)}</p>' for line in lines if line) + "</section>")
+
+
 def forest_chart(doc: Doc) -> str:
     t, forest = doc.t, doc.r["sections"]["forest"]
     if forest["status"] != "available" or not forest["by_year"]:
@@ -720,7 +764,7 @@ def render(report: dict[str, Any], embedded_images: dict[str, str] | None = None
                    f'<a href="/api/reports/territorial/{esc(report["id"])}/package" download>{esc(t["download_zip"])}</a></div>')
     else:
         toolbar = ""  # the package already holds report.pdf
-    evidence = [trend_chart(doc), events_chart(doc)]
+    evidence = [trend_chart(doc), events_chart(doc), burned_chart(doc)]
     detail = [forest_chart(doc), imagery(doc, embedded_images)]
     annex = [calendar_chart(doc), subdivision_table(doc), climate_table(doc), quality(doc)]
     parts = [

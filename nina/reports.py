@@ -40,7 +40,7 @@ from .harmonized import (
 
 router = APIRouter(tags=["Territorial report"])
 CONTEXT = SOURCE / "context"
-REPORT_VERSION = "1"
+REPORT_VERSION = "2"  # 2: burned area (MODIS MCD64A1 via GWIS)
 EVENT_MIN_CELL_DAYS = 5  # "significant" fire events: at least five active cell-days
 SEASON_MONTHS = (7, 8, 9, 10)  # Peruvian fire season used for season totals
 TREND_FIRST_YEAR = 2003
@@ -455,6 +455,99 @@ def territory_cells_all(connection, territory: dict[str, Any]) -> str | None:
     return None
 
 
+# Natural Earth names that differ from the GWIS/GADM country names of the burned-area table.
+GWIS_ISO3 = {
+    "Bosnia and Herz.": "BIH", "Central African Rep.": "CAF", "Congo": "COG", "Czechia": "CZE",
+    "Dem. Rep. Congo": "COD", "Dominican Rep.": "DOM", "Eq. Guinea": "GNQ", "N. Cyprus": "XNC",
+    "Palestine": "PSE", "S. Sudan": "SSD", "Solomon Is.": "SLB", "United States of America": "USA",
+    "W. Sahara": "ESH", "eSwatini": "SWZ",
+}
+# INEI department → GADM level-1 units (GADM splits Lima region and Lima province).
+GADM_PERU = {"LIMA": ["Lima", "Lima Province"]}
+
+
+def section_burned_area(connection, territory: dict[str, Any], year: int, month: int) -> dict[str, Any]:
+    """Monthly burned area (MODIS MCD64A1 c6.1, aggregated by GWIS) for a country or a Peruvian department."""
+    path = CONTEXT / "burned_area/gwis_mcd64a1_admin1.parquet"
+    if not path.exists():
+        return {"status": "not_available", "reason": "burned area layer not built"}
+    source = path.as_posix()
+    scope, unit = "country", territory["name"]
+    if territory["type"] == "polygon":
+        return {"status": "not_available",
+                "reason": "burned-area statistics are published by country and first-level unit, not for drawn areas"}
+    if territory.get("ubigeo"):
+        code = territory["ubigeo"][:2]
+        department = next((p["department"] for p, _ in districts() if p["ubigeo"].startswith(code)), None)
+        if department is None:
+            return {"status": "not_available", "reason": "unknown department"}
+        key = unicodedata_fold(department)
+        regions = [r for (r,) in connection.execute(
+            f"SELECT DISTINCT region FROM read_parquet('{source}') WHERE iso3='PER'").fetchall()]
+        names = GADM_PERU.get(key) or [r for r in regions if unicodedata_fold(r) == key]
+        if not names:
+            return {"status": "not_available", "reason": f"no burned-area unit for {department}"}
+        where, args = "iso3='PER' AND region IN (SELECT unnest(?::VARCHAR[]))", [names]
+        scope, unit = "department", display_name(department)
+    else:
+        countries = connection.execute(f"SELECT DISTINCT iso3, country FROM read_parquet('{source}')").fetchall()
+        iso3 = GWIS_ISO3.get(territory["country"]) or next(
+            (i for i, c in countries if c == territory["country"]), None)
+        if iso3 is None:
+            return {"status": "not_available", "reason": f"no burned-area statistics for {territory['country']}"}
+        where, args = "iso3=?", [iso3]
+    rows = connection.execute(
+        f"""SELECT year, month, sum(burned_ha), sum(forest), sum(savannas), sum(shrublands_grasslands),
+            sum(croplands), sum(other) FROM read_parquet('{source}') WHERE {where} GROUP BY 1, 2 ORDER BY 1, 2""",
+        args,
+    ).fetchall()
+    if not rows:
+        return {"status": "not_available", "reason": "no burned-area rows for this territory"}
+    monthly = {(int(y), int(m)): float(v or 0) for y, m, v, *_ in rows}
+    yearly: dict[int, float] = {}
+    classes: dict[int, dict[str, float]] = {}
+    names = ["forest", "savannas", "shrublands_grasslands", "croplands", "other"]
+    for y, _m, v, *parts in rows:
+        yearly[int(y)] = yearly.get(int(y), 0.0) + float(v or 0)
+        bucket = classes.setdefault(int(y), dict.fromkeys(names, 0.0))
+        for name, part in zip(names, parts, strict=True):
+            bucket[name] += float(part or 0)
+    last_year, last_month = max(monthly)
+    selected = None
+    if (year, month) in monthly:
+        value = monthly[(year, month)]
+        history = [v for (y, m), v in monthly.items() if m == month and y != year]
+        median = statistics.median(history) if history else None
+        same_month = sorted((v for (y, m), v in monthly.items() if m == month), reverse=True)
+        selected = {"year": year, "month": month, "burned_ha": value, "median_other_years_ha": median,
+                    "anomaly_percent": 100 * (value / median - 1) if median else None,
+                    "rank": same_month.index(value) + 1, "rank_of": len(same_month)}
+    manifest_path = CONTEXT / "burned_area/gwis_mcd64a1_admin1.json"
+    manifest = load_json(manifest_path) if manifest_path.exists() else {}
+    return {
+        "status": "available",
+        "scope": scope,
+        "unit": unit,
+        "source": "MODIS MCD64A1 collection 6.1 burned area (500 m), aggregated by GWIS (JRC/Copernicus); CC BY 4.0",
+        "note": "Independent of the hotspots NINA harmonizes; fires much smaller than one 500 m pixel (~25 ha) are "
+                "often missed." + (" Shown for the department: the table is published by first-level unit."
+                                   if territory["type"] in {"province", "district"} else ""),
+        "coverage": [f"{min(monthly)[0]}-{min(monthly)[1]:02d}", f"{last_year}-{last_month:02d}"],
+        "by_year": [{"year": y, "burned_ha": v} for y, v in sorted(yearly.items())],
+        "selected_month": selected,
+        "selected_year": {"year": year, "burned_ha": yearly[year], "by_class": classes[year]} if year in yearly else None,
+        "license": manifest.get("license"),
+        "retrieved": manifest.get("retrieved"),
+    }
+
+
+def unicodedata_fold(text: str) -> str:
+    import unicodedata
+
+    plain = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode()
+    return " ".join(plain.upper().replace("-", " ").split())
+
+
 def section_forest(connection, territory: dict[str, Any], year: int) -> dict[str, Any]:
     loss_path = CONTEXT / "forest_loss/forest_loss_cell_year.parquet"
     forest_path = CONTEXT / "forest_loss/forest_2000_cell.parquet"
@@ -688,6 +781,8 @@ TEXT = {
         "events_registry": "{year}: {events} significant fire events detected by satellite; {label}: {emergencies}.",
         "indeci_partial": " (INDECI records available through {through}.)",
         "forest": "Tree-cover loss {year}: {loss} ha, of which {fire} ha in cells with fire activity.",
+        "burned": "Burned area {year} (MODIS MCD64A1, GWIS): {area} ha.",
+        "burned_month": "Burned area in {month} {year} (MODIS MCD64A1, GWIS): {area} ha, rank {rank} of {of} for that month.",
         "climate": "Climate {period}: {drought} of {total} department(s) under drought conditions (low precipitation and high vapour-pressure deficit).",
     },
     "es": {
@@ -703,6 +798,8 @@ TEXT = {
         "events_registry": "{year}: {events} evento(s) de incendio significativo(s) detectado(s) por satélite; {label}: {emergencies}.",
         "indeci_partial": " (registros de INDECI disponibles hasta {through}).",
         "forest": "Pérdida de cobertura arbórea {year}: {loss} ha, de las cuales {fire} ha en celdas con actividad de fuego.",
+        "burned": "Área quemada {year} (MODIS MCD64A1, GWIS): {area} ha.",
+        "burned_month": "Área quemada en {month} de {year} (MODIS MCD64A1, GWIS): {area} ha, puesto {rank} de {of} para ese mes.",
         "climate": "Clima {period}: {drought} de {total} departamento(s) en condición de sequía (baja precipitación y alto déficit de presión de vapor).",
     },
 }
@@ -818,6 +915,16 @@ def summary_items(report: dict[str, Any]) -> list[tuple[str, str]]:
             lines.append(("events", line))
         else:
             lines.append(("events", t["events_only"].format(year=row["year"], events=n(row["significant_events"]))))
+    ba = s.get("burned_area") or {}
+    if ba.get("status") == "available":
+        if ba.get("selected_month"):
+            sm = ba["selected_month"]
+            lines.append(("burned", t["burned_month"].format(
+                month=MONTH_NAMES[language][sm["month"] - 1], year=sm["year"], area=n(sm["burned_ha"]),
+                rank=sm["rank"], of=sm["rank_of"])))
+        elif ba.get("selected_year"):
+            lines.append(("burned", t["burned"].format(year=ba["selected_year"]["year"],
+                                                       area=n(ba["selected_year"]["burned_ha"]))))
     fo = s["forest"]
     if fo["status"] == "available" and fo.get("selected_year"):
         lines.append(("forest", t["forest"].format(year=fo["selected_year"]["year"], loss=n(fo["selected_year"]["loss_ha"]),
@@ -851,6 +958,7 @@ def build_report(request: ReportRequest) -> dict[str, Any]:
             "history": section_history(connection, months, request.year),
             "events": section_events(connection, territory, request.year, request.language),
             "forest": section_forest(connection, territory, request.year),
+            "burned_area": section_burned_area(connection, territory, request.year, request.month),
             "climate": section_climate(territory, request.year, request.month, connection),
             "quality": section_quality(selected, manifest),
             "imagery": section_imagery(connection, territory, request.year, request.month),
@@ -1171,6 +1279,8 @@ def report_package(identifier: str):
     }
     if s["events"]["status"] == "available":
         files["events_by_year.csv"] = csv_bytes(s["events"]["by_year"], ["year", "events", "significant_events", "emergencies"])
+    if (s.get("burned_area") or {}).get("status") == "available":
+        files["burned_area_by_year.csv"] = csv_bytes(s["burned_area"]["by_year"], ["year", "burned_ha"])
     if s["forest"]["status"] == "available":
         files["forest_loss_by_year.csv"] = csv_bytes(s["forest"]["by_year"], ["year", "loss_ha", "loss_ha_with_fire"])
     if s["climate"]["status"] == "available":
