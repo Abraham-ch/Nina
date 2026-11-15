@@ -737,6 +737,7 @@ export default function App() {
                   drawing={drawing}
                   onDrawing={setDrawing}
                   onGeometry={applyGeometry}
+                  onClear={placeId === 'custom' ? () => choosePlace('world') : undefined}
                   onInspect={setInspected}
                   flat={flat}
                   onFlat={setFlat}

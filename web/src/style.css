@@ -10,6 +10,8 @@
   --line: #dce2da;
   --ocean: #071820;
   --sand: #e9bc78;
+  /* Text on sand surfaces (primary buttons, pressed toggles, selection). */
+  --on-sand: #142f35;
   --modis: #f3b968;
   --viirs: #80d2df;
 }
@@ -81,8 +83,8 @@ optgroup {
   color: #203a3c;
 }
 ::selection {
-  background: #e9bc78;
-  color: #142f35;
+  background: var(--sand);
+  color: var(--on-sand);
 }
 .sr-only {
   position: absolute;
@@ -121,7 +123,7 @@ optgroup {
 }
 .button.sand {
   background: var(--sand);
-  color: #18343b;
+  color: var(--on-sand);
 }
 .button.dark {
   background: #183d42;
@@ -666,9 +668,22 @@ optgroup {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px;
-  background: #d7d6ba;
+  padding: 7px 10px;
+  border-radius: 2px;
+  background: var(--sand);
+  color: var(--on-sand);
+  font-weight: 500;
   white-space: nowrap;
+}
+.draw-help button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* Cancel: secondary, no fill. */
+.draw-help button:last-child {
+  background: transparent;
+  color: inherit;
+  padding: 7px;
 }
 .point-inspector {
   position: absolute;
@@ -3625,7 +3640,7 @@ optgroup {
 }
 .lang-switch > button[aria-pressed='true'] {
   background: var(--sand);
-  color: #142f35;
+  color: var(--on-sand);
 }
 .lang-switch.on-dark {
   border-color: rgba(232, 238, 240, 0.3);
