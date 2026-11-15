@@ -79,6 +79,20 @@ const Globe = lazy(() => import('./Globe'))
 export type Tab = 'atlas' | 'calendar' | 'priority' | 'lab' | 'data'
 export type Modal = '' | 'evidence' | 'export' | 'explain' | 'area'
 const NOW = new Date()
+// The example of the challenge video (CONAE activation ACT#356): the fire of Chilecito, La Rioja, Argentina,
+// July 2026, around Guanchín in the Famatina range.
+const CHILECITO: Geometry = {
+  type: 'Polygon',
+  coordinates: [
+    [
+      [-67.75, -29.35],
+      [-67.05, -29.35],
+      [-67.05, -28.75],
+      [-67.75, -28.75],
+      [-67.75, -29.35],
+    ],
+  ],
+}
 const DEFAULT: Selection = {
   scope: 'PER', // Peru by default: the world analysis (~2.5 s + 2.8 MB of points) loads only when picked
   area_label: '',
@@ -442,6 +456,22 @@ export default function App() {
       })
       return
     }
+    if (id === 'case:chilecito') {
+      setPlaceId('custom')
+      change({
+        scope: 'custom',
+        area_label: 'Chilecito, La Rioja (Argentina)',
+        geometry: CHILECITO,
+        department: 'all',
+        metric: 'observed',
+        selected_year: 2026,
+        selected_month: 7,
+        year_start: 2002,
+        year_end: 2026,
+        ...(readiness?.available ? { source: HARMONIZED, platform: 'all' } : {}),
+      })
+      return
+    }
     if (id.startsWith('region:')) {
       const chosen = regions?.geojson.features.find((f) => f.properties.id === id.slice(7))
       if (chosen)
@@ -706,6 +736,12 @@ export default function App() {
             <option value="world">{tr('The planet', 'El planeta')}</option>
             <option value="PER">
               {tr('Peru · historical archive', 'Perú · archivo histórico')}
+            </option>
+            <option value="case:chilecito">
+              {tr(
+                'Challenge example · Chilecito, Argentina (Jul 2026)',
+                'Ejemplo del reto · Chilecito, Argentina (jul 2026)',
+              )}
             </option>
             {placeId === 'custom' && (
               <option value="custom">{tr('Custom area', 'Área personalizada')}</option>
