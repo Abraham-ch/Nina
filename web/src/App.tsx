@@ -231,15 +231,28 @@ export default function App() {
   const firstRevision = useRef(dataRevision)
   if (firstRevision.current === undefined) firstRevision.current = dataRevision
   const revisionKey = dataRevision === firstRevision.current ? 'initial' : dataRevision
+  // Picking another month in the calendar only moves the indicators: the loaded series stays on screen and
+  // the new month's analysis (needed by the map and the report) arrives in the background.
+  const { selected_year: _year, selected_month: _month, ...seriesSelection } = selection
+  const seriesKey = JSON.stringify([
+    seriesSelection,
+    revisionKey,
+    isHarmonized && !!regions && !!places,
+  ])
+  const lastSeries = useRef('')
   useEffect(() => {
     if (selection.scope === 'custom' && !selection.geometry) return
     const abort = new AbortController()
-    setLoading(true)
-    setAnalysis(null)
-    setPoints(null)
-    setComparison(null)
+    const monthOnly = tab === 'calendar' && lastSeries.current === seriesKey
+    lastSeries.current = seriesKey
+    if (!monthOnly) {
+      setLoading(true)
+      setAnalysis(null)
+      setPoints(null)
+      setComparison(null)
+      setHarmonized(null)
+    }
     setInspected(null)
-    setHarmonized(null)
     const request = isHarmonized
       ? post<HarmonizedAnalysis>('/harmonized/analyses', harmonizedBody(), abort.signal).then(
           (h) => {
@@ -1459,7 +1472,16 @@ export default function App() {
         {tab === 'calendar' && (
           <Calendar
             label={label}
-            analysis={analysis}
+            analysis={
+              analysis && {
+                ...analysis,
+                selected:
+                  analysis.months.find(
+                    (m) =>
+                      m.year === selection.selected_year && m.month === selection.selected_month,
+                  ) || analysis.selected,
+              }
+            }
             harmonized={harmonized}
             selection={selection}
             loading={loading}
