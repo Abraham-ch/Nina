@@ -12,6 +12,7 @@ __pycache__
 tests
 source
 !source/review
+!source/context
 source/review/data
 node_modules
 docs

@@ -211,7 +211,7 @@ def _country_names(path: str, stamp: int) -> dict[str, str]:
 
 
 def country_names() -> dict[str, str]:
-    path = harmonized.ROOT / "web/public/assets/countries.geojson"
+    path = harmonized.countries_path()
     return _country_names(str(path), path.stat().st_mtime_ns) if path.exists() else {"PERU": "Peru"}
 
 

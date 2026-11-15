@@ -5,11 +5,12 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
+      - ./source:/app/source
+    # Every setting and key comes from .env (never committed); the server reads it only inside the container.
+    env_file:
+      - path: .env
+        required: false
     environment:
-      FIRMS_MAP_KEY: ${FIRMS_MAP_KEY:-}
-      EARTHDATA_USERNAME: ${EARTHDATA_USERNAME:-}
-      EARTHDATA_PASSWORD: ${EARTHDATA_PASSWORD:-}
-      NINA_LLM_BASE_URL: ${NINA_LLM_BASE_URL:-}
-      NINA_LLM_API_KEY: ${NINA_LLM_API_KEY:-}
-      NINA_LLM_MODEL: ${NINA_LLM_MODEL:-}
+      NINA_DATA_DIR: /app/data
+      NINA_SOURCE_DIR: source
     restart: unless-stopped

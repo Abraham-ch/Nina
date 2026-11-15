@@ -31,6 +31,7 @@ from .harmonized import (
     HarmonizedSelection,
     compare,
     country_shapes,
+    countries_path,
     load_json,
     month_to_date,
     monthly_calendar,
@@ -829,7 +830,7 @@ def gibs_layers(day: date) -> list[str]:
 def territory_shape(territory: dict[str, Any]) -> Any:
     if territory["polygon"] is not None:
         return territory["polygon"]
-    path = ROOT / "web/public/assets/countries.geojson"
+    path = countries_path()
     shapes = dict(country_shapes(str(path), path.stat().st_mtime_ns))
     return shapes.get(territory["country"])
 
