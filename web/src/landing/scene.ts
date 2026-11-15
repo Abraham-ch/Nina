@@ -368,9 +368,15 @@ export function createScene(
     canvas.width = Math.round(W * dpr)
     canvas.height = Math.round(H * dpr)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    const m = W >= 640 ? { t: 92, r: 86, b: 104, l: 80 } : { t: 84, r: 22, b: 96, l: 44 }
-    plot = { x: m.l, y: m.t, w: W - m.l - m.r, h: H - m.t - m.b }
-    worldView = fit(WORLD, plot)
+    // Phones: the plot starts below the header button and its Y axis is capped (tall screens would stretch it
+    // over the hero text); the world is anchored at the top of the plot, above the title.
+    const m = W >= 640 ? { t: 92, r: 86, b: 104, l: 80 } : { t: 140, r: 22, b: 96, l: 44 }
+    const plotW = W - m.l - m.r
+    plot = { x: m.l, y: m.t, w: plotW, h: W >= 640 ? H - m.t - m.b : Math.min(H - m.t - m.b, plotW * 1.6) }
+    worldView =
+      W >= 640
+        ? fit(WORLD, plot)
+        : fit(WORLD, { ...plot, h: Math.min(plot.h, (plot.w * (WORLD[3] - WORLD[1])) / (WORLD[2] - WORLD[0])) })
     const pad: Box = [peruBox[0] - 1.2, peruBox[1] - 1, peruBox[2] + 1.2, peruBox[3] + 1]
     peruView = fit(
       pad,
@@ -498,7 +504,10 @@ export function createScene(
       left = plot.x - 26
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
-    for (let v = Math.ceil(s0 / latStep) * latStep; v <= s1; v += latStep) {
+    // Phones: latitude ticks stop at the planet's band, so the axis never runs down beside the hero text.
+    const lat0 = W < 640 ? Math.max(s0, WORLD[1]) : s0,
+      lat1 = W < 640 ? Math.min(s1, WORLD[3]) : s1
+    for (let v = Math.ceil(lat0 / latStep) * latStep; v <= lat1; v += latStep) {
       const y = Y(v)
       ctx.beginPath()
       ctx.moveTo(left, y)

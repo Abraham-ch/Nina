@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 import httpx
 import ssl
 import truststore
@@ -49,7 +50,8 @@ PROTEGIDO={401:{'description':'Authentication required'},403:{'description':'The
 async def local_origin(request: Request,call_next):
     if request.method in ['POST','PUT','PATCH','DELETE']:
         origin=request.headers.get('origin')
-        if origin and origin not in ['http://127.0.0.1:8000','http://localhost:8000','http://127.0.0.1:8001','http://localhost:8001','http://127.0.0.1:5173','http://localhost:5173']:
+        # Same origin (the deployed site posting to itself) or a local development server.
+        if origin and urlsplit(origin).netloc!=request.headers.get('host') and origin not in ['http://127.0.0.1:8000','http://localhost:8000','http://127.0.0.1:8001','http://localhost:8001','http://127.0.0.1:5173','http://localhost:5173']:
             return Response('Origen no permitido',status_code=403)
     response=await call_next(request)
     response.headers['X-Content-Type-Options']='nosniff'

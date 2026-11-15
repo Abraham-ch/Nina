@@ -37,3 +37,7 @@ design/nina-design-preview.html
 
 # Data packages shared with the team by Drive (never committed)
 /team-share/
+
+# Fly upload scratch
+up/
+*.tgz

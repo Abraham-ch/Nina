@@ -4,11 +4,16 @@
 .nina-qa
 data/*
 !data/boundaries
+!data/nina.duckdb
 exa-results
 web/node_modules
 web/dist
 __pycache__
 tests
 source
+!source/review
+source/review/data
 node_modules
 docs
+up
+*.tgz

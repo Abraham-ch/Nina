@@ -131,7 +131,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           <span>{tr('The memory of fire', 'La memoria del fuego')}</span>
         </span>
         <div className="landing-header-actions">
-          <LangSwitch className="on-dark" />
+          <LangSwitch className="on-dark landing-lang" />
           <button className="landing-enter" onClick={onEnter}>
             {tr('Open the atlas', 'Abrir el atlas')}
           </button>

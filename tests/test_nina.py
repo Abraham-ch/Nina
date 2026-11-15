@@ -92,6 +92,8 @@ def test_stale_analysis_and_grounded_assistant(client):
 def test_hostile_origin_and_missing_key(client,monkeypatch):
     c,path=client
     assert c.post('/api/models/train',headers={'Origin':'https://untrusted.example'}).status_code==403
+    # The deployed site posting to itself (same host, behind a TLS proxy) is allowed.
+    assert c.post('/api/analyses',json={},headers={'Origin':'https://nina.example','Host':'nina.example'}).status_code!=403
     monkeypatch.delenv('FIRMS_MAP_KEY',raising=False)
     assert c.post('/api/sync',json={'start':'2026-11-01','days':1}).status_code==409
 

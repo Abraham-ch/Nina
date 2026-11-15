@@ -326,8 +326,14 @@ def country_shapes(path: str, modified: int):
     ]
 
 
-def selected_countries(selection):
+def countries_path():
+    # The Docker image ships only the built web app (web/dist), not web/public.
     path = ROOT / "web/public/assets/countries.geojson"
+    return path if path.exists() else ROOT / "web/dist/assets/countries.geojson"
+
+
+def selected_countries(selection):
+    path = countries_path()
     shapes = country_shapes(str(path), path.stat().st_mtime_ns)
     if selection.country != "world":
         shapes = [(name, shape) for name, shape in shapes if name == selection.country]
@@ -401,7 +407,7 @@ def drop_border_slivers(connection, selection, names):
         kept = [name for name in names if shares.get(name, 0) / total >= BORDER_SLIVER_SHARE]
     else:  # No fire cell inside the polygon: keep the country that covers most of it.
         geometry = shapely.geometry.shape(selection.geometry)
-        path = ROOT / "web/public/assets/countries.geojson"
+        path = countries_path()
         areas = {
             name: geometry.intersection(shape).area
             for name, shape in country_shapes(str(path), path.stat().st_mtime_ns)
