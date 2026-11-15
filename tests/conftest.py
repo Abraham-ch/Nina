@@ -13,6 +13,12 @@ from fastapi.testclient import TestClient
 from nina import analytics, config, ingest, main, remote, science, store
 
 
+@pytest.fixture(autouse=True)
+def no_prewarm(monkeypatch):
+    """The server's background planet warm-up reads the real product; tests never start it."""
+    monkeypatch.setenv('NINA_PREWARM', 'false')
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     for key in ['NINA_LLM_BASE_URL', 'NINA_LLM_API_KEY', 'NINA_LLM_MODEL']:

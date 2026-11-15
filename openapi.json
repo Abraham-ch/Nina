@@ -1296,6 +1296,56 @@
         }
       }
     },
+    "/api/reports/territorial/{identifier}/case-figure/{name}": {
+      "get": {
+        "tags": [
+          "Territorial report"
+        ],
+        "summary": "Report Case Figure",
+        "description": "A figure of the 30 m burned-area case study shown in this report.",
+        "operationId": "report_case_figure_api_reports_territorial__identifier__case_figure__name__get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/territorial/{identifier}/imagery/{which}": {
       "get": {
         "tags": [

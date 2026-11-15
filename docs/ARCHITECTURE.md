@@ -282,6 +282,7 @@ The main path is **select territory → read calendar → compare month → revi
 - Show acquisition date and update date separately; distinguish "recent", "provisional" and "validated".
 - Limits on area, time range, export size, memory and time per job. Large tasks go to a queue and have progress and cancellation.
 - Credentials only on the server. Private AOIs and bulletins require permissions; the model cannot extend those permissions or publish a report by itself.
+- Harmonized analyses and their map points are stored by identifier (selection + dataset + analysis version) in `data/jobs/harmonized/` and reused; JSON responses are gzip-compressed. At start-up a background thread (`NINA_PREWARM`, on by default) precomputes the planet view for the default period and each month of the current year. Measured locally (2026-11-15): a cold planet load takes about 8.6 s (analysis 3.9 s + points 4.7 s), a stored one 0.1 s; the analysis travels as 10 KB instead of about 0.8 MB because it now carries a provenance summary, not the full validation.
 - Logging of failures, latency per endpoint, time/memory per job, data revision, model and AI cost. Backups and restore tests for catalog and manifests.
 
 **Experience goals to measure:** filters that do not block the interface, a precomputed calendar that appears within a few seconds and a short explanation that arrives without preventing data exploration. Numeric goals will be set after measuring the pilot case size and connection conditions; performance is not attributed to undeployed infrastructure.
