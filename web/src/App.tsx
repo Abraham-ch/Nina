@@ -761,7 +761,8 @@ export default function App() {
           {[
             ['atlas', 'Atlas'],
             ['calendar', tr('Calendar', 'Calendario')],
-            ['priority', tr('Priorities', 'Prioridades')],
+            // Priorities (Peru's departments side by side) is hidden from the navigation: Peru-only and slow on first
+            // load (25 reports). Still reachable from the assistant's 'open_priorities' action and ?tab=priority.
             ['lab', tr('Lab', 'Laboratorio')],
           ].map(([id, name]) => (
             <button
