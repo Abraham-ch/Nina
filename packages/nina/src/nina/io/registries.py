@@ -10,6 +10,9 @@ the report counts. Every input row is either kept or counted as excluded with a 
 * indonesia_bnpb: BNPB/DIBI forest and land fire records through the DesInventar export (to 2019), at the
   centroid of the regency; zones are the regency H3 cells.
 * brazil_ibama_roi: IBAMA/Prevfogo fire occurrence records (federal brigades, 2015-2022), by municipality.
+* canada_cnfdb: Canadian National Fire Database agency fire points (provinces, territories, Parks Canada);
+  prescribed burns excluded.
+* portugal_icnf: ICNF/SGIF national rural fire records at the ignition point (mainland Portugal).
 """
 
 from __future__ import annotations
@@ -40,6 +43,11 @@ def log(step: str, **fields: Any) -> None:
 
 def epoch_days(values: pd.Series) -> pd.Series:
     return pd.to_datetime(pd.to_numeric(values, errors="coerce"), unit="ms", utc=True).dt.tz_localize(None).dt.normalize()
+
+
+def retrieved(path: Path) -> str:
+    """Download date of a source file (its modification time, UTC)."""
+    return datetime.fromtimestamp(path.stat().st_mtime, UTC).date().isoformat()
 
 
 def finish(frame: pd.DataFrame, read: int, reasons: dict[str, int]) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -212,6 +220,159 @@ def brazil_ibama_roi(raw: Path) -> tuple[pd.DataFrame, dict[str, Any], pd.DataFr
     return frame, manifest, zones
 
 
+NFDB_URL = "https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_pnt/current_version/NFDB_point_txt.zip"
+NFDB_CAUSES = {"H": "human", "N": "natural", "U": "unknown"}
+CANADA_BOX = (41.0, 84.0, -142.0, -52.0)  # lat_min, lat_max, lon_min, lon_max
+
+
+def canada_cnfdb(raw: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """CNFDB agency fire points (one row per fire), dated by the report date; prescribed burns excluded."""
+    with zipfile.ZipFile(raw / "NFDB_point_txt.zip") as archive:
+        member = next(n for n in archive.namelist() if n.lower().endswith(".txt"))
+        with archive.open(member) as handle:
+            data = pd.read_csv(handle, dtype=str, encoding="utf-8-sig", encoding_errors="replace", keep_default_na=False)
+    read = len(data)
+    text = {c: data[c].str.strip() for c in ("NFDBFIREID", "SRC_AGENCY", "FIRE_TYPE", "PRESCRIBED", "CAUSE")}
+    latitude = pd.to_numeric(data["LATITUDE"], errors="coerce")
+    longitude = pd.to_numeric(data["LONGITUDE"], errors="coerce")
+    reported = pd.to_datetime(data["REP_DATE"].str[:10], format="%Y-%m-%d", errors="coerce")
+    year = pd.to_numeric(data["YEAR"], errors="coerce")
+    declared = pd.to_datetime(dict(year=year, month=pd.to_numeric(data["MONTH"], errors="coerce"),
+                                   day=pd.to_numeric(data["DAY"], errors="coerce")), errors="coerce")
+    # The report date is the fire date; where its year contradicts the agency's YEAR (a typed year), or it is
+    # missing, the agency's YEAR/MONTH/DAY is used instead.
+    use_declared = declared.notna() & (reported.isna() | (reported.dt.year != year))
+    data["day"] = reported.where(~use_declared, declared)
+    prescribed = text["PRESCRIBED"].str.upper().isin({"PB", "1", "YES", "Y"}) | \
+        text["FIRE_TYPE"].str.upper().isin({"PB", "PRESCRIBED BURN"})
+    lat_min, lat_max, lon_min, lon_max = CANADA_BOX
+    no_point = ~prescribed & ~(latitude.between(lat_min, lat_max) & longitude.between(lon_min, lon_max))
+    no_date = ~prescribed & ~no_point & data["day"].isna()
+    data = data.assign(record_key=text["NFDBFIREID"], latitude=latitude, longitude=longitude,
+                       region_code=text["SRC_AGENCY"], cause=text["CAUSE"].map(NFDB_CAUSES).fillna(text["CAUSE"]))
+    keep = data[~prescribed & ~no_point & ~no_date]
+    duplicate = keep.duplicated(subset=["record_key", "day", "latitude", "longitude", "SIZE_HA"], keep="first")
+    keep = keep[~duplicate]
+    # Some agencies reuse a fire number within a year for different fires: keep both, with a unique id.
+    repeat = keep.groupby("record_key").cumcount()
+    record_id = keep["record_key"].where(repeat == 0, keep["record_key"] + "#" + repeat.astype(str))
+    size = pd.to_numeric(keep["SIZE_HA"], errors="coerce")
+    frame = pd.DataFrame({"record_id": record_id, "day": keep["day"], "latitude": keep["latitude"],
+                          "longitude": keep["longitude"], "size_ha": size.where(size >= 0),
+                          "region_code": keep["region_code"], "cause": keep["cause"]})
+    frame, summary = finish(frame, read, {"prescribed_burn": int(prescribed.sum()), "no_point": int(no_point.sum()),
+                                          "no_date": int(no_date.sum()), "duplicate": int(duplicate.sum())})
+    return frame, {"name": "canada_cnfdb", "source_name": "Canadian National Fire Database (CNFDB), agency fire points",
+                   "url": NFDB_URL, "license": "Open Government Licence - Canada (source: Natural Resources Canada, "
+                   "Canadian Forest Service, must be acknowledged)",
+                   "kind": "point of origin of fires reported by provincial, territorial and Parks Canada agencies; "
+                           "prescribed burns excluded",
+                   "region_code": "reporting agency (province or territory code; PC = Parks Canada)",
+                   "min_size_ha": 40.0, "size_note": "the report counts fires of at least 40 ha (about 100 acres); "
+                   "agencies record many spot fires under 1 ha",
+                   "release": member, "retrieved": retrieved(raw / "NFDB_point_txt.zip"),
+                   "dated_by_year_month_day": int(use_declared[keep.index].sum()),
+                   "repeated_fire_numbers": int((repeat > 0).sum()),
+                   "note": "coverage and completeness vary by agency and year; the current version ends with the last "
+                           "season the agencies have submitted", **summary}
+
+
+SHEET_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+ICNF_URL = "https://www.icnf.pt/florestas/gfr/gfrgestaoinformacao/estatisticas"
+ICNF_FILES = {"12-Registos-Incendios-SGIF-2001-2010.zip": "https://www.icnf.pt/api/file/doc/6f1861934bbc866f",
+              "13-Registos-Incendios-SGIF-2011-2020.zip": "https://www.icnf.pt/api/file/doc/c77d0e2c5bb91f1c",
+              "RegistoIncendiosSGIF-2021-2025.zip": "https://www.icnf.pt/api/file/doc/8b2adaf3ea9b42ab"}
+ICNF_CAUSES = {"Negligente": "negligent", "Intencional": "intentional", "Natural": "natural",
+               "Desconhecida": "unknown", "Reacendimento": "rekindle"}
+ICNF_COLUMNS = ["Codigo_SGIF", "Ano", "Mes", "Dia", "DataHoraAlerta", "AreaTotal_ha", "DTCCFR", "Latitude", "Longitude",
+                "TipoCausa"]
+PORTUGAL_BOX = (36.8, 42.2, -9.6, -6.1)  # mainland Portugal (the SGIF area)
+
+
+def xlsx_columns(workbook: zipfile.ZipFile, columns: list[str]) -> pd.DataFrame:
+    """Named columns of the first sheet of an .xlsx, as text, streamed (an SGIF sheet is tens of MB of XML)."""
+    from nina.io.xlsx import column_index
+
+    strings = ["".join(t.text or "" for t in item.iter(f"{SHEET_NS}t"))
+               for item in ET.fromstring(workbook.read("xl/sharedStrings.xml")).findall(f"{SHEET_NS}si")]
+    positions: list[int] | None = None
+    rows: list[list[str | None]] = []
+    with workbook.open("xl/worksheets/sheet1.xml") as handle:
+        for _, element in ET.iterparse(handle):
+            if element.tag != f"{SHEET_NS}row":
+                continue
+            values: dict[int, str] = {}
+            for cell in element.iter(f"{SHEET_NS}c"):
+                value, kind = cell.find(f"{SHEET_NS}v"), cell.get("t")
+                if kind == "inlineStr":
+                    values[column_index(cell.get("r"))] = "".join(t.text or "" for t in cell.iter(f"{SHEET_NS}t"))
+                elif value is not None and value.text is not None:
+                    values[column_index(cell.get("r"))] = strings[int(value.text)] if kind == "s" else value.text
+            element.clear()
+            if positions is None:
+                header = {name.strip(): index for index, name in values.items()}
+                missing = [c for c in columns if c not in header]
+                if missing:
+                    raise ValueError(f"columns {missing} not in the sheet header {sorted(header)}")
+                positions = [header[c] for c in columns]
+            elif values:
+                rows.append([values.get(i) for i in positions])
+    return pd.DataFrame(rows, columns=columns)
+
+
+def portugal_icnf(raw: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """ICNF/SGIF national rural fire records (one row per fire), at the ignition point, dated by the alert date."""
+    parts, files = [], {}
+    for path in sorted(raw.glob("*.zip")):
+        with zipfile.ZipFile(path) as archive:
+            member = next(n for n in archive.namelist() if n.lower().endswith(".xlsx"))
+            with archive.open(member) as handle, zipfile.ZipFile(handle) as workbook:
+                part = xlsx_columns(workbook, ICNF_COLUMNS)
+        parts.append(part.assign(source_file=path.name))
+        files[path.name] = {"url": ICNF_FILES.get(path.name), "rows": int(len(part)), "retrieved": retrieved(path)}
+    data = pd.concat(parts, ignore_index=True)
+    read = len(data)
+    latitude = pd.to_numeric(data["Latitude"], errors="coerce")
+    longitude = pd.to_numeric(data["Longitude"], errors="coerce")
+    # Ano/Mes/Dia is the (local) calendar date of the alert; the alert timestamp is the fallback.
+    declared = pd.to_datetime(dict(year=pd.to_numeric(data["Ano"], errors="coerce"),
+                                   month=pd.to_numeric(data["Mes"], errors="coerce"),
+                                   day=pd.to_numeric(data["Dia"], errors="coerce")), errors="coerce")
+    alert = pd.to_datetime(pd.to_numeric(data["DataHoraAlerta"], errors="coerce"), unit="D", origin="1899-12-30")
+    data["day"] = declared.fillna(alert.dt.normalize())
+    lat_min, lat_max, lon_min, lon_max = PORTUGAL_BOX
+    no_point = ~(latitude.between(lat_min, lat_max) & longitude.between(lon_min, lon_max))
+    no_date = ~no_point & data["day"].isna()
+    data = data.assign(latitude=latitude, longitude=longitude, code=data["Codigo_SGIF"].str.strip())
+    keep = data[~no_point & ~no_date]
+    duplicate = keep["code"].notna() & keep.duplicated(subset=["code"], keep="first")
+    keep = keep[~duplicate]
+    record_id = keep["code"].fillna(pd.Series([f"pt-{i}" for i in keep.index], index=keep.index))
+    parish_code = pd.to_numeric(keep["DTCCFR"], errors="coerce")
+    parish = parish_code.astype("Int64").astype(str).str.zfill(6).where(parish_code.notna())
+    area = pd.to_numeric(keep["AreaTotal_ha"], errors="coerce")
+    frame = pd.DataFrame({"record_id": record_id, "day": keep["day"], "latitude": keep["latitude"],
+                          "longitude": keep["longitude"], "size_ha": area.where(area >= 0),
+                          "region_code": parish,
+                          "cause": keep["TipoCausa"].str.strip().map(ICNF_CAUSES)})
+    frame, summary = finish(frame, read, {"no_point": int(no_point.sum()), "no_date": int(no_date.sum()),
+                                          "duplicate": int(duplicate.sum())})
+    expected = set(ICNF_FILES) - set(files)
+    note = "the SGIF records every rural fire attended in mainland Portugal (most under 1 ha); dates are local"
+    if expected:
+        note += (f"; not downloaded: {', '.join(sorted(expected))} (the ICNF file service ended each transfer "
+                 "after 300 s, before these 62-87 MB archives were complete)")
+    return frame, {"name": "portugal_icnf", "source_name": "ICNF national rural fire database (SGIF), individual records",
+                   "url": ICNF_URL, "files": files,
+                   "license": "ICNF terms (icnf.pt/avisoslegais): free to copy and use for personal or educational "
+                              "purposes, citing the source; not for profit",
+                   "kind": "ignition point of rural fires (forest, shrub and agricultural), including rekindles",
+                   "region_code": "INE code of the parish (freguesia) of the ignition point; the first two digits are "
+                                  "the district",
+                   "min_size_ha": 40.0, "size_note": "the report counts fires of at least 40 ha (about 100 acres)",
+                   "note": note, **summary}
+
+
 def write(context: Path, frame: pd.DataFrame, manifest: dict[str, Any], zones: pd.DataFrame | None = None) -> None:
     folder = context / "registries"
     folder.mkdir(parents=True, exist_ok=True)
@@ -227,7 +388,8 @@ def write(context: Path, frame: pd.DataFrame, manifest: dict[str, Any], zones: p
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
-    parser.add_argument("names", nargs="+", choices=["usa_nifc", "australia", "indonesia_bnpb", "brazil_ibama_roi"])
+    parser.add_argument("names", nargs="+", choices=["usa_nifc", "australia", "indonesia_bnpb", "brazil_ibama_roi",
+                                                     "canada_cnfdb", "portugal_icnf"])
     args = parser.parse_args()
     workspace = args.workspace.resolve()
     downloads = workspace / "source/downloads/validation"
@@ -239,6 +401,10 @@ def main() -> None:
             write(context, *australia(downloads / "australia_bushfires"))
         elif name == "brazil_ibama_roi":
             write(context, *brazil_ibama_roi(downloads / "brazil_ibama_roi"))
+        elif name == "canada_cnfdb":
+            write(context, *canada_cnfdb(downloads / "canada_cnfdb"))
+        elif name == "portugal_icnf":
+            write(context, *portugal_icnf(downloads / "portugal_icnf"))
         else:
             frame, manifest, zones = indonesia_bnpb(downloads / "indonesia_desinventar")
             write(context, frame, manifest, zones)
