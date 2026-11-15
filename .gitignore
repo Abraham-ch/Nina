@@ -27,6 +27,7 @@ pytest-cache-files-*/
 !/source/**/.gitkeep
 /data_abraham/
 *.zip
+*.tgz
 
 # Verificaciones locales y artefactos de diseño
 /.nina-qa/
