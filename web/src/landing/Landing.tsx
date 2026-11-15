@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { locale, tr } from '../i18n'
 import LangSwitch from '../LangSwitch'
-import Evidence, { day, share, title, type PeruEvidence, type WorldEvidence } from './Evidence'
+import Evidence, { Problem, ThisYear, day, share, title, type PeruEvidence, type WorldEvidence } from './Evidence'
 import Team from './Team'
 import { createScene, weekLabel, type Countries, type LandingData, type Week } from './scene'
 
@@ -236,6 +236,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
         </div>
       </section>
 
+      <Problem e={evidence} />
+
       {data &&
         evidence &&
         (() => {
@@ -300,7 +302,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                 <div className="landing-stage">
                   <div className="landing-stage-head">
                     <p className="landing-kicker">
-                      {tr('What these data help answer', 'Lo que estos datos permiten resolver')}
+                      {tr('2 · What it costs', '2 · Lo que cuesta')}
                     </p>
                     <h2 id="landing-impact-title">
                       {tr(
@@ -336,7 +338,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
               >
                 <div className="landing-impact-grid">
                   <div>
-                    <h3>{tr('Who it is for', 'Para quién')}</h3>
+                    <h3>{tr('3 · Who it is for', '3 · Para quién')}</h3>
                     <ul className="landing-who">
                       <li>
                         <strong>
@@ -414,8 +416,8 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                 </div>
                 <p className="landing-caveat">
                   {tr(
-                    `Indicators from the harmonized MODIS + VIIRS archive for Peru (method ${evidence.method_version}, experimental), unit: VIIRS-equivalent active cell-days; a retrospective reading, not a tested alert. The animation behind them shows one year of real VIIRS NOAA-20 detections (${data.first_date} → ${data.last_date}, ${fmt.format(data.detections)} detections, ${pct(night)} at night). They are context indicators for planning, not for tactical response.`,
-                    `Indicadores del archivo armonizado MODIS + VIIRS del Perú (método ${evidence.method_version}, experimental), en celdas-día activas equivalentes VIIRS; es una lectura retrospectiva, no una alerta probada. La animación de fondo muestra un año de detecciones reales VIIRS NOAA-20 (${data.first_date} → ${data.last_date}, ${fmt.format(data.detections)} detecciones, el ${pct(night)} nocturnas). Son indicadores de contexto para planificar, no de respuesta táctica.`,
+                    `Peru, September 2024: the latest season with official human figures (INDECI). Behind it, one year of real VIIRS NOAA-20 detections (${data.first_date} → ${data.last_date}).`,
+                    `Perú, septiembre de 2024: la temporada más reciente con cifras humanas oficiales (INDECI). Al fondo, un año de detecciones reales VIIRS NOAA-20 (${data.first_date} → ${data.last_date}).`,
                   )}
                 </p>
               </section>
@@ -423,6 +425,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           )
         })()}
 
+      <ThisYear w={world} />
       <Evidence e={evidence} w={world} />
 
       <Team />

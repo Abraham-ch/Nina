@@ -36,5 +36,91 @@
    "note": "records of at least 400 ha (about 1,000 acres); smaller fires are often below satellite detection"
   }
  },
- "transfer_median_abs_bias": 0.1453001146644568
+ "transfer_median_abs_bias": 0.1453001146644568,
+ "this_year": {
+  "year": 2026,
+  "through_month": 10,
+  "record_rule": "more activity than any same month since 2003, >= 15 earlier years, >= 50",
+  "countries_with_record_month": 7,
+  "records_by_country": [
+   {
+    "country": "Ethiopia",
+    "month": 8,
+    "value": 2964.2633473679953,
+    "median": 412.0,
+    "times_median": 7.1948139499223185,
+    "years": 16,
+    "provisional": true
+   },
+   {
+    "country": "Ecuador",
+    "month": 3,
+    "value": 148.0,
+    "median": 23.466434665469244,
+    "times_median": 6.306880534254373,
+    "years": 23,
+    "provisional": false
+   },
+   {
+    "country": "Mexico",
+    "month": 9,
+    "value": 2171.0,
+    "median": 1064.1544435369588,
+    "times_median": 2.040117403244767,
+    "years": 24,
+    "provisional": true
+   },
+   {
+    "country": "India",
+    "month": 7,
+    "value": 899.1431577464344,
+    "median": 460.0,
+    "times_median": 1.9546590385792053,
+    "years": 20,
+    "provisional": false
+   },
+   {
+    "country": "Canada",
+    "month": 1,
+    "value": 925.0,
+    "median": 531.0,
+    "times_median": 1.7419962335216572,
+    "years": 24,
+    "provisional": false
+   },
+   {
+    "country": "Australia",
+    "month": 7,
+    "value": 40122.027439490346,
+    "median": 23177.0,
+    "times_median": 1.7311139249898755,
+    "years": 24,
+    "provisional": false
+   },
+   {
+    "country": "Venezuela",
+    "month": 10,
+    "value": 4085.0,
+    "median": 2382.0,
+    "times_median": 1.714945424013434,
+    "years": 24,
+    "provisional": true
+   }
+  ],
+  "peru_september": {
+   "value": 9952.0,
+   "median": 14150.0,
+   "anomaly_percent": -29.667844522968203,
+   "rank": 21,
+   "rank_of": 24,
+   "provisional": true
+  },
+  "chilecito_july": {
+   "value": 45.86788154897495,
+   "median": 4.0,
+   "rank": 1,
+   "rank_of": 24,
+   "provisional": false
+  }
+ }
 }
