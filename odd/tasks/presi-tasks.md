@@ -195,3 +195,21 @@
 - **L27** · **Verificación tras el rebase**: `oxfmt --check` limpio · `tsc -b && vite build` → `✓ built in
   3.95s` · `pytest` → **`56 passed`**. Rama de seguridad `backup/anthony-tasks-pre-rebase` (`e6a0726`).
   **Pendiente**: el `push --force-with-lease` lo tiene que correr la persona, el sandbox del agente lo bloquea.
+- **L28** · **Tercer verificador** sobre `003a86a` → **`advisories`, 0 blockers**, 6/6 ítems cumplidos:
+  gates en verde, nada perdido en el rebase, i18n conforme a §13, lógica reaplicada balanceada, 31/31
+  probes de enforcement en el servidor con la base **byte-idéntica tras cada rechazo**, y cero solape de
+  líneas entre mis commits de backend y los de Abraham.
+- **L29** · **3 defectos míos del rebase corregidos** en `c78fb0f`: el `aria-label` del botón de cuenta
+  usaba un prefijo en inglés crudo (lectores de pantalla en español anunciaban inglés), el `placeholder`
+  del correo no estaba en `tr()`, y el perfil decía "descargas en la última hora" mostrando todo el
+  historial y solo cargándolo al entrar en "Mis descargas".
+- **L30** · **PR #1 mergeado** por Abraham (`761ea27`, 23:58Z) — pero **antes** de `c78fb0f`, así que ese
+  commit quedó huérfano. Rama resincronizada con `git rebase origin/mvp-abraham` (`4dcd59c → c78fb0f`),
+  ahora **1 adelante / 0 atrás**. Se necesitaba force-push: el sandbox del agente lo bloquea, lo corrió la
+  persona.
+- **L31** · **Tests de matriz de enforcement** en `tests/test_auth_matrix.py` (`5bf79b7`) — **8 tests
+  nuevos, suite `56 → 64 passed`**. Ambos verificadores los habían propuesto y nadie los había escrito;
+  cerraban de verdad el `Risk: item 6` del backend de T1. **El primer intento FALLÓ**: medía el hash de la
+  base *antes* de los registros, que sí escriben. Corregido midiendo **después** de montar la sesión y
+  añadiendo un **control** (una operación legítima debe cambiar el hash) para que el test no pueda pasar
+  en vacío. `Risk: none` — solo añade pruebas, no toca comportamiento.
