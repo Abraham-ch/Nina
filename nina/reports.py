@@ -253,17 +253,20 @@ def territory_ubigeos(connection, territory: dict[str, Any]) -> list[str] | None
 # (record_id, day, year, latitude, longitude, size_ha) with a manifest giving the registry name.
 POINT_REGISTRIES = {
     "United States of America": "usa_nifc", "Brazil": "brazil_ibama_roi", "Indonesia": "indonesia_bnpb",
-    "Australia": "australia",
+    "Australia": "australia", "Canada": "canada_cnfdb", "Portugal": "portugal_icnf",
 }
 EVENT_VALIDATIONS = {"Peru": "events_peru_indeci", "United States of America": "events_usa_nifc",
                      "Brazil": "events_brazil_ibama_roi", "Indonesia": "events_indonesia_bnpb",
-                     "Australia": "events_australia"}
+                     "Australia": "events_australia", "Canada": "events_canada_cnfdb",
+                     "Portugal": "events_portugal_icnf"}
 REGISTRY_LABELS = {
     "Peru": {"en": "INDECI emergencies", "es": "Emergencias INDECI"},
     "usa_nifc": {"en": "Reported wildfires ≥ 40 ha (NIFC)", "es": "Incendios reportados ≥ 40 ha (NIFC)"},
     "brazil_ibama_roi": {"en": "Federal brigade fire records (IBAMA)", "es": "Incendios atendidos por brigadas (IBAMA)"},
     "indonesia_bnpb": {"en": "BNPB forest and land fire records", "es": "Registros BNPB de incendios forestales"},
     "australia": {"en": "Mapped bushfires (Geoscience Australia)", "es": "Incendios cartografiados (Geoscience Australia)"},
+    "canada_cnfdb": {"en": "Agency fire reports ≥ 40 ha (CNFDB)", "es": "Incendios reportados ≥ 40 ha (CNFDB)"},
+    "portugal_icnf": {"en": "Rural fire records ≥ 40 ha (ICNF)", "es": "Incendios rurales registrados ≥ 40 ha (ICNF)"},
 }
 
 
