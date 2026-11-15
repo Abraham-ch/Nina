@@ -830,6 +830,15 @@ optgroup {
   font-size: 12px;
   color: #395b50;
 }
+/* Short pages (priority, data) keep the footer at the bottom of the window. */
+.nina-app {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+#main {
+  flex: 1;
+}
 .site-footer {
   background: #f3f5ee;
   display: flex;
@@ -4162,26 +4171,115 @@ h1 > .experimental-tag {
     animation: none;
   }
 }
-/* Ask NINA: side panel that leaves the map visible; it stays mounted so the conversation is kept */
+/* Ask NINA: 400 px panel docked inside the map stage (atlas, lab) or as a right column (other tabs) */
 .analyst-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 60;
   display: flex;
   flex-direction: column;
-  width: min(460px, 100vw);
+  width: 400px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
   background: var(--paper);
   color: var(--ink);
-  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.28);
-  transform: translateX(105%);
-  transition: transform 0.22s ease;
-  visibility: hidden;
 }
-.analyst-drawer.open {
-  transform: translateX(0);
-  visibility: visible;
+.atlas-stage > .analyst-drawer {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 30;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+/* Map controls anchored to the right move left of the panel. */
+.atlas-stage.analyst-open
+  :is(.map-tools, .imagery-credit, .map-evidence, .point-inspector, .sensor-tag.right) {
+  translate: -416px 0;
+}
+main.analyst-docked {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 416px;
+  align-items: start;
+}
+main.analyst-docked > .analyst-drawer {
+  grid-column: 2;
+  grid-row: 1;
+  position: sticky;
+  top: 16px;
+  height: calc(100svh - 32px);
+  margin: 16px 16px 16px 0;
+  width: auto;
+}
+@media (max-width: 900px) {
+  .analyst-drawer,
+  main.analyst-docked > .analyst-drawer {
+    position: fixed;
+    inset: 12px;
+    width: auto;
+    height: auto;
+    margin: 0;
+    z-index: 60;
+  }
+  main.analyst-docked {
+    display: block;
+  }
+  .atlas-stage.analyst-open
+    :is(.map-tools, .imagery-credit, .map-evidence, .point-inspector, .sensor-tag.right) {
+    translate: none;
+  }
+}
+/* Atlas night palette. */
+.analyst-drawer.dark {
+  --paper: #0a0d0f;
+  --ink: #e6ecee;
+  --muted: #8d9ca1;
+  --line: rgba(238, 243, 244, 0.14);
+}
+.analyst-drawer.dark :is(.explanation-lead, .analyst-answer p, .analyst-answer ul) {
+  color: #d5dde0 !important;
+}
+.analyst-drawer.dark .question-list button {
+  border-color: rgba(238, 243, 244, 0.2);
+  color: var(--sand);
+}
+.analyst-drawer.dark .question-form input {
+  background: #0f1416;
+  border-color: rgba(238, 243, 244, 0.2);
+  color: var(--ink);
+}
+.analyst-drawer.dark .button.dark {
+  background: var(--sand);
+  color: var(--on-sand);
+}
+/* Calendar palette: light paper, heat colours for highlights and buttons. */
+.analyst-drawer.light {
+  --paper: #fbf7ef;
+  --line: #e6d6bd;
+  background: var(--paper);
+  box-shadow: 0 10px 30px rgba(115, 51, 35, 0.12);
+}
+.analyst-drawer.light > header {
+  background: #f5eee2;
+  color: #733323;
+}
+.analyst-drawer.light .explanation-lead {
+  color: #3c372f !important;
+}
+.analyst-drawer.light .question-list button {
+  border-color: #e6c99a;
+  color: #984a2b;
+}
+.analyst-drawer.light .question-form input {
+  background: #fff;
+  border-color: #deb273;
+  color: #3c372f;
+}
+.analyst-drawer.light .button.dark {
+  background: #b66b38;
+  color: #fff9ec;
+}
+.analyst-drawer.light .analyst-user {
+  background: #733323;
+  color: #fff9ec;
 }
 .analyst-drawer > header {
   display: flex;
@@ -4268,4 +4366,45 @@ ol.analyst-progress {
 .color-by {
   align-items: center;
   font-size: 0.72rem;
+}
+/* Technical report shown in a modal over the app. */
+.report-dialog {
+  width: min(1100px, 96vw);
+  height: 92svh;
+  max-height: 92svh;
+}
+.report-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.report-dialog .dialog-head {
+  padding: 14px 20px;
+}
+.report-dialog .dialog-head h2 {
+  font-size: 22px;
+  margin-right: auto;
+}
+.report-dialog iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+.report-wait {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink);
+}
+.report-wait svg {
+  color: #c2410c;
+}
+.report-wait p {
+  max-width: 480px;
+  color: var(--muted);
+  font-size: 14px;
 }

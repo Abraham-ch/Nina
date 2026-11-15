@@ -28,6 +28,7 @@ import {
 } from 'react'
 
 import Account from './Account'
+import AnalystPanel from './AnalystPanel'
 import {
   api,
   post,
@@ -45,11 +46,10 @@ import {
 } from './api'
 import Calendar from './Calendar'
 import DataPanel from './DataPanel'
+import { DAY_COLORS, DAY_RANGES } from './dayColors'
 import Dialog from './Dialog'
 import Experiment from './Experiment'
 import ExperimentalTag from './ExperimentalTag'
-import AnalystPanel from './AnalystPanel'
-import { DAY_COLORS, DAY_RANGES } from './dayColors'
 import { tr, locale, getLang } from './i18n'
 import LangSwitch from './LangSwitch'
 import Priority from './Priority'
@@ -168,7 +168,6 @@ export default function App() {
     [accountOpen, setAccountOpen] = useState(false),
     [readiness, setReadiness] = useState<Readiness | null>(null),
     [harmonized, setHarmonized] = useState<HarmonizedAnalysis | null>(null),
-    [labLayers, setLabLayers] = useState<Layer[] | null>(null),
     [observer, setObserver] = useState('')
   const isHarmonized = selection.source === HARMONIZED
   function change(patch: Partial<Selection>) {
@@ -298,6 +297,24 @@ export default function App() {
       : selection.scope === 'world'
         ? 'viirs-jpss1:all'
         : 'modis:Aqua')
+  // Each side reuses the main view's analysis and points when it is the same query, so the lab never asks the
+  // server twice for the same (world-sized) data; only the side the main view lacks is fetched.
+  const mainIsObserver =
+    !isHarmonized &&
+    `${selection.source}:${selection.platform}` === observed &&
+    selection.metric === 'observed'
+  const [labFetchedH, setLabFetchedH] = useState<Layer | null>(null),
+    [labObserver, setLabObserver] = useState<Layer | null>(null)
+  const mainLayer: Layer | null =
+    analysis && points
+      ? {
+          source: selection.source,
+          platform: isHarmonized ? 'all' : selection.platform,
+          selected: analysis.selected,
+          points,
+          analysis_id: analysis.id,
+        }
+      : null
   useEffect(() => {
     if (tab !== 'lab' || !readiness?.available) return
     if (selection.scope === 'custom' && !selection.geometry) return
@@ -305,41 +322,42 @@ export default function App() {
     const { signal } = abort
     const [source, platform] = observed.split(':')
     const date = `${selection.selected_year}-${String(selection.selected_month).padStart(2, '0')}`
-    setLabLayers(null)
-    const left = post<HarmonizedAnalysis>('/harmonized/analyses', harmonizedBody(), signal).then(
-      (h) =>
-        api<HarmonizedPoints>(`/harmonized/analyses/${h.id}/points?limit=5000`, { signal }).then(
-          (p) => ({
-            source: HARMONIZED,
-            platform: 'all',
-            selected: fromHarmonized(h, selection, placeLabel).selected,
-            points: pointsFromHarmonized(p, date),
-            analysis_id: h.id,
+    const fail = (e: Error) => {
+      if (e.name !== 'AbortError') setError(e.message)
+    }
+    setLabFetchedH(null)
+    setLabObserver(null)
+    if (!isHarmonized)
+      post<HarmonizedAnalysis>('/harmonized/analyses', harmonizedBody(), signal)
+        .then((h) =>
+          api<HarmonizedPoints>(`/harmonized/analyses/${h.id}/points?limit=5000`, { signal }).then(
+            (p) => {
+              if (!signal.aborted)
+                setLabFetchedH({
+                  source: HARMONIZED,
+                  platform: 'all',
+                  selected: fromHarmonized(h, selection, placeLabel).selected,
+                  points: pointsFromHarmonized(p, date),
+                  analysis_id: h.id,
+                })
+            },
+          ),
+        )
+        .catch(fail)
+    if (!mainIsObserver)
+      post<Analysis>('/analyses', { ...selection, source, platform, metric: 'observed' }, signal)
+        .then((a) =>
+          api<Points>(`/analyses/${a.id}/points`, { signal }).then((points) => {
+            if (!signal.aborted)
+              setLabObserver({ source, platform, selected: a.selected, points, analysis_id: a.id })
           }),
-        ),
-    )
-    const right = post<Analysis>(
-      '/analyses',
-      { ...selection, source, platform, metric: 'observed' },
-      signal,
-    ).then((a) =>
-      api<Points>(`/analyses/${a.id}/points`, { signal }).then((points) => ({
-        source,
-        platform,
-        selected: a.selected,
-        points,
-        analysis_id: a.id,
-      })),
-    )
-    Promise.all([left, right])
-      .then((layers) => {
-        if (!signal.aborted) setLabLayers(layers)
-      })
-      .catch((e) => {
-        if (e.name !== 'AbortError') setError(e.message)
-      })
+        )
+        .catch(fail)
     return () => abort.abort()
   }, [tab, readiness?.available, JSON.stringify(selection), observed, !!regions && !!places])
+  const labLeft = isHarmonized ? mainLayer : labFetchedH,
+    labRight = mainIsObserver ? mainLayer : labObserver,
+    labLayers = labLeft && labRight ? [labLeft, labRight] : null
   useEffect(() => {
     if (!jobs.some((j) => ['queued', 'running'].includes(j.status))) return
     const interval = setInterval(refresh, 1800)
@@ -415,7 +433,11 @@ export default function App() {
           ? selection.area_label || null
           : null,
       geometry:
-        selection.scope === 'PER' ? department?.geometry || null : country ? null : selection.geometry,
+        selection.scope === 'PER'
+          ? department?.geometry || null
+          : country
+            ? null
+            : selection.geometry,
       year: selection.selected_year,
       month: selection.selected_month,
       language: getLang(),
@@ -456,7 +478,9 @@ export default function App() {
         selected_year: 2025,
         selected_month: 9,
         year_end: 2025,
-        ...(isHarmonized ? { year_start: 2002 } : { year_start: 2018, source: 'modis', platform: 'Aqua' }),
+        ...(isHarmonized
+          ? { year_start: 2002 }
+          : { year_start: 2018, source: 'modis', platform: 'Aqua' }),
       })
       return
     }
@@ -502,23 +526,25 @@ export default function App() {
   // A button offered by the analyst: select the territory and period, keep the current data source
   // (the analyst lives in the harmonized view) and show the requested view.
   function runAnalystAction(action: AnalystAction) {
-    const fold = (text: string) =>
-      text
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .toUpperCase()
-        .trim()
+    const fold = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim()
     const keep = { source: selection.source, platform: selection.platform }
     if (action.kind !== 'open_priorities' && action.country) {
       if (action.country === 'Peru') {
         const region = action.department
-          ? regions?.geojson.features.find((f) => fold(f.properties.name) === fold(action.department ?? ''))
+          ? regions?.geojson.features.find(
+              (f) => fold(f.properties.name) === fold(action.department ?? ''),
+            )
           : undefined
         choosePlace(region ? `region:${region.properties.id}` : 'PER')
       } else {
         const place = places?.features.find((p) => p.properties.name === action.country)
         if (!place) {
-          setError(tr(`${action.country} is not available on the map.`, `${action.country} no está disponible en el mapa.`))
+          setError(
+            tr(
+              `${action.country} is not available on the map.`,
+              `${action.country} no está disponible en el mapa.`,
+            ),
+          )
           return
         }
         choosePlace(`country:${place.properties.id}`)
@@ -534,7 +560,13 @@ export default function App() {
         year_end: Math.max(selection.year_end, year),
       })
     } else change(keep)
-    setTab(action.kind === 'open_calendar' ? 'calendar' : action.kind === 'open_priorities' ? 'priority' : 'atlas')
+    setTab(
+      action.kind === 'open_calendar'
+        ? 'calendar'
+        : action.kind === 'open_priorities'
+          ? 'priority'
+          : 'atlas',
+    )
   }
   function applyGeometry(geometry: Geometry) {
     setPlaceId('custom')
@@ -550,7 +582,8 @@ export default function App() {
   }
   // The analyst answers about the harmonized record: switch to it when it is available, then open the panel.
   function openAnalyst() {
-    if (!isHarmonized && readiness?.available && selection.scope !== 'world') selectSource(`${HARMONIZED}:all`)
+    if (!isHarmonized && readiness?.available && selection.scope !== 'world')
+      selectSource(`${HARMONIZED}:all`)
     setIntro(false)
     setModal('')
     setAnalystOpen(true)
@@ -647,6 +680,26 @@ export default function App() {
     ) || []
   const monthName = MONTHS[selection.selected_month - 1]
   const noData = tr('No data available', 'Sin datos disponibles')
+  const onMap = tab === 'atlas' || tab === 'lab'
+  // Docked inside the map stage on the atlas and lab, as a right column elsewhere; the thread lives in sessionStorage.
+  const analystDrawer = analystOpen && (
+    <aside
+      className={`analyst-drawer ${onMap ? 'dark' : 'light'}`}
+      aria-label={tr('Ask NINA', 'Pregúntale a NINA')}
+    >
+      <header>
+        <Sparkles size={16} />
+        <strong>{tr('Ask NINA', 'Pregúntale a NINA')}</strong>
+        <button
+          onClick={() => setAnalystOpen(false)}
+          aria-label={tr('Close the panel', 'Cerrar el panel')}
+        >
+          <X size={18} />
+        </button>
+      </header>
+      <AnalystPanel context={reportBody()} onError={setError} onAction={runAnalystAction} />
+    </aside>
+  )
   return (
     <div className="nina-app">
       <a className="skip-link" href="#main">
@@ -881,11 +934,11 @@ export default function App() {
           </button>
         </div>
       )}
-      <main id="main">
+      <main id="main" className={analystDrawer && !onMap ? 'analyst-docked' : undefined}>
         {(tab === 'atlas' || tab === 'lab') && (
           <>
             <section
-              className={`atlas-stage ${intro && tab === 'atlas' ? 'has-intro' : ''} ${tab === 'lab' ? 'comparison-stage' : ''}`}
+              className={`atlas-stage ${intro && tab === 'atlas' ? 'has-intro' : ''} ${tab === 'lab' ? 'comparison-stage' : ''} ${analystOpen ? 'analyst-open' : ''}`}
               aria-label={
                 tab === 'lab'
                   ? tr('Sensor comparison', 'Comparación de sensores')
@@ -1249,7 +1302,10 @@ export default function App() {
                     <button aria-pressed={colorBy === 'day'} onClick={() => setColorBy('day')}>
                       {tr('day of detection', 'día de detección')}
                     </button>
-                    <button aria-pressed={colorBy === 'sensor'} onClick={() => setColorBy('sensor')}>
+                    <button
+                      aria-pressed={colorBy === 'sensor'}
+                      onClick={() => setColorBy('sensor')}
+                    >
                       {tr('sensor', 'sensor')}
                     </button>
                   </span>
@@ -1289,6 +1345,7 @@ export default function App() {
                   {tr('Review evidence', 'Revisar evidencia')}
                 </button>
               )}
+              {analystDrawer}
             </section>
             <section className="time-dock" aria-label={tr('Time selection', 'Selección temporal')}>
               <div className="time-title">
@@ -1452,6 +1509,7 @@ export default function App() {
             onError={setError}
           />
         )}
+        {!onMap && analystDrawer}
       </main>
       <footer className="site-footer">
         <span>
@@ -1473,20 +1531,6 @@ export default function App() {
         </div>
       </footer>
       {tour && <Tour onClose={() => setTour(false)} />}
-      <aside
-        className={`analyst-drawer${analystOpen ? ' open' : ''}`}
-        aria-hidden={!analystOpen}
-        aria-label={tr('Ask NINA', 'Pregúntale a NINA')}
-      >
-        <header>
-          <Sparkles size={16} />
-          <strong>{tr('Ask NINA', 'Pregúntale a NINA')}</strong>
-          <button onClick={() => setAnalystOpen(false)} aria-label={tr('Close the panel', 'Cerrar el panel')}>
-            <X size={18} />
-          </button>
-        </header>
-        <AnalystPanel context={reportBody()} onError={setError} onAction={runAnalystAction} />
-      </aside>
       <Dialog
         harmonized={isHarmonized}
         modal={modal}
