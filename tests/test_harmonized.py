@@ -325,3 +325,24 @@ def test_stored_analysis_and_points_are_reused_and_a_failed_write_leaves_no_temp
     harmonized.store_json(target, {"value": 1})
     assert target.read_text(encoding="utf-8") == "{}"
     assert not list(cache.glob("*.tmp"))
+
+
+def test_heavy_queries_take_turns_and_reuse_the_result_of_the_one_they_waited_for(published_artifact):
+    import threading
+
+    client, _ = published_artifact
+    entered = threading.Event()
+    results = []
+    harmonized.HEAVY_QUERY.acquire()  # another planet query is running
+    try:
+        worker = threading.Thread(
+            target=lambda: (entered.set(), results.append(client.post("/api/harmonized/analyses", json=request())))
+        )
+        worker.start()
+        entered.wait(5)
+        worker.join(0.5)
+        assert worker.is_alive() and not results  # waiting for its turn, not running in parallel
+    finally:
+        harmonized.HEAVY_QUERY.release()
+    worker.join(30)
+    assert results and results[0].status_code == 200
