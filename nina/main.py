@@ -16,8 +16,10 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Req
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field,model_validator
+from pydantic_core import PydanticCustomError
 from .config import ROOT, DATA, RAW, FIRMS, SOURCES
+from .errors import instalar
 from .auth import Login, Register, attach, audit_entries, clear_session, detach
 from .auth import downloads_for, downloads_last_hour, max_downloads_per_hour, max_export_rows, optional
 from .auth import record_audit, record_download, require
@@ -40,6 +42,7 @@ async def lifespan(app):
     POOL.shutdown(wait=False,cancel_futures=True)
 
 app=FastAPI(title='NINA · Atlas del fuego',version='0.3.0',lifespan=lifespan)
+instalar(app)
 
 # Las rutas con `require()` rechazan por rol; se documentan aquí porque FastAPI
 # solo añade 401/403 automáticamente cuando el medio es un esquema Security.
@@ -276,7 +279,13 @@ async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','
 class Sync(BaseModel):
     source:Literal['MODIS_NRT','VIIRS_NOAA20_NRT','VIIRS_NOAA21_NRT']='VIIRS_NOAA20_NRT'
     start:date
-    days:int=Field(default=1,ge=1,le=5)
+    days:int=Field(default=1)
+
+    @model_validator(mode='after')
+    def reglas(self):
+        if not 1<=self.days<=5: raise PydanticCustomError('days_range','El número de días debe estar entre 1 y 5')
+        if self.start>date.today(): raise PydanticCustomError('date_future','La fecha no puede ser posterior a hoy')
+        return self
 
 @app.post('/api/sync',responses=PROTEGIDO)
 def sync(body:Sync,user:dict=Depends(require('admin'))):
@@ -288,9 +297,15 @@ def sync(body:Sync,user:dict=Depends(require('admin'))):
 class Acquisition(BaseModel):
     products:list[Literal['MODIS_NRT','MODIS_SP','VIIRS_NOAA20_NRT','VIIRS_NOAA20_SP','VIIRS_NOAA21_NRT','VIIRS_NOAA21_SP','VIIRS_SNPP_SP']]=Field(default=['MODIS_NRT','VIIRS_NOAA20_NRT','VIIRS_NOAA21_NRT'],min_length=1,max_length=3)
     start:date|None=None
-    days:int=Field(default=1,ge=1,le=5)
+    days:int=Field(default=1)
     scope:Literal['world','PER','custom']='world'
     geometry:dict|None=None
+
+    @model_validator(mode='after')
+    def reglas(self):
+        if not 1<=self.days<=5: raise PydanticCustomError('days_range','El número de días debe estar entre 1 y 5')
+        if self.start is not None and self.start>date.today(): raise PydanticCustomError('date_future','La fecha no puede ser posterior a hoy')
+        return self
 
 @app.post('/api/acquisitions',responses=PROTEGIDO)
 def acquisition(body:Acquisition,user:dict=Depends(require('admin'))):

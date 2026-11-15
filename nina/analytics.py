@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Literal
 import shapely
 from pydantic import BaseModel, Field, model_validator
+from pydantic_core import PydanticCustomError
 from .store import database, rows, boundaries, now, code_revision,atomic_read
 from .config import DATA
 
@@ -15,10 +16,10 @@ class Selection(BaseModel):
     department: str = 'all'
     source: Literal['modis','viirs-snpp','viirs-jpss1','viirs-jpss2'] = 'modis'
     platform: Literal['all','Aqua','Terra'] = 'Aqua'
-    year_start: int = Field(default=2018,ge=2000,le=2100)
-    year_end: int = Field(default=2025,ge=2000,le=2100)
-    selected_year: int = Field(default=2025,ge=2000,le=2100)
-    selected_month: int = Field(default=9,ge=1,le=12)
+    year_start: int = Field(default=2018)
+    year_end: int = Field(default=2025)
+    selected_year: int = Field(default=2025)
+    selected_month: int = Field(default=9)
     metric: Literal['observed','experimental'] = 'observed'
     daynight: Literal['all','D','N'] = 'all'
     fire_type: Literal['all','vegetation'] = 'all'
@@ -26,18 +27,31 @@ class Selection(BaseModel):
 
     @model_validator(mode='after')
     def valid(self):
-        if self.year_start>self.year_end or not self.year_start<=self.selected_year<=self.year_end: raise ValueError('El año seleccionado debe estar dentro del rango')
+        # Los límites se validan aquí y no con ge/le para poder devolver un code
+        # propio por regla (WORK_PLAN §10, T2: "cada regla recibe su code").
+        if not 1<=self.selected_month<=12:
+            raise PydanticCustomError('month_range','El mes debe estar entre 1 y 12')
+        if not 2000<=self.year_start<=2100 or not 2000<=self.year_end<=2100 or not 2000<=self.selected_year<=2100:
+            raise PydanticCustomError('year_bounds','Los años deben estar entre 2000 y 2100')
+        if self.year_start>self.year_end or not self.year_start<=self.selected_year<=self.year_end: raise PydanticCustomError('year_range','El año seleccionado debe estar dentro del rango')
+        # Coherencia de sensor: Aqua y Terra solo existen en MODIS (§10, T2).
+        if self.platform!='all' and self.source!='modis':
+            raise PydanticCustomError('sensor_platform','Aqua y Terra solo existen en MODIS; usa la plataforma "all" con VIIRS')
         if self.department!='all' and self.department not in {f['properties']['id'] for f in boundaries()['features']}: raise ValueError('Departamento desconocido')
         if self.scope!='PER' and self.department!='all': raise ValueError('Las divisiones regionales corresponden al archivo peruano')
         if self.scope=='custom' and not self.geometry: raise ValueError('Selecciona una geometría para esta área')
         if self.geometry:
+            motivo='Polígono inválido; utiliza coordenadas geográficas WGS84'
             try:
                 g=shapely.geometry.shape(self.geometry)
-                if g.geom_type not in ['Polygon','MultiPolygon'] or not g.is_valid or g.is_empty or len(json.dumps(self.geometry))>100000: raise ValueError()
-                w,s,e,n=g.bounds
-                if not(-180<=w<e<=180 and -90<=s<n<=90): raise ValueError()
-                if self.scope=='PER' and not(-82<=w<e<=-68 and -19<=s<n<=1): raise ValueError()
-            except Exception: raise ValueError('Polígono inválido; utiliza coordenadas geográficas WGS84')
+                valido=g.geom_type in ['Polygon','MultiPolygon'] and g.is_valid and not g.is_empty and len(json.dumps(self.geometry))<=100000
+                if valido:
+                    w,s,e,n=g.bounds
+                    valido=-180<=w<e<=180 and -90<=s<n<=90
+                    if valido and self.scope=='PER': valido=-82<=w<e<=-68 and -19<=s<n<=1
+            except Exception:
+                valido=False
+            if not valido: raise PydanticCustomError('geometry_invalid',motivo)
         return self
 
 def filters(s, start=None, end=None, source=None, platform=None):

@@ -52,7 +52,7 @@ def test_analysis_baseline_and_export_match(client):
 
 def test_missing_is_distinct_from_archive_zero(client):
     c,path=client;seed(path)
-    a=c.post('/api/analyses',json=selection(source='viirs-jpss2')).json()
+    a=c.post('/api/analyses',json=selection(source='viirs-jpss2',platform='all')).json()
     assert a['selected']['value'] is None
     b=c.post('/api/analyses',json=selection(selected_month=2)).json()
     assert b['selected']['value']==0 and b['selected']['coverage_percent'] is None
