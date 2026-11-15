@@ -44,7 +44,10 @@
 - **Tipos y formatos:** fechas ISO `YYYY-MM-DD`, enumeraciones cerradas, longitudes máximas en textos, tamaño máximo de
   archivo subido, CSV con columnas FIRMS obligatorias y codificación UTF-8.
 - **Geometría:** polígono válido, área máxima, dentro del ámbito elegido (ya existe en parte; se unifica).
-- **Errores uniformes:** respuesta `422` con `code` y mensaje en español (tipo _problem+json_), mostrado tal cual en la UI.
+- **Errores uniformes:** a `422` response with a `code` and a message (_problem+json_ style), shown as is in the UI, **in the interface language**.
+  > Texto vigente de `WORK_PLAN.md` §10. Sustituye al original en español —"respuesta `422` con `code` y
+  > mensaje en español"—, que era el que regía al empezar T2. **Cambio de requisito registrado en L38**;
+  > el resto de `S2` es semánticamente idéntico en las dos versiones (ver L32).
 - **Doble validación:** la UI valida antes de enviar (botón deshabilitado y mensaje junto al campo) y el servidor valida siempre.
 
 | A | B | C |
@@ -248,3 +251,28 @@
   en español, pero la UI no lo enmarca. Lo dejó el verificador en `unverified` (habría que *clickear*);
   corregirlo implica convertir los enlaces de exportación en `fetch` + aviso, y es una pieza de
   interfaz aparte. **También pendiente**: `manifest`/`report` registran `rows=0`.
+- **L37** · **La target branch cambió a `mvp`** (instrucción del usuario). Verificado con `merge-base`:
+  `mvp` **contiene** a `mvp-abraham`, absorbió los dos PRs mergeados (`d3ef1c7`), y suma 10 commits —
+  API de lectura `harmonized`, `packages/nina/` (pipeline offline con H3+uv, ADR 0002–0004), ADRs,
+  `fly.toml` y `openapi.d.ts`. Mi rama iba 1 atrás / 1 adelante.
+- **L38** · **Cambio de requisito detectado al mirar el spec vigente.** El `WORK_PLAN.md` §10 ya **no**
+  pide el mensaje *en español*; pide:
+  > *"Uniform errors: a `422` response with a `code` and a message (_problem+json_ style), shown as is in the UI, **in the interface language**."*
+
+  Reescrito el bullet de `S2` con ese texto verbatim. Consecuencias implementadas: `nina/errors.py`
+  lleva **cada regla y cada plantilla de Pydantic en los dos idiomas** y elige por `Accept-Language`
+  (por defecto **inglés**, igual que `i18n.ts`); `web/src/api.ts` manda esa cabecera; el `code` **no**
+  cambia con el idioma porque es contrato. Tres `ValueError` a secas de `Selection` pasaron a tener code
+  (`department_unknown`, `scope_mismatch`, `geometry_required`), lo que cierra el advisory 1 del cuarto
+  verificador (el mensaje concreto se perdía en un "Entrada inválida" genérico).
+- **L39** · **Merge de `origin/mvp` en `anthony/tasks`** (`e45ae7a`): 2 conflictos resueltos —
+  `nina/analytics.py` (el validador de `Selection`) y `nina/main.py` (`app=FastAPI` + `instalar(app)`) —
+  conservando **mi estructura con códigos y sus textos en inglés**. Verificación de que nada se perdió:
+  `git diff --cached origin/mvp` sobre esos dos archivos da **45+/16−**, todo mío; `harmonized_router`
+  y el resto de aportes de `mvp` siguen presentes. **`openapi.json` regenerado** (las rutas nuevas de
+  `harmonized` entraron con el `422` viejo `HTTPValidationError`; ahora apuntan a `Problem`).
+- **L40** · **3 archivos de `mvp` no pasan `oxfmt`** (`Experiment.tsx`, `perf-scene.js`, `landing/Landing.tsx`).
+  El formatter los tocó y **los revertí a propósito**: reformatarlos aquí enterraría el merge en ruido
+  ajeno y `format:check` no es una puerta del CI. **Queda como deriva preexistente de `mvp`.**
+  Verificación del merge: **`98 passed`**, build `✓ built in 4.09s`. `Risk: none` — el merge solo
+  resuelve conflictos y añade el soporte de idioma que pide el spec, todo cubierto por tests.
