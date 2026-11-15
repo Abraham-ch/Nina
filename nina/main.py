@@ -322,6 +322,8 @@ def archive_month(body:ArchiveMonth,user:dict=Depends(require('admin'))):
 
 from .harmonized import router as harmonized_router
 app.include_router(harmonized_router)
+from .reports import router as reports_router
+app.include_router(reports_router)
 
 dist=ROOT/'web'/'dist'
 if dist.exists(): app.mount('/',StaticFiles(directory=str(dist),html=True),name='web')
