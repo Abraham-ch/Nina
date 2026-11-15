@@ -149,7 +149,7 @@ def test_no_se_puede_exceder_el_tope_de_descargas_por_hora(client, monkeypatch):
     assert c.get(url).status_code == 200
     segunda = c.get(url)
     assert segunda.status_code == 429
-    assert 'hora' in segunda.json()['detail'].lower()
+    assert 'hour' in segunda.json()['detail'].lower()
 
 
 def test_las_exportaciones_no_superan_el_tope_de_filas(client, monkeypatch):
@@ -162,7 +162,7 @@ def test_las_exportaciones_no_superan_el_tope_de_filas(client, monkeypatch):
     respuesta = c.get(f"/api/analyses/{analisis['id']}/exports/detections")
     assert respuesta.status_code == 413
     detalle = respuesta.json()['detail']
-    assert '2' in detalle and 'fila' in detalle.lower()
+    assert '2' in detalle and 'row' in detalle.lower()
     # Una exportación rechazada no debe aparecer en el historial.
     assert c.get('/api/downloads').json() == []
 

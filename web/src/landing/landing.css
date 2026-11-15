@@ -337,7 +337,7 @@
     gap: 28px;
   }
 }
-/* Tercera escena: Perú centrado (canvas) y cuatro indicadores flotando a los lados; cada 85 vh activa uno. */
+/* Third scene: Peru centred (canvas) and four indicators floating at the sides; every 85 vh activates one. */
 .landing-impact {
   height: calc(100vh + 340vh);
 }
@@ -517,5 +517,120 @@
 @media (prefers-reduced-motion: reduce) {
   .landing-ind strong {
     animation: none;
+  }
+}
+/* The problem in figures (peru-evidence.json) */
+.landing-evidence {
+  padding: 14vh max(16px, 6vw) 8vh;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  background: rgba(5, 7, 8, 0.9);
+}
+.landing-evidence h2 {
+  font-size: clamp(30px, 4vw, 52px);
+  max-width: 900px;
+  margin: 0;
+}
+.landing-evidence-lead {
+  max-width: 720px;
+  font-size: 16px;
+  line-height: 1.7;
+  color: #c9d3d6;
+  margin: 0;
+}
+.landing-evidence-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: rgba(238, 243, 244, 0.14);
+  max-width: 1100px;
+  width: 100%;
+}
+.landing-evidence-cards li {
+  background: #07090a;
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.landing-evidence-figure {
+  font-family: 'Barlow Condensed', Arial, sans-serif;
+  font-size: clamp(30px, 3.4vw, 44px);
+  color: var(--l-fire);
+  line-height: 1;
+}
+.landing-evidence-cards strong {
+  font-family: 'Barlow Condensed', Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+}
+.landing-evidence-cards p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #b4c0c4;
+}
+@media (max-width: 699px) {
+  .landing-evidence-cards {
+    grid-template-columns: 1fr;
+  }
+}
+/* Team */
+.landing-team {
+  padding: 10vh max(16px, 6vw);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  background: rgba(5, 7, 8, 0.9);
+}
+.landing-team h2 {
+  font-size: clamp(30px, 4vw, 52px);
+  margin: 0;
+}
+.landing-team-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+  max-width: 1100px;
+}
+.landing-team-list li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.landing-team-photo {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(238, 243, 244, 0.08);
+  border: 1px solid rgba(238, 243, 244, 0.18);
+  font-family: 'Barlow Condensed', Arial, sans-serif;
+  font-size: 40px;
+  color: var(--l-fire);
+}
+.landing-team-list strong {
+  font-family: 'Barlow Condensed', Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+}
+.landing-team-list span:last-child {
+  font-size: 13.5px;
+  color: var(--l-muted);
+}
+@media (max-width: 699px) {
+  .landing-team-list {
+    grid-template-columns: 1fr;
   }
 }

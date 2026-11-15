@@ -213,3 +213,76 @@ export type AuditEntry = {
   detail: string | null
   created_at: string
 }
+// Harmonized product (/api/harmonization, /api/harmonized/*): see docs/HARMONIZED_CONTRACT.md.
+export type Readiness = {
+  available: boolean
+  status: string
+  method_version?: string
+  scientifically_validated?: boolean
+  unit?: string
+  as_of_date?: string
+}
+export type HarmonizedMonth = {
+  year: number
+  month: number
+  value: number | null
+  observed_activity: number | null
+  unit: string
+  status: string
+  data_gap: boolean
+  partial_coverage: boolean
+  is_provisional: boolean
+  historical_median: number | null
+  historical_n: number
+  historical_p10: number | null
+  historical_p90: number | null
+  anomaly_percent: number | null
+  rank: number | null
+  rank_of: number
+}
+export type HarmonizedSelection = {
+  country: string
+  year_start: number
+  year_end: number
+  selected_year: number
+  selected_month: number
+  geometry: Geometry | null
+}
+export type HarmonizedAnalysis = {
+  id: string
+  dataset_id: string
+  method_version: string
+  selection: HarmonizedSelection
+  unit: string
+  selected: HarmonizedMonth
+  months: HarmonizedMonth[]
+  scientifically_validated: boolean
+  validation_status: string
+  legal: string
+  limitations: string[]
+  references: string[]
+  excluded_border_countries: string[]
+  synthetic: false
+}
+export type HarmonizedPoints = {
+  type: 'FeatureCollection'
+  total: number
+  shown: number
+  sampled: boolean
+  features: {
+    type: 'Feature'
+    geometry: { type: 'Point'; coordinates: [number, number] }
+    properties: {
+      cell: string
+      activity: number
+      calibration_validated: boolean
+      observed_cell_days: number
+    }
+  }[]
+}
+export type HarmonizedReply = {
+  answer: string
+  analysis_id: string
+  dataset_id: string
+  references: string[]
+}

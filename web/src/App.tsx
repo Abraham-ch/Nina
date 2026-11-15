@@ -9,7 +9,6 @@ import {
   Layers2,
   MapPin,
   MessageSquareText,
-  Play,
   Share2,
   X,
   Check,
@@ -18,7 +17,14 @@ import {
   CircleHelp,
   UserRound,
 } from 'lucide-react'
-import { lazy, Suspense, useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 
 import Account from './Account'
 import {
@@ -31,11 +37,16 @@ import {
   sourceName,
   translatedName,
   pct,
+  HARMONIZED,
+  harmonizedName,
+  fromHarmonized,
+  pointsFromHarmonized,
 } from './api'
 import Calendar from './Calendar'
 import DataPanel from './DataPanel'
 import Dialog from './Dialog'
 import Experiment from './Experiment'
+import ExperimentalTag from './ExperimentalTag'
 import { tr, locale } from './i18n'
 import LangSwitch from './LangSwitch'
 import Tour from './Tour'
@@ -44,6 +55,8 @@ import type {
   Catalog,
   Comparison,
   Geometry,
+  HarmonizedAnalysis,
+  HarmonizedPoints,
   Health,
   Job,
   Layer,
@@ -52,6 +65,7 @@ import type {
   Points,
   Regions,
   Selection,
+  Readiness,
   Status,
   User,
 } from './types'
@@ -60,7 +74,7 @@ export type Tab = 'atlas' | 'calendar' | 'lab' | 'data'
 export type Modal = '' | 'evidence' | 'export' | 'explain' | 'area'
 const NOW = new Date()
 const DEFAULT: Selection = {
-  scope: 'world',
+  scope: 'PER', // Peru by default: the world analysis (~2.5 s + 2.8 MB of points) loads only when picked
   area_label: '',
   department: 'all',
   source: 'viirs-jpss1',
@@ -81,7 +95,7 @@ function readLink() {
       const value = JSON.parse(raw)
       return {
         selection: { ...DEFAULT, ...value.selection } as Selection,
-        place: String(value.place || 'world'),
+        place: String(value.place || 'PER'),
         tab: (['atlas', 'calendar', 'lab', 'data'].includes(value.tab)
           ? value.tab
           : 'atlas') as Tab,
@@ -93,42 +107,12 @@ function readLink() {
   }
   return {
     selection: DEFAULT,
-    place: 'world',
+    place: 'PER',
     tab: 'atlas' as Tab,
     linked: false,
   }
 }
 const linked = readLink()
-const stories = () => [
-  {
-    tag: tr('The archive', 'El archivo'),
-    title: tr('Did the fire change, or the observer?', '¿Cambió el fuego o el observador?'),
-    copy: tr(
-      'We start in Peru, September 2025, and examine the same territory with different generations of sensors.',
-      'Empezamos en Perú, septiembre de 2025. Examinamos el mismo territorio con distintas generaciones de sensores.',
-    ),
-    action: tr('Compare observers', 'Comparar observadores'),
-  },
-  {
-    tag: tr('The observers', 'Los observadores'),
-    title: tr('The instrument leaves a signal too.', 'El instrumento también deja una señal.'),
-    copy: tr(
-      'Slide the comparison between MODIS Aqua and VIIRS S-NPP. Same area, same month; their overpasses and resolution differ.',
-      'Desliza la comparación entre MODIS Aqua y VIIRS S-NPP. Es la misma área y el mismo mes; sus pasadas y resolución son diferentes.',
-    ),
-    action: tr('Test the continuity', 'Poner a prueba la continuidad'),
-  },
-  {
-    tag: tr('The evidence', 'La evidencia'),
-    title: tr('An estimate deserves a test.', 'Una estimación merece una prueba.'),
-    copy: tr(
-      'Reveal the Aqua reference and review the error on a held-out period. It is an exploratory test: observation opportunities are not controlled yet.',
-      'Revela la referencia Aqua y revisa el error en un período reservado. Es una prueba exploratoria: falta controlar las oportunidades de observación.',
-    ),
-    action: tr('Finish the tour', 'Terminar recorrido'),
-  },
-]
-
 export default function App() {
   const [selection, setSelection] = useState<Selection>(linked.selection),
     [placeId, setPlaceId] = useState(linked.place),
@@ -151,12 +135,16 @@ export default function App() {
     [flat, setFlat] = useState(false),
     [split, setSplit] = useState(50),
     [inspected, setInspected] = useState<Point | null>(null),
-    [story, setStory] = useState<number | null>(null),
     [viirs, setViirs] = useState('viirs-snpp'),
     [extraFilters, setExtraFilters] = useState(false),
     [tour, setTour] = useState(false)
   const [user, setUser] = useState<User | null>(null),
-    [accountOpen, setAccountOpen] = useState(false)
+    [accountOpen, setAccountOpen] = useState(false),
+    [readiness, setReadiness] = useState<Readiness | null>(null),
+    [harmonized, setHarmonized] = useState<HarmonizedAnalysis | null>(null),
+    [labLayers, setLabLayers] = useState<Layer[] | null>(null),
+    [observer, setObserver] = useState('')
+  const isHarmonized = selection.source === HARMONIZED
   function change(patch: Partial<Selection>) {
     setSelection((previous) => ({ ...previous, ...patch }))
     setInspected(null)
@@ -188,6 +176,9 @@ export default function App() {
     api<User>('/auth/me')
       .then(setUser)
       .catch(() => setUser(null))
+    api<Readiness>('/harmonization')
+      .then(setReadiness)
+      .catch(() => setReadiness(null))
     refresh()
   }, [])
   useEffect(() => {
@@ -202,6 +193,11 @@ export default function App() {
     if (country) setSelection((s) => ({ ...s, geometry: country.geometry }))
   }, [places])
   const dataRevision = status?.batches.map((b) => b.id).join(',')
+  // The first revision to arrive (/status takes ~1.3 s) is the data the first analysis already reads:
+  // only a later change restarts it, so the opening request is not aborted and sent again.
+  const firstRevision = useRef(dataRevision)
+  if (firstRevision.current === undefined) firstRevision.current = dataRevision
+  const revisionKey = dataRevision === firstRevision.current ? 'initial' : dataRevision
   useEffect(() => {
     if (selection.scope === 'custom' && !selection.geometry) return
     const abort = new AbortController()
@@ -210,7 +206,16 @@ export default function App() {
     setPoints(null)
     setComparison(null)
     setInspected(null)
-    post<Analysis>('/analyses', selection, abort.signal)
+    setHarmonized(null)
+    const request = isHarmonized
+      ? post<HarmonizedAnalysis>('/harmonized/analyses', harmonizedBody(), abort.signal).then(
+          (h) => {
+            if (!abort.signal.aborted) setHarmonized(h)
+            return fromHarmonized(h, selection, placeLabel)
+          },
+        )
+      : post<Analysis>('/analyses', selection, abort.signal)
+    request
       .then((a) => {
         if (!abort.signal.aborted) setAnalysis(a)
       })
@@ -221,19 +226,25 @@ export default function App() {
         if (!abort.signal.aborted) setLoading(false)
       })
     return () => abort.abort()
-  }, [JSON.stringify(selection), dataRevision])
+  }, [JSON.stringify(selection), revisionKey, isHarmonized && !!regions && !!places])
   useEffect(() => {
     if (!analysis) return
     const abort = new AbortController()
-    api<Points>(`/analyses/${analysis.id}/points`, { signal: abort.signal })
-      .then(setPoints)
-      .catch((e) => {
-        if (e.name !== 'AbortError') setError(e.message)
-      })
+    const { selected_year, selected_month } = analysis.selection
+    const date = `${selected_year}-${String(selected_month).padStart(2, '0')}`
+    const request = isHarmonized
+      ? api<HarmonizedPoints>(`/harmonized/analyses/${analysis.id}/points?limit=5000`, {
+          signal: abort.signal,
+        }).then((p) => pointsFromHarmonized(p, date))
+      : api<Points>(`/analyses/${analysis.id}/points`, { signal: abort.signal })
+    request.then(setPoints).catch((e) => {
+      if (e.name !== 'AbortError') setError(e.message)
+    })
     return () => abort.abort()
   }, [analysis?.id])
   useEffect(() => {
-    if (!analysis || tab !== 'lab') return
+    // Without a harmonized product the lab falls back to comparing two sensors.
+    if (!analysis || tab !== 'lab' || isHarmonized || readiness?.available) return
     const abort = new AbortController()
     setComparison(null)
     api<Comparison>(`/analyses/${analysis.id}/comparison?viirs=${viirs}`, {
@@ -245,6 +256,56 @@ export default function App() {
       })
     return () => abort.abort()
   }, [analysis?.id, tab, viirs])
+  // Lab: the harmonized series (left) against the original observations of one sensor (right).
+  const observed =
+    observer ||
+    (selection.source !== HARMONIZED
+      ? `${selection.source}:${selection.platform}`
+      : selection.scope === 'world'
+        ? 'viirs-jpss1:all'
+        : 'modis:Aqua')
+  useEffect(() => {
+    if (tab !== 'lab' || !readiness?.available) return
+    if (selection.scope === 'custom' && !selection.geometry) return
+    const abort = new AbortController()
+    const { signal } = abort
+    const [source, platform] = observed.split(':')
+    const date = `${selection.selected_year}-${String(selection.selected_month).padStart(2, '0')}`
+    setLabLayers(null)
+    const left = post<HarmonizedAnalysis>('/harmonized/analyses', harmonizedBody(), signal).then(
+      (h) =>
+        api<HarmonizedPoints>(`/harmonized/analyses/${h.id}/points?limit=5000`, { signal }).then(
+          (p) => ({
+            source: HARMONIZED,
+            platform: 'all',
+            selected: fromHarmonized(h, selection, placeLabel).selected,
+            points: pointsFromHarmonized(p, date),
+            analysis_id: h.id,
+          }),
+        ),
+    )
+    const right = post<Analysis>(
+      '/analyses',
+      { ...selection, source, platform, metric: 'observed' },
+      signal,
+    ).then((a) =>
+      api<Points>(`/analyses/${a.id}/points`, { signal }).then((points) => ({
+        source,
+        platform,
+        selected: a.selected,
+        points,
+        analysis_id: a.id,
+      })),
+    )
+    Promise.all([left, right])
+      .then((layers) => {
+        if (!signal.aborted) setLabLayers(layers)
+      })
+      .catch((e) => {
+        if (e.name !== 'AbortError') setError(e.message)
+      })
+    return () => abort.abort()
+  }, [tab, readiness?.available, JSON.stringify(selection), observed, !!regions && !!places])
   useEffect(() => {
     if (!jobs.some((j) => ['queued', 'running'].includes(j.status))) return
     const interval = setInterval(refresh, 1800)
@@ -269,8 +330,7 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [notice])
   const MONTHS = months(),
-    SHORT = shortMonths(),
-    STORIES = stories()
+    SHORT = shortMonths()
   const country = places?.features.find((p) => `country:${p.properties.id}` === placeId) || null
   const department =
     regions?.geojson.features.find((p) => p.properties.id === selection.department) || null
@@ -280,15 +340,35 @@ export default function App() {
     (selection.scope === 'PER'
       ? places?.features.find((p) => p.properties.name === 'Peru') || null
       : null)
-  const label =
-    analysis?.area_name ||
-    (placeId === 'world'
+  // Name of the chosen place without an analysis (the harmonized API does not return one).
+  const placeLabel =
+    placeId === 'world'
       ? tr('The planet', 'El planeta')
       : placeId === 'PER'
         ? tr('All of Peru', 'Perú completo')
-        : country
-          ? translatedName(country.properties.name)
-          : selection.area_label || tr('Your selection', 'Tu selección'))
+        : department
+          ? department.properties.name
+          : country
+            ? translatedName(country.properties.name)
+            : selection.area_label || tr('Your selection', 'Tu selección')
+  // The UI names the place itself so the name follows the interface language.
+  const label = placeLabel
+  // Peru and its regions query Peru (a region by its outline); a country by name; a drawn area worldwide.
+  function harmonizedBody() {
+    return {
+      country: selection.scope === 'PER' ? 'Peru' : country ? country.properties.name : 'world',
+      year_start: selection.year_start,
+      year_end: selection.year_end,
+      selected_year: selection.selected_year,
+      selected_month: selection.selected_month,
+      geometry:
+        selection.scope === 'PER'
+          ? department?.geometry || null
+          : country
+            ? null
+            : selection.geometry,
+    }
+  }
   function choosePlace(id: string) {
     const worldPeriod =
       selection.selected_year < 2025 ||
@@ -303,7 +383,6 @@ export default function App() {
     setPlaceId(id)
     setError('')
     setIntro(false)
-    setStory(null)
     if (id === 'world') {
       change({
         ...worldPeriod,
@@ -368,6 +447,11 @@ export default function App() {
   }
   function selectSource(value: string) {
     const [source, platform] = value.split(':')
+    // The harmonized series starts in 2002 (Terra-only months are not served); the world archive covers recent years.
+    if (source === HARMONIZED && selection.scope !== 'world') {
+      change({ source, platform, metric: 'observed', year_start: 2002 })
+      return
+    }
     change({ source, platform, metric: 'observed' })
     if (source.startsWith('viirs')) setViirs(source)
   }
@@ -389,28 +473,8 @@ export default function App() {
       )
     }
   }
-  function startStory() {
-    setPlaceId('PER')
-    setSelection({
-      ...DEFAULT,
-      scope: 'PER',
-      source: 'modis',
-      platform: 'Aqua',
-      year_start: 2018,
-      year_end: 2025,
-      selected_year: 2025,
-      selected_month: 9,
-    })
-    setIntro(false)
-    setStory(0)
-    setTab('atlas')
-    setFlat(false)
-    setViirs('viirs-snpp')
-    window.scrollTo({ top: 0, behavior: 'instant' })
-  }
   function startTour() {
     setIntro(false)
-    setStory(null)
     setExtraFilters(false)
     setDrawing(false)
     setTab('atlas')
@@ -432,31 +496,10 @@ export default function App() {
     addEventListener('pointermove', move)
     addEventListener('pointerup', up)
   }
-  function nextStory() {
-    if (story === null) return
-    if (story === 0) {
-      setStory(1)
-      setTab('lab')
-      setFlat(true)
-      window.scrollTo({ top: 0, behavior: 'instant' })
-    } else if (story === 1) {
-      setStory(2)
-      setTimeout(
-        () =>
-          document.getElementById('substitution')?.scrollIntoView({
-            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-              ? 'instant'
-              : 'smooth',
-            block: 'center',
-          }),
-        60,
-      )
-    } else setStory(null)
-  }
   const selected = analysis?.selected
   const layers: Layer[] =
     tab === 'lab'
-      ? comparison?.layers || []
+      ? (readiness?.available ? labLayers : comparison?.layers) || []
       : analysis && points
         ? [
             {
@@ -468,9 +511,12 @@ export default function App() {
             },
           ]
         : []
+  const labHarmonized = !!readiness?.available,
+    labReady = labHarmonized ? !!labLayers : !!comparison
   const displayed = layers.reduce((sum, l) => sum + l.points.shown, 0),
     total = layers.reduce((sum, l) => sum + l.points.total, 0)
-  const firstYear = selection.scope === 'PER' ? 2000 : 2025
+  const firstYear =
+    isHarmonized && selection.scope !== 'world' ? 2002 : selection.scope === 'PER' ? 2000 : 2025
   const years = Array.from(
     {
       length: Math.max(NOW.getUTCFullYear(), selection.year_end) - firstYear + 1,
@@ -538,10 +584,6 @@ export default function App() {
           >
             <CircleHelp size={16} />
             <span>{tr('Guide', 'Guía')}</span>
-          </button>
-          <button className="story-start" onClick={startStory}>
-            <Play size={13} fill="currentColor" />
-            {tr('Expedition', 'Expedición')}
           </button>
           <button className={tab === 'data' ? 'active' : ''} onClick={() => setTab('data')}>
             <BookOpen size={17} />
@@ -625,11 +667,18 @@ export default function App() {
             value={`${selection.source}:${selection.platform}`}
             onChange={(e) => selectSource(e.target.value)}
           >
-            {SOURCES.map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
+            <optgroup label={tr('Original observations', 'Observaciones originales')}>
+              {SOURCES.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </optgroup>
+            {(readiness?.available || isHarmonized) && (
+              <optgroup label={tr('Processed product', 'Producto procesado')}>
+                <option value={`${HARMONIZED}:all`}>{harmonizedName()}</option>
+              </optgroup>
+            )}
           </select>
         </label>
         <button className="coordinates-button" onClick={() => setModal('area')}>
@@ -743,7 +792,7 @@ export default function App() {
                   onInspect={setInspected}
                   flat={flat}
                   onFlat={setFlat}
-                  busy={loading || (tab === 'lab' ? !comparison : !points)}
+                  busy={loading || (tab === 'lab' ? !labReady : !points)}
                 />
               </Suspense>
               {intro && tab === 'atlas' ? (
@@ -795,12 +844,15 @@ export default function App() {
                   <div className="map-brief">
                     <span className="map-kicker">
                       {sourceName(selection.source, selection.platform)}
+                      {isHarmonized && <ExperimentalTag />}
                     </span>
                     <h1>{label}</h1>
                     <div className="observed-number">
                       {loading ? '…' : fmt(selected?.value)}
                       <span>
-                        {tr('archive detections', 'detecciones del archivo')}
+                        {isHarmonized
+                          ? tr('equivalent active cell-days', 'celdas-día activas equivalentes')
+                          : tr('archive detections', 'detecciones del archivo')}
                         <br />
                         {tr(
                           `${monthName} ${selection.selected_year}`,
@@ -855,38 +907,50 @@ export default function App() {
                       {tr('Same territory · same period', 'Mismo territorio · mismo período')}
                     </span>
                     <h1>
-                      {tr(
-                        'The observer changes the signal too.',
-                        'El observador también cambia la señal.',
-                      )}
+                      {labHarmonized
+                        ? tr(
+                            'One consistent record against a single observer.',
+                            'Un registro coherente frente a un solo observador.',
+                          )
+                        : tr(
+                            'The observer changes the signal too.',
+                            'El observador también cambia la señal.',
+                          )}
                     </h1>
                     <p>
                       {label} · {monthName} {selection.selected_year}
                     </p>
                   </div>
                   <div className="sensor-tag left">
-                    <i className="modis-square" />
+                    <i className={labHarmonized ? 'viirs-circle harmonized-dot' : 'modis-square'} />
                     <span>
-                      MODIS Aqua
+                      {labHarmonized ? harmonizedName() : 'MODIS Aqua'}
                       <strong>
-                        {comparison?.layers[0]?.selected.value == null
+                        {layers[0]?.selected.value == null
                           ? noData
-                          : fmt(comparison.layers[0].selected.value) +
+                          : fmt(layers[0].selected.value) +
                             ' ' +
-                            tr('detections', 'detecciones')}
+                            (labHarmonized
+                              ? tr('equivalent cell-days', 'celdas-día equivalentes')
+                              : tr('detections', 'detecciones'))}
                       </strong>
                     </span>
                   </div>
                   <div className="sensor-tag right">
-                    <i className="viirs-circle" />
+                    <i
+                      className={
+                        (layers[1]?.source === 'modis' ? 'modis-square' : 'viirs-circle') +
+                        (labHarmonized ? ' observer-dot' : '')
+                      }
+                    />
                     <span>
-                      {sourceName(viirs, 'all')}
+                      {labHarmonized
+                        ? sourceName(observed.split(':')[0], observed.split(':')[1])
+                        : sourceName(viirs, 'all')}
                       <strong>
-                        {comparison?.layers[1]?.selected.value == null
+                        {layers[1]?.selected.value == null
                           ? noData
-                          : fmt(comparison.layers[1].selected.value) +
-                            ' ' +
-                            tr('detections', 'detecciones')}
+                          : fmt(layers[1].selected.value) + ' ' + tr('detections', 'detecciones')}
                       </strong>
                     </span>
                   </div>
@@ -930,15 +994,29 @@ export default function App() {
                         onChange={(e) => setSplit(Number(e.target.value))}
                       />
                     </label>
-                    <select
-                      aria-label={tr('VIIRS to compare', 'VIIRS de comparación')}
-                      value={viirs}
-                      onChange={(e) => setViirs(e.target.value)}
-                    >
-                      <option value="viirs-snpp">VIIRS · S-NPP</option>
-                      <option value="viirs-jpss1">VIIRS · NOAA-20</option>
-                      <option value="viirs-jpss2">VIIRS · NOAA-21</option>
-                    </select>
+                    {labHarmonized ? (
+                      <select
+                        aria-label={tr('Observer to compare', 'Observador de comparación')}
+                        value={observed}
+                        onChange={(e) => setObserver(e.target.value)}
+                      >
+                        {SOURCES.map(([id, name]) => (
+                          <option key={id} value={id}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select
+                        aria-label={tr('VIIRS to compare', 'VIIRS de comparación')}
+                        value={viirs}
+                        onChange={(e) => setViirs(e.target.value)}
+                      >
+                        <option value="viirs-snpp">VIIRS · S-NPP</option>
+                        <option value="viirs-jpss1">VIIRS · NOAA-20</option>
+                        <option value="viirs-jpss2">VIIRS · NOAA-21</option>
+                      </select>
+                    )}
                   </div>
                 </>
               )}
@@ -952,42 +1030,87 @@ export default function App() {
                     <X size={16} />
                   </button>
                   <span className="map-kicker">
-                    {tr('One archive observation', 'Una observación del archivo')}
+                    {inspected.properties.source === HARMONIZED
+                      ? tr('One harmonized cell', 'Una celda armonizada')
+                      : tr('One archive observation', 'Una observación del archivo')}
                   </span>
                   <h2>{inspected.properties.platform}</h2>
-                  <dl>
-                    <dt>{tr('UTC date', 'Fecha UTC')}</dt>
-                    <dd>{inspected.properties.date}</dd>
-                    <dt>{tr('Coordinates', 'Coordenadas')}</dt>
-                    <dd>{inspected.geometry.coordinates.map((n) => n.toFixed(4)).join(', ')}</dd>
-                    <dt>{tr('Fire radiative power', 'Potencia radiativa')}</dt>
-                    <dd>{fmt(inspected.properties.frp, 2)} MW</dd>
-                    <dt>{tr('Product confidence', 'Confianza del producto')}</dt>
-                    <dd>{inspected.properties.confidence}</dd>
-                    <dt>{tr('Time of day', 'Horario')}</dt>
-                    <dd>
-                      {inspected.properties.daynight === 'N'
-                        ? tr('Night', 'Noche')
-                        : tr('Day', 'Día')}
-                    </dd>
-                  </dl>
-                  <p>
-                    {tr(
-                      'One detected thermal pixel; it does not identify an individual fire.',
-                      'Un píxel térmico detectado; no identifica un incendio individual.',
-                    )}
-                  </p>
+                  {inspected.properties.source === HARMONIZED ? (
+                    <>
+                      <dl>
+                        <dt>{tr('Month', 'Mes')}</dt>
+                        <dd>{inspected.properties.date}</dd>
+                        <dt>{tr('Cell centre', 'Centro de celda')}</dt>
+                        <dd>
+                          {inspected.geometry.coordinates.map((n) => n.toFixed(4)).join(', ')}
+                        </dd>
+                        <dt>{tr('Equivalent activity', 'Actividad equivalente')}</dt>
+                        <dd>{fmt(inspected.properties.frp, 2)}</dd>
+                        <dt>{tr('Active cell-days', 'Celdas-día activas')}</dt>
+                        <dd>{fmt(inspected.properties.scan)}</dd>
+                        <dt>{tr('Calibration', 'Calibración')}</dt>
+                        <dd>{inspected.properties.confidence}</dd>
+                      </dl>
+                      <p>
+                        {tr(
+                          'An H3 cell centre with VIIRS-equivalent activity; not a fire location.',
+                          'Centro de una celda H3 con actividad equivalente VIIRS; no es la ubicación de un incendio.',
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <dl>
+                        <dt>{tr('UTC date', 'Fecha UTC')}</dt>
+                        <dd>{inspected.properties.date}</dd>
+                        <dt>{tr('Coordinates', 'Coordenadas')}</dt>
+                        <dd>
+                          {inspected.geometry.coordinates.map((n) => n.toFixed(4)).join(', ')}
+                        </dd>
+                        <dt>{tr('Fire radiative power', 'Potencia radiativa')}</dt>
+                        <dd>{fmt(inspected.properties.frp, 2)} MW</dd>
+                        <dt>{tr('Product confidence', 'Confianza del producto')}</dt>
+                        <dd>{inspected.properties.confidence}</dd>
+                        <dt>{tr('Time of day', 'Horario')}</dt>
+                        <dd>
+                          {inspected.properties.daynight === 'N'
+                            ? tr('Night', 'Noche')
+                            : tr('Day', 'Día')}
+                        </dd>
+                      </dl>
+                      <p>
+                        {tr(
+                          'One detected thermal pixel; it does not identify an individual fire.',
+                          'Un píxel térmico detectado; no identifica un incendio individual.',
+                        )}
+                      </p>
+                    </>
+                  )}
                 </aside>
               )}
               <div className="map-data-note">
                 <span>
                   {tab === 'lab' ? (
-                    <>
-                      <i className="modis-square" />
-                      MODIS
-                      <i className="viirs-circle" />
-                      VIIRS
-                    </>
+                    labHarmonized ? (
+                      <>
+                        <i className="viirs-circle harmonized-dot" />
+                        {tr('Harmonized', 'Armonizado')}
+                        <i
+                          className={
+                            (layers[1]?.source === 'modis' ? 'modis-square' : 'viirs-circle') +
+                            ' observer-dot'
+                          }
+                        />
+                        {sourceName(observed.split(':')[0], observed.split(':')[1])}
+                      </>
+                    ) : (
+                      <>
+                        <i className="modis-square" />
+                        MODIS
+                        <i className="viirs-circle" />
+                        VIIRS
+                      </>
+                    )
                   ) : (
                     <>
                       <i
@@ -998,7 +1121,7 @@ export default function App() {
                   )}
                 </span>
                 <span>
-                  {loading || !points || (tab === 'lab' && !comparison)
+                  {loading || !points || (tab === 'lab' && !labReady)
                     ? tr('Querying archive points…', 'Consultando puntos del archivo…')
                     : tr(
                         `${fmt(displayed)} of ${fmt(total)} points on screen${displayed < total ? ' · deterministic sample' : ''}`,
@@ -1085,23 +1208,33 @@ export default function App() {
                 <div className="comparison-note">
                   <Info size={17} />
                   <p>
-                    {comparison?.note ||
-                      tr(
-                        'Original files from the same period. Their overpasses are not simultaneous, and the differences are not real changes in activity.',
-                        'Archivos originales del mismo período. Sus pasadas no son simultáneas y las diferencias no equivalen a cambios reales de actividad.',
-                      )}
+                    {labHarmonized
+                      ? tr(
+                          'Left: the harmonized MODIS + VIIRS series, in VIIRS-equivalent active cell-days. Right: the original observations of the chosen sensor, in detections. The units differ: compare where and when there is activity, not the totals.',
+                          'Izquierda: la serie armonizada MODIS + VIIRS, en celdas-día activas equivalentes VIIRS. Derecha: las observaciones originales del sensor elegido, en detecciones. Las unidades difieren: compara dónde y cuándo hay actividad, no los totales.',
+                        )
+                      : comparison?.note ||
+                        tr(
+                          'Original files from the same period. Their overpasses are not simultaneous, and the differences are not real changes in activity.',
+                          'Archivos originales del mismo período. Sus pasadas no son simultáneas y las diferencias no equivalen a cambios reales de actividad.',
+                        )}
                   </p>
                 </div>
-                <Experiment regions={regions} revealForStory={story === 2} />
+                <Experiment regions={regions} />
               </>
             )}
             {tab === 'atlas' && (
               <div className="atlas-caption">
                 <span>
-                  {tr(
-                    'NASA FIRMS data · thermal pixels, not individual fires.',
-                    'Datos NASA FIRMS · píxeles térmicos, no incendios individuales.',
-                  )}
+                  {isHarmonized
+                    ? tr(
+                        'NASA FIRMS data, harmonized · H3 cell centres, not individual fires.',
+                        'Datos NASA FIRMS armonizados · centros de celdas H3, no incendios individuales.',
+                      )
+                    : tr(
+                        'NASA FIRMS data · thermal pixels, not individual fires.',
+                        'Datos NASA FIRMS · píxeles térmicos, no incendios individuales.',
+                      )}
                 </span>
                 <button
                   onClick={() => {
@@ -1118,7 +1251,9 @@ export default function App() {
         )}
         {tab === 'calendar' && (
           <Calendar
+            label={label}
             analysis={analysis}
+            harmonized={harmonized}
             selection={selection}
             loading={loading}
             onChange={change}
@@ -1164,29 +1299,9 @@ export default function App() {
           </span>
         </div>
       </footer>
-      {story !== null && (
-        <aside className="story-panel" aria-label={tr('Guided expedition', 'Expedición guiada')}>
-          <div>
-            <span>
-              {story + 1} / 3 · {STORIES[story].tag}
-            </span>
-            <button
-              onClick={() => setStory(null)}
-              aria-label={tr('Close expedition', 'Cerrar expedición')}
-            >
-              <X size={17} />
-            </button>
-          </div>
-          <h2>{STORIES[story].title}</h2>
-          <p>{STORIES[story].copy}</p>
-          <button className="button sand" onClick={nextStory}>
-            {STORIES[story].action}
-            <ArrowRight size={16} />
-          </button>
-        </aside>
-      )}
       {tour && <Tour onClose={() => setTour(false)} />}
       <Dialog
+        harmonized={isHarmonized}
         modal={modal}
         onModal={setModal}
         label={label}

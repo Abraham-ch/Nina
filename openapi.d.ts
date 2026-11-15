@@ -84,7 +84,7 @@ export interface paths {
         };
         /**
          * Downloads
-         * @description T1: historial propio de descargas ("Mis descargas"). Cada usuario solo ve las suyas.
+         * @description T1: the user's own download history ("My downloads"). Each user only sees their own.
          */
         get: operations["downloads_api_downloads_get"];
         put?: never;
@@ -104,7 +104,7 @@ export interface paths {
         };
         /**
          * Audit
-         * @description T1: quién importó, sincronizó o entrenó, y cuándo. Visible solo para `admin`.
+         * @description T1: who imported, synced or trained, and when. Visible only to `admin`.
          */
         get: operations["audit_api_audit_get"];
         put?: never;

@@ -7,10 +7,8 @@ import type { Experiment as Result, Regions } from './types'
 
 export default function Experiment({
   regions,
-  revealForStory = false,
 }: {
   regions: Regions | null
-  revealForStory?: boolean
 }) {
   const [source, setSource] = useState('viirs-snpp'),
     [department, setDepartment] = useState(''),
@@ -36,9 +34,6 @@ export default function Experiment({
       })
     return () => abort.abort()
   }, [source, department])
-  useEffect(() => {
-    if (revealForStory && result?.available) setRevealed(true)
-  }, [revealForStory, result?.model_id])
   const sample = result?.samples[index],
     maximum = Math.max(1, sample?.input || 0, sample?.reference || 0, sample?.estimate || 0)
   return (

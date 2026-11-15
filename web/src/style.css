@@ -3750,3 +3750,58 @@ optgroup {
 .permission-state .button {
   margin-top: 14px;
 }
+/* Harmonized product (experimental draft) */
+.experimental-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid #cc8542;
+  border-radius: 2px;
+  background: #f6e9d9;
+  color: #743f2c;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+h1 > .experimental-tag {
+  font-family: 'IBM Plex Sans', Arial, sans-serif;
+  font-size: 12px;
+  margin-left: 14px;
+}
+.harmonized-note {
+  margin: 22px 0;
+  padding: 18px;
+  background: #f6e9d9;
+  border-left: 3px solid #cc8542;
+  color: #743f2c;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.harmonized-note p {
+  margin: 8px 0 0;
+}
+.harmonized-legal {
+  font-size: 12px;
+  color: #88553c;
+}
+
+/* Lab: dots in the colours the map paints, so each side reads at a glance. */
+.harmonized-dot,
+.observer-dot {
+  width: 8px;
+  height: 8px;
+}
+.harmonized-dot {
+  background: #28d2ff;
+  box-shadow: 0 0 6px #28d2ff;
+}
+.observer-dot.viirs-circle {
+  background: #ff5a36;
+  box-shadow: 0 0 6px #ff4020;
+}
+.observer-dot.modis-square {
+  background: #ffaa32;
+  box-shadow: 0 0 6px #ffaa32;
+}

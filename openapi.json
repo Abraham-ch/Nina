@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "NINA · Atlas del fuego",
+    "title": "NINA · Fire atlas",
     "version": "0.3.0"
   },
   "paths": {
@@ -113,7 +113,7 @@
     "/api/downloads": {
       "get": {
         "summary": "Downloads",
-        "description": "T1: historial propio de descargas (\"Mis descargas\"). Cada usuario solo ve las suyas.",
+        "description": "T1: the user's own download history (\"My downloads\"). Each user only sees their own.",
         "operationId": "downloads_api_downloads_get",
         "responses": {
           "200": {
@@ -136,7 +136,7 @@
     "/api/audit": {
       "get": {
         "summary": "Audit",
-        "description": "T1: quién importó, sincronizó o entrenó, y cuándo. Visible solo para `admin`.",
+        "description": "T1: who imported, synced or trained, and when. Visible only to `admin`.",
         "operationId": "audit_api_audit_get",
         "responses": {
           "200": {

@@ -32,6 +32,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+import { HARMONIZED } from './api'
 import { tr } from './i18n'
 import type { Geometry, Layer, Place, Point, Selection } from './types'
 
@@ -82,12 +83,12 @@ function bounds(geometry: Geometry) {
 }
 // Heat is painted on an overlaid 2D canvas with additive blending ('lighter'), as on the landing page: nearby
 // hotspots add up and glow brighter. Cesium billboards average translucency, so overlapping halos darkened
-// each other. VIIRS in red and MODIS in amber so the instrument stays identifiable.
+// each other. VIIRS in red, MODIS in amber and the harmonized series in cyan, so the source stays identifiable.
 const MAX_ZOOM_OUT = 24_000_000,
   HOME = Cartesian3.fromDegrees(-65, 5, 18_000_000)
 type Dot = {
   pos: Cartesian3
-  modis: boolean
+  kind: number // 0 VIIRS · 1 MODIS · 2 harmonized
   side: number
   point: Point
   x: number
@@ -95,13 +96,13 @@ type Dot = {
   on: boolean
   m: number[]
 }
-function glow(rgb: string) {
+function glow(rgb: string, core = '255,225,190') {
   const S = 64,
     c = document.createElement('canvas')
   c.width = c.height = S
   const x = c.getContext('2d')!,
     g = x.createRadialGradient(32, 32, 0, 32, 32, 32)
-  g.addColorStop(0, 'rgba(255,225,190,.9)')
+  g.addColorStop(0, `rgba(${core},.9)`)
   g.addColorStop(0.1, `rgba(${rgb},.7)`)
   g.addColorStop(0.38, `rgba(${rgb},.16)`)
   g.addColorStop(1, `rgba(${rgb},0)`)
@@ -237,6 +238,8 @@ export default function Globe({
       }, 9000) // ponytail: if the tiles never finish, do not block the map
       const red = glow('255,64,32'),
         amber = glow('255,170,50'),
+        cyan = glow('40,210,255', '215,250,255'),
+        sprites = [red, amber, cyan],
         scratch = new Cartesian2()
       const paint = () => {
         const c = heat.current
@@ -284,16 +287,16 @@ export default function Globe({
           d.x = p.x
           d.y = p.y
           d.on = true
-          ctx.drawImage(d.modis ? amber : red, p.x - r, p.y - r, r * 2, r * 2)
+          ctx.drawImage(sprites[d.kind], p.x - r, p.y - r, r * 2, r * 2)
         }
         // Motes: two particles per detection around the core, for the cloud texture.
         ctx.globalAlpha = 0.85
         const spread = r * 0.38
-        for (const modis of [false, true]) {
-          ctx.fillStyle = modis ? '#ffd08a' : '#ff9a6a'
+        for (const [kind, mote] of ['#ff9a6a', '#ffd08a', '#9eeeff'].entries()) {
+          ctx.fillStyle = mote
           ctx.beginPath()
           for (const d of list)
-            if (d.on && d.modis === modis) {
+            if (d.on && d.kind === kind) {
               ctx.rect(d.x + d.m[0] * spread, d.y + d.m[1] * spread, 1.4, 1.4)
               ctx.rect(d.x + d.m[2] * spread, d.y + d.m[3] * spread, 1.2, 1.2)
             }
@@ -394,7 +397,7 @@ export default function Globe({
         const [lon, lat] = point.geometry.coordinates
         list.push({
           pos: Cartesian3.fromDegrees(lon, lat, 0),
-          modis: layer.source === 'modis',
+          kind: layer.source === 'modis' ? 1 : layer.source === HARMONIZED ? 2 : 0,
           side: index,
           point,
           x: 0,

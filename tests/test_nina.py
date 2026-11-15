@@ -84,7 +84,7 @@ def test_stale_analysis_and_grounded_assistant(client):
     c,path=client;seed(path)
     a=c.post('/api/analyses',json=selection()).json()
     reply=c.post('/api/assistant',json={'analysis_id':a['id'],'question':'Predice el incendio de mañana'}).json()
-    assert 'no permiten' in reply['answer'] and reply['engine']=='deterministic_evidence'
+    assert 'cannot confirm causes' in reply['answer'] and reply['engine']=='deterministic_evidence'
     assert reply['evidence'][1]['value']==6
     p=fixture_csv(path/'raw'/'extra.csv',2026);ingest.ingest_file(p,'modis')
     assert c.get(f"/api/analyses/{a['id']}/exports/series").status_code==409

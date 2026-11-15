@@ -26,10 +26,10 @@ class Selection(BaseModel):
 
     @model_validator(mode='after')
     def valid(self):
-        if self.year_start>self.year_end or not self.year_start<=self.selected_year<=self.year_end: raise ValueError('El año seleccionado debe estar dentro del rango')
-        if self.department!='all' and self.department not in {f['properties']['id'] for f in boundaries()['features']}: raise ValueError('Departamento desconocido')
-        if self.scope!='PER' and self.department!='all': raise ValueError('Las divisiones regionales corresponden al archivo peruano')
-        if self.scope=='custom' and not self.geometry: raise ValueError('Selecciona una geometría para esta área')
+        if self.year_start>self.year_end or not self.year_start<=self.selected_year<=self.year_end: raise ValueError('The selected year must be within the range')
+        if self.department!='all' and self.department not in {f['properties']['id'] for f in boundaries()['features']}: raise ValueError('Unknown department')
+        if self.scope!='PER' and self.department!='all': raise ValueError('Regional divisions belong to the Peruvian archive')
+        if self.scope=='custom' and not self.geometry: raise ValueError('Select a geometry for this area')
         if self.geometry:
             try:
                 g=shapely.geometry.shape(self.geometry)
@@ -37,7 +37,7 @@ class Selection(BaseModel):
                 w,s,e,n=g.bounds
                 if not(-180<=w<e<=180 and -90<=s<n<=90): raise ValueError()
                 if self.scope=='PER' and not(-82<=w<e<=-68 and -19<=s<n<=1): raise ValueError()
-            except Exception: raise ValueError('Polígono inválido; utiliza coordenadas geográficas WGS84')
+            except Exception: raise ValueError('Invalid polygon; use WGS84 geographic coordinates')
         return self
 
 def filters(s, start=None, end=None, source=None, platform=None):
@@ -80,9 +80,9 @@ def _selected_chunks(s,start=None,end=None,source=None,platform=None,
     El consumidor debe agotar o cerrar el generador en el mismo hilo, porque
     la conexión mantiene el bloqueo de la revisión mientras está abierta.
     """
-    if chunk_size<1: raise ValueError('El tamaño de bloque debe ser positivo')
+    if chunk_size<1: raise ValueError('The chunk size must be positive')
     if not columns or any(column not in OBSERVATION_COLUMNS for column in columns):
-        raise ValueError('Columnas de observación inválidas')
+        raise ValueError('Invalid observation columns')
     where,args=filters(s,start,end,source,platform)
     geometry=shapely.geometry.shape(s.geometry) if s.geometry else None
     if geometry is not None:
@@ -111,7 +111,7 @@ def iter_selected_rows(s,start=None,end=None,source=None,platform=None,chunk_siz
 
 
 def selected_rows(s,start=None,end=None,source=None,platform=None):
-    """Compatibilidad para consultas pequeñas; exportaciones usan el iterador."""
+    """Compatibility for small queries; exports use the iterator."""
     return list(iter_selected_rows(s,start,end,source,platform))
 
 def month_dates(year,month):
@@ -120,10 +120,10 @@ def month_dates(year,month):
     return start,end
 
 def name(s):
-    if s.scope=='world': return 'El planeta'
-    if s.scope=='custom': return s.area_label or 'Área personalizada'
-    department=next((f['properties']['name'] for f in boundaries()['features'] if f['properties']['id']==s.department),'Perú completo')
-    return department+(' · polígono personalizado' if s.geometry else '')
+    if s.scope=='world': return 'The planet'
+    if s.scope=='custom': return s.area_label or 'Custom area'
+    department=next((f['properties']['name'] for f in boundaries()['features'] if f['properties']['id']==s.department),'All of Peru')
+    return department+(' · custom polygon' if s.geometry else '')
 
 
 def spatial_coverage(batch,s):
@@ -203,11 +203,11 @@ def analyze(s,created_by=None):
         'months':months,'selected':selected,
         'archive_windows':[{'start':str(x['coverage_start']),'end':str(x['coverage_end']),'basis':x['coverage_basis'],'scope':x['spatial_scope']} for x in coverage if x['coverage_start']],
         'harmonization_status':'exploratory_peru' if s.metric=='experimental' else 'observed_not_harmonized',
-        'synthetic':False,'metric_label':'Detecciones observadas' if s.metric=='observed' else 'Estimación exploratoria equivalente a Aqua',
-        'limitations':['Son píxeles detectados, no incendios individuales ni superficie quemada.',
-            'Cobertura de cielo y oportunidades válidas todavía no reconstruidas; un cero del archivo no prueba ausencia de fuego.',
-            'Las anomalías de conteos brutos son descriptivas y no están corregidas por cambios de observación.',
-            *(['Modelo experimental ajustado a conteos mensuales, sin corrección de exposición. No es una armonización científica validada.'] if s.metric=='experimental' else [])],
+        'synthetic':False,'metric_label':'Observed detections' if s.metric=='observed' else 'Exploratory Aqua-equivalent estimate',
+        'limitations':['These are detected pixels, not individual fires or burned area.',
+            'Sky coverage and valid observation opportunities are not reconstructed yet; an archive zero does not prove the absence of fire.',
+            'Raw-count anomalies are descriptive and not corrected for changes in observation.',
+            *(['Experimental model fitted to monthly counts, without exposure correction. It is not a validated scientific harmonization.'] if s.metric=='experimental' else [])],
         'references':['https://firms.modaps.eosdis.nasa.gov/country/' if s.scope=='PER' else 'https://firms.modaps.eosdis.nasa.gov/api/area/','https://www.earthdata.nasa.gov/data/tools/firms/faq']}
     with database() as c:
         c.execute('INSERT OR IGNORE INTO analyses(id,selection,result,created_at,created_by) VALUES (?,?,?,?,?)',[analysis_id,json.dumps(s.model_dump()),json.dumps(result),now(),created_by])
@@ -220,8 +220,8 @@ def get_analysis(identifier):
 
 @atomic_read
 def points_for_analysis(result, limit=10000):
-    """Muestra acotada por hash estable; total calculado antes del muestreo."""
-    if limit<1: raise ValueError('El límite de puntos debe ser positivo')
+    """Sample bounded by a stable hash; the total is computed before sampling."""
+    if limit<1: raise ValueError('The point limit must be positive')
     s=Selection(**result['selection']);a,b=month_dates(s.selected_year,s.selected_month)
     if not s.geometry:
         where,args=filters(s,a,b)

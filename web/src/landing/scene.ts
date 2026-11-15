@@ -752,7 +752,9 @@ export function createScene(
     }
     ctx.globalAlpha = 1 - dim * 0.72
 
-    // Particles grouped in color/opacity buckets for few draw calls.
+    // Particles grouped in color/opacity buckets for few fillStyle changes. They are drawn with fillRect, not
+    // rect()+fill(): mid-morph uses ~130 buckets and each path fill rasterizes a full-screen path, which took
+    // ~87 ms/frame on a CPU-rasterized canvas (fillRect: ~6 ms). Measure with web/scripts/perf-scene.js.
     bucketSize.fill(0)
     for (let i = 0; i < LAND; i++) {
       const t = ease(clamp((morph - delay[i]) / 0.55))
@@ -783,15 +785,13 @@ export function createScene(
     for (let b = 0; b < bucketCount; b++) {
       if (!bucketSize[b]) continue
       ctx.fillStyle = styleFor(b)
-      ctx.beginPath()
       for (let n = bucketStart[b]; n < bucketStart[b + 1]; n++) {
         const i = sorted[n],
           x = sx[i],
           y = sy[i]
         if (x < -4 || y < -4 || x > W + 4 || y > H + 4) continue
-        ctx.rect(x, y, size[i], size[i])
+        ctx.fillRect(x, y, size[i], size[i])
       }
-      ctx.fill()
     }
 
     // Planet flares: up to FLARES land particles light up for 2–4 s and fade out; they disappear as the morph advances.

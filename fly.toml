@@ -7,6 +7,11 @@ app = 'nina-cold-stone-3421'
 primary_region = 'gru'
 
 [build]
+[env]
+  # The harmonized product lives on the volume too (data/source/review).
+  NINA_SOURCE_DIR = 'data/source'
+  NINA_EXPERIMENTAL_HARMONIZATION = 'true'
+
 [http_service]
   internal_port = 8000
   force_https = true
