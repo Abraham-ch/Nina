@@ -40,7 +40,7 @@ from .harmonized import (
 
 router = APIRouter(tags=["Territorial report"])
 CONTEXT = SOURCE / "context"
-REPORT_VERSION = "3"  # 2: burned area (MCD64A1 via GWIS); 3: 30 m burned-area case study
+REPORT_VERSION = "4"  # 4: case study in Spanish; 2: burned area (MCD64A1 via GWIS); 3: 30 m burned-area case study
 EVENT_MIN_CELL_DAYS = 5  # "significant" fire events: at least five active cell-days
 SEASON_MONTHS = (7, 8, 9, 10)  # Peruvian fire season used for season totals
 TREND_FIRST_YEAR = 2003
@@ -561,7 +561,7 @@ GFW_NAMES = {
 CASE_FIGURES = ("prithvi_vs_dnbr_zoom.png", "post_truecolour_zoom.png", "dnbr_classes_zoom.png")
 
 
-def section_burn_case(territory: dict[str, Any], year: int, month: int) -> dict[str, Any]:
+def section_burn_case(territory: dict[str, Any], year: int, month: int, language: str = "en") -> dict[str, Any]:
     """Burned area mapped at 30 m for the documented case study (Chilecito, July 2026), when the report's territory
     and period overlap it. Figures come from source/context/burn_case/summary.json (docs/BURN_CASE_CHILECITO.md)."""
     path = CONTEXT / "burn_case/summary.json"
@@ -576,15 +576,21 @@ def section_burn_case(territory: dict[str, Any], year: int, month: int) -> dict[
         return {"status": "not_available", "reason": "the 30 m case study covers Chilecito (Argentina), July–August 2026"}
     hls, mcd, prithvi = summary["hls"], summary["mcd64a1"], summary["prithvi"]
     standard, shadow = hls["areas_ha"]["fmask_standard"], hls["areas_ha"]["terrain_shadow_included"]
+    es = language == "es"
     rows = [
-        {"method": "HLS dNBR ≥ 0.27, pixels clear on both dates (lower bound)", "resolution_m": 30,
+        {"method": "HLS dNBR ≥ 0.27, píxeles despejados en ambas fechas (mínimo)" if es else
+         "HLS dNBR ≥ 0.27, pixels clear on both dates (lower bound)", "resolution_m": 30,
          "burned_ha": standard["moderate"]["hotspot_anchored"]},
-        {"method": "HLS dNBR ≥ 0.10, pixels clear on both dates", "resolution_m": 30,
+        {"method": "HLS dNBR ≥ 0.10, píxeles despejados en ambas fechas" if es else
+         "HLS dNBR ≥ 0.10, pixels clear on both dates", "resolution_m": 30,
          "burned_ha": standard["low"]["hotspot_anchored"]},
-        {"method": "HLS dNBR ≥ 0.10, terrain shadow included", "resolution_m": 30,
+        {"method": "HLS dNBR ≥ 0.10, incluida la sombra del relieve" if es else
+         "HLS dNBR ≥ 0.10, terrain shadow included", "resolution_m": 30,
          "burned_ha": shadow["low"]["hotspot_anchored"]},
-        {"method": "MODIS MCD64A1 burned area", "resolution_m": 500, "burned_ha": mcd["burned_ha_jul_aug"]},
-        {"method": "Prithvi-EO-2.0 BurnScars, patches touching the hotspots (out-of-domain test)",
+        {"method": "Área quemada MODIS MCD64A1" if es else "MODIS MCD64A1 burned area", "resolution_m": 500,
+         "burned_ha": mcd["burned_ha_jul_aug"]},
+        {"method": "Prithvi-EO-2.0 BurnScars, parches que tocan los focos (prueba fuera de dominio)" if es else
+         "Prithvi-EO-2.0 BurnScars, patches touching the hotspots (out-of-domain test)",
          "resolution_m": 30, "burned_ha": prithvi["burned_ha_hotspot_anchored"]},
     ]
     return {
@@ -598,6 +604,13 @@ def section_burn_case(territory: dict[str, Any], year: int, month: int) -> dict[
         "rows": rows,
         "figures": list(CASE_FIGURES),
         "caveats": [
+            "Los umbrales no se calibraron para este matorral árido: el área casi se duplica entre dNBR 0.27 y 0.10.",
+            "La máscara de calidad de HLS marca como agua la sombra invernal de las laderas: las áreas con píxeles "
+            "despejados son mínimos.",
+            "MCD64A1 cuenta celdas enteras de 21.5 ha; Prithvi se entrenó con incendios de EE. UU. y también marca "
+            "laderas no quemadas.",
+            "No se validó con un perímetro de campo ni con una cifra oficial de CONAE.",
+        ] if es else [
             "Thresholds were not calibrated for this arid shrubland: the area roughly doubles between dNBR 0.27 and 0.10.",
             "Steep winter shadow is masked as water by the HLS quality mask, so clear-pixel areas are lower bounds.",
             "MCD64A1 counts whole 21.5 ha cells; Prithvi was trained on US burn scars and also marks unburned slopes.",
@@ -1071,7 +1084,7 @@ def build_report(request: ReportRequest) -> dict[str, Any]:
             "events": section_events(connection, territory, request.year, request.language),
             "forest": section_forest(connection, territory, request.year),
             "burned_area": section_burned_area(connection, territory, request.year, request.month),
-            "burn_case": section_burn_case(territory, request.year, request.month),
+            "burn_case": section_burn_case(territory, request.year, request.month, request.language),
             "climate": section_climate(territory, request.year, request.month, connection),
             "quality": section_quality(selected, manifest),
             "imagery": section_imagery(connection, territory, request.year, request.month),
