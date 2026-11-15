@@ -8,23 +8,41 @@ import type {
   Reply,
   Selection,
 } from './types'
+/** El `detail` de un error problem+json: es lo que la interfaz pinta tal cual (§10, T2). */
+async function mensajeDeError(response: Response): Promise<string> {
+  const generico = tr('The request could not be completed', 'No se pudo completar la consulta')
+  try {
+    const body = await response.json()
+    if (typeof body.detail === 'string' && body.detail) return body.detail
+    if (body.detail !== undefined && body.detail !== null) return JSON.stringify(body.detail)
+    if (typeof body.message === 'string' && body.message) return body.message
+  } catch {
+    /* non-JSON error body: keep the generic message */
+  }
+  return generico
+}
 export async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   // El 422 llega con el mensaje en el idioma de la interfaz (WORK_PLAN §10, T2).
   const response = await fetch('/api' + url, {
     ...options,
     headers: { 'Accept-Language': getLang(), ...(options.headers || {}) },
   })
-  if (!response.ok) {
-    let message = tr('The request could not be completed', 'No se pudo completar la consulta')
-    try {
-      const body = await response.json()
-      message = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
-    } catch {
-      /* non-JSON error body: keep the generic message */
-    }
-    throw new Error(message)
-  }
+  if (!response.ok) throw new Error(await mensajeDeError(response))
   return response.json()
+}
+/**
+ * Descarga un archivo de la API.
+ *
+ * Si el servidor rechaza (401 sin sesión, 413 por tope de filas, 429 por tope
+ * de descargas) lanza con su `detail`, en vez de navegar a una pestaña llena
+ * de JSON crudo: el aviso tiene que salir en la interfaz.
+ */
+export async function descargar(url: string): Promise<{ blob: Blob; nombre: string }> {
+  const response = await fetch('/api' + url, { headers: { 'Accept-Language': getLang() } })
+  if (!response.ok) throw new Error(await mensajeDeError(response))
+  const disposicion = response.headers.get('content-disposition') || ''
+  const nombre = /filename="?([^";]+)"?/.exec(disposicion)?.[1] || 'nina-export'
+  return { blob: await response.blob(), nombre }
 }
 export const post = <T>(url: string, data: unknown, signal?: AbortSignal) =>
   api<T>(url, {

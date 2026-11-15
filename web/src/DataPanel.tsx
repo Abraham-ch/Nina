@@ -44,6 +44,16 @@ export default function DataPanel({
   const chosen = eligible.some((p) => p.product === product) ? product : preferred?.product || ''
   const active = jobs.some((j) => ['queued', 'running'].includes(j.status))
   const puedeAdministrar = !!user && user.role === 'admin'
+  // §10, T2 celda C: el control de fechas queda acotado por la cobertura real de la base.
+  const hoyMes = new Date().toISOString().slice(0, 7)
+  const desdeCobertura = (status?.sources ?? [])
+    .filter((s) => s.source === selection.source)
+    .map((s) => `${s.first_date ?? ''}`.slice(0, 7))
+    .filter((mes) => mes.length === 7)
+    .sort()[0]
+  const mesFuturo = date > hoyMes
+  const fueraDeCobertura = !!desdeCobertura && date < desdeCobertura
+  const mesNoDescargable = mesFuturo || fueraDeCobertura
   const worldFiles = status?.batches.filter((b) => b.spatial_scope === 'world') || []
   const worldStart = worldFiles
     .map((b) => b.coverage_start)
@@ -218,10 +228,25 @@ export default function DataPanel({
                 : tr('You have not signed in yet.', 'Todavía no has iniciado sesión.')}
             </p>
           )}
+          {mesNoDescargable && (
+            <p className="field-error" role="alert">
+              {mesFuturo
+                ? tr('That month is in the future.', 'Ese mes está en el futuro.')
+                : tr(
+                    `The archive for this source starts in ${desdeCobertura}; that month does not exist yet.`,
+                    `El archivo de esta fuente empieza en ${desdeCobertura}; ese mes todavía no existe.`,
+                  )}
+            </p>
+          )}
           <button
             className="button dark"
             disabled={
-              !health?.firms_key_configured || !chosen || busy || active || !puedeAdministrar
+              !health?.firms_key_configured ||
+              !chosen ||
+              busy ||
+              active ||
+              !puedeAdministrar ||
+              mesNoDescargable
             }
             onClick={acquireMonth}
           >

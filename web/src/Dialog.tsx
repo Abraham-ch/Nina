@@ -9,9 +9,9 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 
-import { analysisPath, fmt, months, post, replyFromHarmonized, sourceName } from './api'
+import { analysisPath, descargar, fmt, months, post, replyFromHarmonized, sourceName } from './api'
 import type { Modal } from './App'
 import { seasonSVG } from './export'
 import { getLang, tr } from './i18n'
@@ -101,16 +101,37 @@ export default function Dialog({
       setAsking(false)
     }
   }
+  /** Descarga vía API: si el servidor rechaza, el aviso sale en la interfaz. */
+  async function bajar(event: MouseEvent<HTMLAnchorElement>, ruta: string) {
+    event.preventDefault()
+    try {
+      const { blob, nombre } = await descargar(ruta)
+      const enlace = document.createElement('a')
+      const objecto = URL.createObjectURL(blob)
+      enlace.href = objecto
+      enlace.download = nombre
+      document.body.appendChild(enlace)
+      enlace.click()
+      enlace.remove()
+      URL.revokeObjectURL(objecto)
+    } catch (error) {
+      onError(String(error))
+    }
+  }
+  const numeros = Object.fromEntries(Object.entries(bounds).map(([k, v]) => [k, Number(v)]))
+  const limitesValidos =
+    Number.isFinite(numeros.west) &&
+    Number.isFinite(numeros.east) &&
+    Number.isFinite(numeros.south) &&
+    Number.isFinite(numeros.north) &&
+    -180 <= numeros.west &&
+    numeros.west < numeros.east &&
+    numeros.east <= 180 &&
+    -90 <= numeros.south &&
+    numeros.south < numeros.north &&
+    numeros.north <= 90
   function applyBounds() {
-    const { west, south, east, north } = Object.fromEntries(
-      Object.entries(bounds).map(([k, v]) => [k, Number(v)]),
-    )
-    if (
-      ![
-        -180 <= west && west < east && east <= 180,
-        -90 <= south && south < north && north <= 90,
-      ].every(Boolean)
-    ) {
+    if (!limitesValidos) {
       onError(
         tr(
           'Enter valid bounds: west < east and south < north, in WGS84.',
@@ -119,6 +140,7 @@ export default function Dialog({
       )
       return
     }
+    const { west, south, east, north } = numeros
     onGeometry({
       type: 'Polygon',
       coordinates: [
@@ -209,7 +231,15 @@ export default function Dialog({
                 </label>
               ))}
             </div>
-            <button className="button dark" type="submit">
+            {!limitesValidos && (
+              <p className="field-error" role="alert">
+                {tr(
+                  'West must be less than east and south less than north, within WGS84 bounds.',
+                  'El oeste debe ser menor que el este y el sur menor que el norte, dentro de los límites WGS84.',
+                )}
+              </p>
+            )}
+            <button className="button dark" type="submit" disabled={!limitesValidos}>
               {tr('Apply coordinates', 'Aplicar coordenadas')}
               <ArrowRight size={16} />
             </button>
@@ -321,7 +351,13 @@ export default function Dialog({
                     ],
                   ]
               ).map(([id, title, detail]) => (
-                <a key={id} href={`/api${analysisPath(harmonized)}/${analysis?.id}/exports/${id}`}>
+                <a
+                  key={id}
+                  href={`/api${analysisPath(harmonized)}/${analysis?.id}/exports/${id}`}
+                  onClick={(e) =>
+                    bajar(e, `${analysisPath(harmonized)}/${analysis?.id}/exports/${id}`)
+                  }
+                >
                   <Download size={19} />
                   <span>
                     <strong>{title}</strong>
@@ -534,6 +570,9 @@ export default function Dialog({
           <a
             className="button dark"
             href={`/api${analysisPath(harmonized)}/${analysis?.id}/exports/manifest`}
+            onClick={(e) =>
+              bajar(e, `${analysisPath(harmonized)}/${analysis?.id}/exports/manifest`)
+            }
           >
             <FileJson size={16} />
             {tr('Download record', 'Descargar expediente')}

@@ -150,6 +150,17 @@ def test_la_cobertura_declarada_con_rango_invertido_da_date_range(client):
     assert cuerpo['detail']
 
 
+def test_no_se_pide_un_archivo_mensual_futuro(client):
+    """§10 T2: 'nada en el futuro' también en la descarga mensual."""
+    c, _ = client
+    admin(c)
+    cuerpo = rechazo(
+        c.post('/api/acquisitions/month', json={'product': 'MODIS_NRT', 'year': 2030, 'month': 1}),
+        'date_future',
+    )
+    assert cuerpo['detail']
+
+
 def test_el_numero_maximo_de_dias_es_configurable(client, monkeypatch):
     """§10 T2: 'configurable maximum range' → `FIRMS_MAX_DAY_RANGE`."""
     from nina.errors import dias_maximos

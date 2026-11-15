@@ -3750,6 +3750,14 @@ optgroup {
 .permission-state .button {
   margin-top: 14px;
 }
+.field-error {
+  margin: 14px 0 0;
+  padding-left: 12px;
+  border-left: 3px solid #cc8542;
+  color: #8a4a2c;
+  font-size: 12px;
+  line-height: 1.8;
+}
 /* Harmonized product (experimental draft) */
 .experimental-tag {
   display: inline-block;

@@ -353,7 +353,10 @@ class ArchiveMonth(BaseModel):
     geometry:dict|None=None
 
     @model_validator(mode='after')
-    def reglas(self): _cobertura_mes(self.product,self.year,self.month); return self
+    def reglas(self):
+        if date(self.year,self.month,1)>date.today().replace(day=1): raise PydanticCustomError('date_future','The month cannot be in the future')
+        _cobertura_mes(self.product,self.year,self.month)
+        return self
 
 @app.post('/api/acquisitions/month',responses=PROTEGIDO)
 def archive_month(body:ArchiveMonth,user:dict=Depends(require('admin'))):
