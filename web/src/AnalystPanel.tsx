@@ -40,6 +40,7 @@ const TOOL_NAMES: Record<string, [string, string]> = {
   calculate: ['checked calculation', 'cálculo verificado'],
   show_visual: ['chart or table', 'gráfico o tabla'],
   propose_action: ['interface action', 'acción en la interfaz'],
+  web_search: ['official web sources', 'fuentes oficiales en la web'],
 }
 
 const ACTION_ICONS = {
@@ -190,6 +191,21 @@ export default function AnalystPanel({
           {reply.visuals.map((visual) => (
             <AnalystVisualView key={visual.id} visual={visual} />
           ))}
+        </div>
+      )}
+      {reply && reply.sources.length > 0 && (
+        <div className="analyst-sources">
+          <h3>{tr('Official sources cited', 'Fuentes oficiales citadas')}</h3>
+          <ol>
+            {reply.sources.map((source) => (
+              <li key={source.url + source.cited_text}>
+                <a href={source.url} target="_blank" rel="noreferrer">
+                  {source.title}
+                </a>
+                {source.cited_text && <q>{source.cited_text}</q>}
+              </li>
+            ))}
+          </ol>
         </div>
       )}
       {reply && reply.actions.length > 0 && (

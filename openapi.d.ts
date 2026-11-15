@@ -830,6 +830,11 @@ export interface components {
              * @description Questions NINA can answer next
              */
             follow_ups?: string[];
+            /**
+             * Sources
+             * @description Official web sources cited in the answer (web search)
+             */
+            sources?: components["schemas"]["AnalystSource"][];
         };
         /**
          * AnalystContext
@@ -876,6 +881,18 @@ export interface components {
             context: components["schemas"]["AnalystContext"];
             /** History */
             history?: components["schemas"]["AnalystTurn"][];
+        };
+        /** AnalystSource */
+        AnalystSource: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /**
+             * Cited Text
+             * @description Passage of the page the answer relies on (up to 150 characters)
+             */
+            cited_text: string;
         };
         /** AnalystStatus */
         AnalystStatus: {

@@ -1755,6 +1755,14 @@
             "type": "array",
             "title": "Follow Ups",
             "description": "Questions NINA can answer next"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/AnalystSource"
+            },
+            "type": "array",
+            "title": "Sources",
+            "description": "Official web sources cited in the answer (web search)"
           }
         },
         "type": "object",
@@ -1895,6 +1903,30 @@
           "context"
         ],
         "title": "AnalystQuestion"
+      },
+      "AnalystSource": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "cited_text": {
+            "type": "string",
+            "title": "Cited Text",
+            "description": "Passage of the page the answer relies on (up to 150 characters)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "url",
+          "cited_text"
+        ],
+        "title": "AnalystSource"
       },
       "AnalystStatus": {
         "properties": {
