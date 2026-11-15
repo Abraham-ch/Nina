@@ -4425,3 +4425,23 @@ ol.analyst-progress {
   color: var(--muted);
   font-size: 14px;
 }
+/* The guide invites a first click: highlighted until used or for one minute (App.tsx, GUIDE_SEEN). */
+.header-actions .tour-start.hint {
+  padding: 7px 12px;
+  border: 1px solid var(--sand);
+  border-radius: 999px;
+  color: var(--sand);
+  box-shadow: 0 0 0 0 rgba(233, 188, 120, 0.6);
+  animation: guide-pulse 1.8s ease-out infinite;
+}
+@keyframes guide-pulse {
+  to {
+    box-shadow: 0 0 0 10px rgba(233, 188, 120, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .header-actions .tour-start.hint {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(233, 188, 120, 0.35);
+  }
+}

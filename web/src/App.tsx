@@ -134,6 +134,8 @@ function readLink() {
   }
 }
 const linked = readLink()
+const GUIDE_SEEN = 'nina-guide-hint-seen'
+
 export default function App() {
   const [selection, setSelection] = useState<Selection>(linked.selection),
     [placeId, setPlaceId] = useState(linked.place),
@@ -159,6 +161,13 @@ export default function App() {
     [viirs, setViirs] = useState('viirs-snpp'),
     [extraFilters, setExtraFilters] = useState(false),
     [tour, setTour] = useState(false),
+    [guideHint, setGuideHint] = useState(() => {
+      try {
+        return !localStorage.getItem(GUIDE_SEEN)
+      } catch {
+        return false
+      }
+    }),
     // Atlas points: by sensor, or by day of the last detection in the month (FIRMS "time since detection").
     [colorBy, setColorBy] = useState<'sensor' | 'day'>('day'),
     // The analyst is a side panel: the map stays visible and its buttons act on it; the conversation
@@ -629,7 +638,22 @@ export default function App() {
       )
     }
   }
+  // The guide button is highlighted until it is used or for one minute, then never again in this browser.
+  function dismissGuideHint() {
+    setGuideHint(false)
+    try {
+      localStorage.setItem(GUIDE_SEEN, '1')
+    } catch {
+      // Storage blocked: the highlight simply comes back on the next visit.
+    }
+  }
+  useEffect(() => {
+    if (!guideHint) return
+    const timer = setTimeout(dismissGuideHint, 60_000)
+    return () => clearTimeout(timer)
+  }, [guideHint])
   function startTour() {
+    dismissGuideHint()
     setIntro(false)
     setExtraFilters(false)
     setDrawing(false)
@@ -759,7 +783,7 @@ export default function App() {
           </button>
           <LangSwitch />
           <button
-            className="tour-start"
+            className={`tour-start${guideHint ? ' hint' : ''}`}
             onClick={startTour}
             aria-label={tr('Platform guide', 'Guía de la plataforma')}
           >
@@ -1315,7 +1339,10 @@ export default function App() {
                     <button aria-pressed={colorBy === 'day'} onClick={() => setColorBy('day')}>
                       {tr('when it burned', 'cuándo ardió')}
                     </button>
-                    <button aria-pressed={colorBy === 'sensor'} onClick={() => setColorBy('sensor')}>
+                    <button
+                      aria-pressed={colorBy === 'sensor'}
+                      onClick={() => setColorBy('sensor')}
+                    >
                       {tr('which satellite', 'qué satélite')}
                     </button>
                   </span>
@@ -1323,7 +1350,9 @@ export default function App() {
                 {tab === 'atlas' && colorBy === 'day' && (
                   <span
                     className="day-legend"
-                    title={DAY_RANGES.map((range) => tr(`days ${range}`, `días ${range}`)).join(' · ')}
+                    title={DAY_RANGES.map((range) => tr(`days ${range}`, `días ${range}`)).join(
+                      ' · ',
+                    )}
                   >
                     <b>
                       {tr(
@@ -1345,7 +1374,10 @@ export default function App() {
                       {tr('day 31', 'día 31')}
                     </span>
                     <span className="day-note">
-                      {tr('pale = early in the month, dark red = most recent', 'claro = inicio del mes, rojo oscuro = lo más reciente')}
+                      {tr(
+                        'pale = early in the month, dark red = most recent',
+                        'claro = inicio del mes, rojo oscuro = lo más reciente',
+                      )}
                     </span>
                   </span>
                 )}
