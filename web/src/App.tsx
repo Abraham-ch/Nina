@@ -53,6 +53,7 @@ import Priority from './Priority'
 import ReportButton from './ReportButton'
 import Tour from './Tour'
 import type {
+  AnalystAction,
   Analysis,
   Catalog,
   Comparison,
@@ -453,6 +454,44 @@ export default function App() {
         department: 'all',
         metric: 'observed',
       })
+  }
+  // A button offered by the analyst: select the territory and period, keep the current data source
+  // (the analyst lives in the harmonized view) and show the requested view.
+  function runAnalystAction(action: AnalystAction) {
+    const fold = (text: string) =>
+      text
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toUpperCase()
+        .trim()
+    const keep = { source: selection.source, platform: selection.platform }
+    if (action.kind !== 'open_priorities' && action.country) {
+      if (action.country === 'Peru') {
+        const region = action.department
+          ? regions?.geojson.features.find((f) => fold(f.properties.name) === fold(action.department ?? ''))
+          : undefined
+        choosePlace(region ? `region:${region.properties.id}` : 'PER')
+      } else {
+        const place = places?.features.find((p) => p.properties.name === action.country)
+        if (!place) {
+          setError(tr(`${action.country} is not available on the map.`, `${action.country} no está disponible en el mapa.`))
+          return
+        }
+        choosePlace(`country:${place.properties.id}`)
+      }
+    }
+    if (action.year && action.month) {
+      const year = action.year
+      change({
+        ...keep,
+        selected_year: year,
+        selected_month: action.month,
+        year_start: Math.min(selection.year_start, year),
+        year_end: Math.max(selection.year_end, year),
+      })
+    } else change(keep)
+    setTab(action.kind === 'open_calendar' ? 'calendar' : action.kind === 'open_priorities' ? 'priority' : 'atlas')
+    setModal('')
   }
   function applyGeometry(geometry: Geometry) {
     setPlaceId('custom')
@@ -1358,6 +1397,7 @@ export default function App() {
         onShare={share}
         onError={setError}
         context={reportBody()}
+        onAnalystAction={runAnalystAction}
       />
       <Account
         open={accountOpen}

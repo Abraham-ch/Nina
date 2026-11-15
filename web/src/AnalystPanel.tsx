@@ -1,9 +1,21 @@
-import { ArrowUpRight, CheckCircle2, FileText, Send, ShieldAlert, Sparkles } from 'lucide-react'
+import {
+  ArrowUpRight,
+  CalendarDays,
+  CheckCircle2,
+  Download,
+  FileText,
+  Map as MapIcon,
+  Send,
+  ShieldAlert,
+  Sparkles,
+  Table2,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { analystStatus, askAnalyst, reportDocumentUrl } from './api'
+import AnalystVisualView from './AnalystVisual'
+import { analystStatus, askAnalyst, reportDocumentUrl, reportPackageUrl } from './api'
 import { getLang, tr } from './i18n'
-import type { AnalystAnswer, AnalystStatus, AnalystTurn, ReportRequest } from './types'
+import type { AnalystAction, AnalystAnswer, AnalystStatus, AnalystTurn, ReportRequest } from './types'
 
 // Questions a specialist would ask first; the text sent follows the interface language.
 const PRESETS: [string, string][] = [
@@ -26,6 +38,39 @@ const TOOL_NAMES: Record<string, [string, string]> = {
   method_notes: ['method notes', 'notas de método'],
   find_territory: ['place search', 'búsqueda de lugares'],
   calculate: ['checked calculation', 'cálculo verificado'],
+  show_visual: ['chart or table', 'gráfico o tabla'],
+  propose_action: ['interface action', 'acción en la interfaz'],
+}
+
+const ACTION_ICONS = {
+  show_on_map: MapIcon,
+  open_calendar: CalendarDays,
+  open_priorities: Table2,
+  open_report: FileText,
+  download_data: Download,
+}
+
+/** A button the user presses: navigation goes through the app; reports and packages are plain links. */
+function ActionButton({ action, onAction }: { action: AnalystAction; onAction?: (a: AnalystAction) => void }) {
+  const Icon = ACTION_ICONS[action.kind]
+  if (action.kind === 'open_report' || action.kind === 'download_data') {
+    if (!action.report_id) return null
+    const href =
+      action.kind === 'open_report' ? reportDocumentUrl(action.report_id) : reportPackageUrl(action.report_id)
+    return (
+      <a className="button outline" href={href} target="_blank" rel="noreferrer">
+        <Icon size={15} />
+        {action.label}
+      </a>
+    )
+  }
+  if (!onAction) return null
+  return (
+    <button className="button outline" onClick={() => onAction(action)}>
+      <Icon size={15} />
+      {action.label}
+    </button>
+  )
 }
 
 const LIST_ITEM = /^(?:[-•*]|\d+\.)\s+/
@@ -64,10 +109,12 @@ export default function AnalystPanel({
   context,
   onError,
   onEvidence,
+  onAction,
 }: {
   context: ReportRequest | null
   onError: (message: string) => void
   onEvidence?: () => void
+  onAction?: (action: AnalystAction) => void
 }) {
   const [status, setStatus] = useState<AnalystStatus | null>(null),
     [reply, setReply] = useState<AnalystAnswer | null>(null),
@@ -138,6 +185,20 @@ export default function AnalystPanel({
               )}
         </p>
       )}
+      {reply && reply.visuals.length > 0 && (
+        <div className="analyst-visuals">
+          {reply.visuals.map((visual) => (
+            <AnalystVisualView key={visual.id} visual={visual} />
+          ))}
+        </div>
+      )}
+      {reply && reply.actions.length > 0 && (
+        <div className="analyst-actions">
+          {reply.actions.map((action) => (
+            <ActionButton key={action.id} action={action} onAction={onAction} />
+          ))}
+        </div>
+      )}
       {reply?.notice && (
         <p className="analyst-notice">
           <ShieldAlert size={14} />
@@ -160,10 +221,16 @@ export default function AnalystPanel({
                 )}
         </p>
       )}
+      {reply && reply.follow_ups.length > 0 && (
+        <h3 className="analyst-next">{tr('Ask next', 'Siguiente pregunta')}</h3>
+      )}
       <div className="question-list">
-        {PRESETS.map(([en, es]) => (
-          <button disabled={asking || !context} key={en} onClick={() => ask(tr(en, es))}>
-            {tr(en, es)}
+        {(reply && reply.follow_ups.length > 0
+          ? reply.follow_ups
+          : PRESETS.map(([en, es]) => tr(en, es))
+        ).map((text) => (
+          <button disabled={asking || !context} key={text} onClick={() => ask(text)}>
+            {text}
             <ArrowUpRight size={14} />
           </button>
         ))}

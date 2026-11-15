@@ -180,6 +180,7 @@ export const translatedName = (name: string) => tr(name, ES_NAMES[name] || name)
 // Territorial evidence report: the printable document is served by the API itself.
 export const createReport = (body: ReportRequest) => post<ReportCreated>('/reports/territorial', body)
 export const reportDocumentUrl = (id: string) => `/api/reports/territorial/${id}/document`
+export const reportPackageUrl = (id: string) => `/api/reports/territorial/${id}/package`
 export const askAnalyst = (body: AnalystQuestion) => post<AnalystAnswer>('/analyst', body)
 export const analystStatus = () => api<AnalystStatus>('/analyst')
 export const priorityTable = (year: number, month: number) =>

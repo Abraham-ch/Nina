@@ -29,7 +29,8 @@ from typing import Any, Callable, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import harmonized, reports
+from . import analyst_ui, harmonized, reports
+from .analyst_ui import ACTION_KINDS, VISUAL_KINDS, AnalystAction, AnalystVisual
 from .harmonized import load_json, published
 from .report_document import format_number
 from .reports import MONTH_NAMES, SIGNIFICANCE, PriorityRequest, ReportRequest, build_report, districts
@@ -103,6 +104,10 @@ class AnalystAnswer(BaseModel):
     dataset_id: str
     validation_status: Literal["validated", "experimental"]
     notice: str | None = None
+    visuals: list[AnalystVisual] = Field(default_factory=list,
+                                         description="Charts and tables built from NINA's results, never typed by the model")
+    actions: list[AnalystAction] = Field(default_factory=list, description="Interface actions offered as buttons")
+    follow_ups: list[str] = Field(default_factory=list, description="Questions NINA can answer next")
 
 
 class AnalystStatus(BaseModel):
@@ -168,6 +173,11 @@ COUNTRY_ALIASES = {
     "PERU": "Peru", "BRASIL": "Brazil", "ESTADOS UNIDOS": "United States of America",
     "EEUU": "United States of America", "USA": "United States of America", "UNITED STATES": "United States of America",
     "MEXICO": "Mexico", "ESPANA": "Spain", "CANADA": "Canada", "PANAMA": "Panama",
+    "RUSIA": "Russia", "RUSSIAN FEDERATION": "Russia", "CONGO DR": "Dem. Rep. Congo", "RD CONGO": "Dem. Rep. Congo",
+    "REPUBLICA DEMOCRATICA DEL CONGO": "Dem. Rep. Congo", "DEMOCRATIC REPUBLIC OF THE CONGO": "Dem. Rep. Congo",
+    "SUDAFRICA": "South Africa", "GRECIA": "Greece", "TURQUIA": "Turkey", "TURKIYE": "Turkey",
+    "KAZAJISTAN": "Kazakhstan", "KAZAJSTAN": "Kazakhstan", "ETIOPIA": "Ethiopia", "BIRMANIA": "Myanmar",
+    "INDONESIA": "Indonesia", "AUSTRALIA": "Australia",
 }
 
 
@@ -318,6 +328,8 @@ class Session:
         self.calls: list[dict[str, Any]] = []
         self.reports = report_cache if report_cache is not None else {}
         self.report_id: str | None = None
+        self.visuals: list[dict[str, Any]] = []
+        self.actions: list[dict[str, Any]] = []
 
     def period(self, year: int | None, month: int | None) -> tuple[int, int]:
         context = self.request.context
@@ -801,6 +813,109 @@ def run_calculate(session: Session, expression: str) -> dict[str, Any]:
     return {"expression": expression, "result": round(value, 4)}
 
 
+MAX_VISUALS = 3
+MAX_ACTIONS = 3
+# Strict tools allow at most 16 nullable (union) parameters in total, so the interface tools use sentinels:
+# place "current" and year/month 0 mean the on-screen selection, an empty label means the default text.
+PLAIN_PLACE = {"type": "string", "description": "Territory as in territory_profile (for validation_strata, a "
+               "country); 'current' = the on-screen selection."}
+PLAIN_YEAR = {"type": "integer", "description": "Year; 0 = the on-screen year."}
+PLAIN_MONTH = {"type": "integer", "description": "Calendar month 1-12; 0 = the on-screen month."}
+
+
+def unset(value: Any) -> Any:
+    """Sentinel values of the interface tools mean 'the on-screen selection'."""
+    return None if value in (0, "", None) else value
+
+
+def ordered_departments(rows: list[dict[str, Any]], sort_by: str) -> list[dict[str, Any]]:
+    key, ascending = SORTS[sort_by]
+
+    def order(row: dict[str, Any]) -> tuple:
+        value = row[key]
+        return (value is None, 0 if value is None else (value if ascending else -value), row["name"])
+
+    return sorted(rows, key=order)
+
+
+def run_show_visual(session: Session, kind: str, place: str | None, year: int | None,
+                    month: int | None) -> dict[str, Any]:
+    if kind not in VISUAL_KINDS:
+        raise ValueError(f"kind must be one of {sorted(VISUAL_KINDS)}")
+    if len(session.visuals) >= MAX_VISUALS:
+        return {"error": f"At most {MAX_VISUALS} charts or tables per answer; refer to the ones already shown."}
+    place, year, month = unset(place), unset(year), unset(month)
+    language = session.request.language
+    identifier = f"v{len(session.visuals) + 1}"
+    if kind == "department_ranking":
+        year, month = session.period(year, month)
+        table = reports.priority(PriorityRequest(year=year, month=month, language=language))
+        spec = analyst_ui.department_ranking(identifier, table, ordered_departments(table["rows"], "month_anomaly"),
+                                             language, year, month)
+    elif kind == "validation_strata":
+        manifest, _ = published()
+        context = session.request.context
+        default = "Peru" if context.ubigeo or context.country == "world" else context.country
+        country = find_country(place) or (default if fold(place) in CURRENT_PLACE else place) or default
+        spec = analyst_ui.validation_strata(identifier, manifest.get("validation") or {}, str(country),
+                                            BIOMES[language], language)
+        if spec is None:
+            return {"error": f"No validation strata for '{country}': it is not a calibration country."}
+    else:
+        builder = {"monthly_series": analyst_ui.monthly_series, "same_month_by_year": analyst_ui.same_month_by_year,
+                   "annual_totals": analyst_ui.annual_totals, "events_by_year": analyst_ui.events_by_year,
+                   "forest_loss_by_year": analyst_ui.forest_loss_by_year,
+                   "climate_departments": analyst_ui.climate_departments}[kind]
+        spec = builder(identifier, session.report(place, year, month), language)
+        if spec is None:
+            return {"error": f"'{kind}' is not available for this territory (the layer does not cover it)."}
+    session.visuals.append(spec)
+    return analyst_ui.compact(spec)
+
+
+ACTION_LABELS = {
+    "en": {"show_on_map": "Show {place} in the atlas", "open_calendar": "Open the calendar of {place}",
+           "open_priorities": "Open the department table for {period}", "open_report": "Open the report of {place}",
+           "download_data": "Download the data of {place}"},
+    "es": {"show_on_map": "Ver {place} en el atlas", "open_calendar": "Abrir el calendario de {place}",
+           "open_priorities": "Abrir la tabla de departamentos de {period}", "open_report": "Abrir el informe de {place}",
+           "download_data": "Descargar los datos de {place}"},
+}
+
+
+def run_propose_action(session: Session, action: str, place: str | None, year: int | None, month: int | None,
+                       label: str | None) -> dict[str, Any]:
+    if action not in ACTION_KINDS:
+        raise ValueError(f"action must be one of {sorted(ACTION_KINDS)}")
+    if len(session.actions) >= MAX_ACTIONS:
+        return {"error": f"At most {MAX_ACTIONS} actions per answer."}
+    place, year, month, label = unset(place), unset(year), unset(month), unset(label)
+    language = session.request.language
+    year, month = session.period(year, month)
+    country, department, report_id = "Peru", None, None
+    if action != "open_priorities":
+        fields = place_request(place, session.request.context)
+        country = fields["country"]
+        code = fields.get("ubigeo") or (reports.department_code(fields.get("place_name")) if country == "Peru" else None)
+        if code:
+            match = next((d for d in divisions() if d["ubigeo"] == code[:2]), None)
+            department = match["name"] if match else None
+        if action in {"show_on_map", "open_calendar"} and country == "world":
+            raise ValueError("A drawn area cannot be selected again from here; offer open_report instead.")
+        if action in {"open_report", "download_data"}:
+            report_id = session.report(place, year, month)["id"]
+    name = department or (country if action != "open_priorities" else "Peru")
+    period = f"{MONTH_NAMES[language][month - 1]} {year}"
+    text = (label or "").strip()[:80] or ACTION_LABELS[language][action].format(place=name, period=period)
+    spec = AnalystAction(id=f"a{len(session.actions) + 1}", kind=action, label=text, country=country,
+                         department=department, year=year, month=month, report_id=report_id).model_dump()
+    session.actions.append(spec)
+    note = ("provinces and districts open at their department; the report keeps the exact division"
+            if (place and re.fullmatch(r"\d{4}(\d{2})?", place.strip())) else None)
+    return {"action_id": spec["id"], "kind": action, "label": text, "shown_to_user_as": "button",
+            "target": {k: spec[k] for k in ("country", "department", "year", "month")}, **({"note": note} if note else {})}
+
+
 class Tool:
     def __init__(self, name: str, description: str, properties: dict[str, Any], run: Callable[..., dict[str, Any]]):
         self.name, self.description, self.properties, self.run = name, description, properties, run
@@ -848,6 +963,23 @@ TOOL_LIST = [
     Tool("find_territory",
          "Find Peruvian departments, provinces or districts (with UBIGEO codes) or a country by name.",
          {"name": {"type": "string", "description": "Place name, accents optional."}}, run_find_territory),
+    Tool("show_visual",
+         "Show the user a chart or table under your answer, drawn from NINA's own results (the numbers come from "
+         "NINA, not from you). Kinds: " + "; ".join(f"{k}: {v}" for k, v in VISUAL_KINDS.items()) + ". At most "
+         "three per answer. The result returns the same numbers so you can refer to them.",
+         {"kind": {"type": "string", "enum": sorted(VISUAL_KINDS), "description": "What to show."},
+          "place": PLAIN_PLACE, "year": PLAIN_YEAR, "month": PLAIN_MONTH},
+         run_show_visual),
+    Tool("propose_action",
+         "Offer the user a button that operates NINA's interface: " + "; ".join(f"{k}: {v}" for k, v in
+                                                                         ACTION_KINDS.items())
+         + ". Use it when the user asks to see, open, go to, compare on the map, print or download something. You "
+         "cannot press it yourself; say that the button is below the answer.",
+         {"action": {"type": "string", "enum": sorted(ACTION_KINDS), "description": "Interface action."},
+          "place": PLAIN_PLACE, "year": PLAIN_YEAR, "month": PLAIN_MONTH,
+          "label": {"type": "string", "description": "Short button text in the answer language (max 80 "
+                    "characters); empty = default text."}},
+         run_propose_action),
     Tool("calculate",
          "Arithmetic on figures already returned by other tools (+ - * / and parentheses), for ratios, differences "
          "or shares. Every operand must come from an earlier tool result; 100 and 1000 are allowed as constants.",
@@ -1498,7 +1630,29 @@ def deterministic(session: Session) -> tuple[str, str]:
         text = getattr(composer, intent)(place, year, month, kind)
     except ToolFailed as error:
         text = composer.t["tool_failed"].format(reason=error)
+    action = requested_action(request.question) if intent != "scope" else None
+    if action:
+        session.run("propose_action", {"action": action, "place": place, "year": year, "month": month, "label": None})
     return text, intent
+
+
+ACTION_WORDS = [
+    ("download_data", matcher("DOWNLOAD", "DESCARG", "EXPORT")),
+    ("open_report", matcher("REPORT", "INFORME", "PRINT", "IMPRIM", "PDF")),
+    ("open_priorities", matcher("DEPARTMENT TABLE", "TABLA DE DEPARTAMENTOS", "PRIORIT")),
+    ("open_calendar", matcher("CALENDAR", "CALENDARIO")),
+    ("show_on_map", matcher("MAP", "MAPA", "ATLAS", "GO TO", "VE A", "LLEVAME", "MUESTRAME", "SHOW ME")),
+]
+ACTION_VERBS = matcher("SHOW", "OPEN", "GO TO", "TAKE ME", "DOWNLOAD", "EXPORT", "PRINT", "MUESTRA", "ABRE", "ABRIR",
+                       "VE A", "LLEVAME", "DESCARG", "EXPORT", "IMPRIM", "VER ")
+
+
+def requested_action(question: str) -> str | None:
+    """The interface action a question asks for ('open the report of Cusco'), if any."""
+    text = fold(question)
+    if not ACTION_VERBS.search(text):
+        return None
+    return next((action for action, words in ACTION_WORDS if words.search(text)), None)
 
 
 # ---------------------------------------------------------------- Claude engine
@@ -1510,6 +1664,8 @@ How to work
 - Obtain every figure from the tools. Call several tools when a question needs it, for example territory_profile together with validation_summary to judge whether a trend can be trusted. Use find_territory when a place name is ambiguous.
 - For a derived figure (ratio, difference, share), use the calculate tool. Every number in your answer must appear in a tool result of this conversation; answers are checked automatically and rejected otherwise.
 - "current" or null in a place argument means the territory on the user's screen; null year or month means the period on screen.
+- Show, do not only tell: when a series, a comparison across years or departments, or a validation table helps the reader, call show_visual (one or two per answer). The reader sees it under your answer; mention it in one sentence ("the chart below shows...") instead of listing all its values.
+- When the reader asks to see, open, go to, print or download something, call propose_action: they get a button under the answer. You cannot operate the interface yourself; never claim that you did.
 
 What the data mean
 - Unit: VIIRS-equivalent active cell-days (an H3 cell of about 5 km² with at least one detection that day). It measures detected activity, not the number of fires, burned area or damage.
@@ -1777,8 +1933,78 @@ def ask(request: AnalystQuestion) -> dict[str, Any]:
     return respond(session, text, "deterministic", None, intent, checked, unverified, manifest, notice)
 
 
+DEFAULT_VISUAL = {"overview": "same_month_by_year", "trend": "annual_totals", "events": "events_by_year",
+                  "forest": "forest_loss_by_year", "climate": "climate_departments", "compare": "department_ranking",
+                  "validation": "validation_strata", "season": "monthly_series", "quality": "monthly_series"}
+FOLLOW_UPS = {
+    "en": {
+        "overview": ["Is the trend real or a sensor artefact?", "How does this month compare with every other year?",
+                     "Which departments stand out this month?"],
+        "trend": ["How reliable is the MODIS calibration in this country?", "Show the annual totals, harmonized "
+                  "versus raw.", "What happened in the fire season (July to October)?"],
+        "events": ["How were detected events validated against official records?", "Which subdivisions had the "
+                   "most events?", "Is this year's activity unusual?"],
+        "forest": ["How does Hansen loss compare with Geobosques?", "Which years had the most loss with fire?",
+                   "What does tree-cover loss not measure?"],
+        "climate": ["Why does NINA use CHIRPS for rainfall?", "Which departments were in drought this month?",
+                    "Is the activity of this month unusual?"],
+        "compare": ["Open the department table.", "Show the report of the first department.",
+                    "How reliable is the harmonization in Peru?"],
+        "validation": ["Why does MODIS fail some strata?", "What is the noise ceiling?",
+                       "Show the validation strata of Brazil."],
+        "season": ["Show the monthly series of the last five years.", "Is the trend real or a sensor artefact?",
+                   "Which departments stand out this month?"],
+        "quality": ["What is a data gap and how is it shown?", "How reliable is the harmonization here?",
+                    "Show the monthly series of the last five years."],
+        "method": ["What is a VIIRS-equivalent active cell-day?", "Why does MODIS fail some strata?",
+                   "What can NINA not answer?"],
+        "scope": ["What does this period show?", "How reliable is the harmonization here?",
+                  "Which departments stand out this month?"],
+    },
+    "es": {
+        "overview": ["¿La tendencia es real o un artefacto del sensor?", "¿Cómo se compara este mes con todos los "
+                     "demás años?", "¿Qué departamentos destacan este mes?"],
+        "trend": ["¿Qué tan fiable es la calibración MODIS en este país?", "Muestra los totales anuales, armonizados "
+                  "frente a crudos.", "¿Qué pasó en la temporada de incendios (julio a octubre)?"],
+        "events": ["¿Cómo se validaron los eventos detectados contra registros oficiales?", "¿Qué subdivisiones "
+                   "tuvieron más eventos?", "¿La actividad de este año es inusual?"],
+        "forest": ["¿Cómo se compara la pérdida de Hansen con Geobosques?", "¿Qué años tuvieron más pérdida con "
+                   "fuego?", "¿Qué no mide la pérdida de cobertura arbórea?"],
+        "climate": ["¿Por qué NINA usa CHIRPS para la lluvia?", "¿Qué departamentos estuvieron en sequía este mes?",
+                    "¿La actividad de este mes es inusual?"],
+        "compare": ["Abre la tabla de departamentos.", "Muestra el informe del primer departamento.",
+                    "¿Qué tan fiable es la armonización en el Perú?"],
+        "validation": ["¿Por qué MODIS falla en algunos estratos?", "¿Qué es el techo de ruido?",
+                       "Muestra los estratos de validación de Brasil."],
+        "season": ["Muestra la serie mensual de los últimos cinco años.", "¿La tendencia es real o un artefacto del "
+                   "sensor?", "¿Qué departamentos destacan este mes?"],
+        "quality": ["¿Qué es un vacío de datos y cómo se muestra?", "¿Qué tan fiable es la armonización aquí?",
+                    "Muestra la serie mensual de los últimos cinco años."],
+        "method": ["¿Qué es una celda-día activa equivalente VIIRS?", "¿Por qué MODIS falla en algunos estratos?",
+                   "¿Qué no puede responder NINA?"],
+        "scope": ["¿Qué muestra este período?", "¿Qué tan fiable es la armonización aquí?",
+                  "¿Qué departamentos destacan este mes?"],
+    },
+}
+
+
+def default_visual(session: Session, intent: str) -> None:
+    """One chart or table for answers that have none, chosen by question type (never for out-of-scope)."""
+    kind = DEFAULT_VISUAL.get(intent)
+    if session.visuals or not kind or intent == "scope":
+        return
+    if kind in {"department_ranking", "climate_departments"} and session.request.context.country != "Peru":
+        kind = "same_month_by_year"
+    # Built directly, not through session.run: it is not a step of the answer and is not listed as a tool call.
+    try:
+        run_show_visual(session, kind, None, None, None)
+    except (HTTPException, KeyError, TypeError, ValueError):  # a missing chart never blocks an answer
+        return
+
+
 def respond(session: Session, text: str, engine: str, model: str | None, intent: str, checked: int,
             unverified: list[str], manifest: dict[str, Any], notice: str | None) -> dict[str, Any]:
+    default_visual(session, intent)
     return {
         "answer": text, "engine": engine, "model": model, "intent": intent, "abstained": intent == "scope",
         "facts": facts_from(session, intent),
@@ -1787,4 +2013,7 @@ def respond(session: Session, text: str, engine: str, model: str | None, intent:
         "report_id": session.report_id, "dataset_id": manifest["id"],
         "validation_status": "validated" if manifest["status"] == "published" else "experimental",
         "notice": notice,
+        "visuals": session.visuals,
+        "actions": session.actions,
+        "follow_ups": FOLLOW_UPS[session.request.language].get(intent, [])[:3],
     }

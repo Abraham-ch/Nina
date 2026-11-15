@@ -171,3 +171,56 @@ def test_model_errors_fall_back_to_the_deterministic_engine(client, monkeypatch)
     monkeypatch.setattr(anthropic, "Anthropic", lambda **_: SimpleNamespace(beta=SimpleNamespace(messages=Broken())))
     result = ask(test_client, "Is the coverage sufficient?")
     assert result["engine"] == "deterministic" and "could not be reached" in result["notice"]
+
+
+def test_model_visuals_and_actions_come_from_nina_data(client, monkeypatch):
+    test_client, _ = client
+    scripted_client(monkeypatch, [
+        tool_use("show_visual", {"kind": "same_month_by_year", "place": None, "year": None, "month": None}),
+        tool_use("propose_action", {"action": "open_report", "place": None, "year": None, "month": None,
+                                    "label": None}),
+        text("The chart below compares September of every year; the button opens the full report."),
+    ])
+    result = ask(test_client, "Show me September in every year and open the report.")
+    assert result["engine"] == "claude" and result["verification"]["passed"]
+    [chart] = result["visuals"]
+    assert chart["type"] == "chart" and chart["chart"] == "bar" and chart["highlight"] == "2025"
+    assert chart["categories"] and all(c.isdigit() for c in chart["categories"])
+    assert len(chart["series"][0]["values"]) == len(chart["categories"])
+    [action] = result["actions"]
+    assert action["kind"] == "open_report" and action["report_id"] == result["report_id"]
+    assert action["country"] == "Peru" and action["year"] == 2025 and action["month"] == 9
+    assert len(result["follow_ups"]) == 3
+
+
+def test_deterministic_answers_attach_a_chart_and_detect_requested_actions(client):
+    test_client, _ = client
+    result = ask(test_client, "Is the trend real or a sensor artefact?")
+    assert [v["kind"] for v in result["visuals"]] == ["annual_totals"]
+    names = [s["name"] for s in result["visuals"][0]["series"]]
+    assert len(names) == 2 and "show_visual" not in [t["name"] for t in result["tools"]]
+    result = ask(test_client, "Abre el calendario de este período", "es")
+    assert [a["kind"] for a in result["actions"]] == ["open_calendar"]
+    assert result["actions"][0]["label"].startswith("Abrir el calendario")
+    scope = ask(test_client, "Will there be fires here next week?")
+    assert scope["abstained"] and not scope["visuals"] and not scope["actions"]
+
+
+def test_visual_limits_and_unknown_kinds_are_reported_to_the_model(client):
+    test_client, _ = client
+    request = analyst.AnalystQuestion(question="x", context=analyst.AnalystContext(**CONTEXT))
+    session = analyst.Session(request)
+    assert "error" in session.run("show_visual", {"kind": "pie", "place": None, "year": None, "month": None})
+    for _ in range(analyst.MAX_VISUALS):
+        assert "error" not in session.run("show_visual", {"kind": "monthly_series", "place": None, "year": None,
+                                                          "month": None})
+    assert "error" in session.run("show_visual", {"kind": "monthly_series", "place": None, "year": None, "month": None})
+    assert len(session.visuals) == analyst.MAX_VISUALS
+
+
+def test_strict_tool_schemas_stay_within_the_union_parameter_limit():
+    # The API rejects strict tool sets with more than 16 nullable (anyOf / type-array) parameters in total.
+    unions = sum(1 for tool in analyst.TOOL_SCHEMAS for p in tool["input_schema"]["properties"].values()
+                 if "anyOf" in p or isinstance(p.get("type"), list))
+    assert unions <= 16
+    assert analyst.unset(0) is None and analyst.unset("") is None and analyst.unset("Cusco") == "Cusco"

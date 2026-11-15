@@ -753,6 +753,31 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** AnalystAction */
+        AnalystAction: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "show_on_map" | "open_calendar" | "open_priorities" | "open_report" | "download_data";
+            /** Label */
+            label: string;
+            /** Country */
+            country?: string | null;
+            /**
+             * Department
+             * @description Peruvian department name, when the target is one
+             */
+            department?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Month */
+            month?: number | null;
+            /** Report Id */
+            report_id?: string | null;
+        };
         /** AnalystAnswer */
         AnalystAnswer: {
             /** Answer */
@@ -790,6 +815,21 @@ export interface components {
             validation_status: "validated" | "experimental";
             /** Notice */
             notice?: string | null;
+            /**
+             * Visuals
+             * @description Charts and tables built from NINA's results, never typed by the model
+             */
+            visuals?: components["schemas"]["AnalystVisual"][];
+            /**
+             * Actions
+             * @description Interface actions offered as buttons
+             */
+            actions?: components["schemas"]["AnalystAction"][];
+            /**
+             * Follow Ups
+             * @description Questions NINA can answer next
+             */
+            follow_ups?: string[];
         };
         /**
          * AnalystContext
@@ -882,6 +922,42 @@ export interface components {
             unverified: string[];
             /** Passed */
             passed: boolean;
+        };
+        /** AnalystVisual */
+        AnalystVisual: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "chart" | "table";
+            /** Chart */
+            chart?: ("line" | "bar") | null;
+            /** Title */
+            title: string;
+            /** Unit */
+            unit?: string | null;
+            /** Categories */
+            categories?: string[];
+            /** Series */
+            series?: components["schemas"]["VisualSeries"][];
+            /** Reference Value */
+            reference_value?: number | null;
+            /** Reference Label */
+            reference_label?: string | null;
+            /** Highlight */
+            highlight?: string | null;
+            /** Columns */
+            columns?: string[];
+            /** Rows */
+            rows?: (string | number | null)[][];
+            /** Note */
+            note?: string | null;
+            /** Source */
+            source: string;
         };
         /** ArchiveMonth */
         ArchiveMonth: {
@@ -1395,6 +1471,13 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VisualSeries */
+        VisualSeries: {
+            /** Name */
+            name: string;
+            /** Values */
+            values: (number | null)[];
         };
     };
     responses: never;

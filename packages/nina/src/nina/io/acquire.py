@@ -219,7 +219,9 @@ def acquire(workspace: Path) -> None:
         result["download_date"] = datetime.now(UTC).isoformat()
         if entry["file"] == "world-110m.topojson":
             bundled = workspace / "design/world-110m.topojson"
-            if file_digest(bundled) != result["sha256"]:
+            # Compare content, not bytes: a git checkout on Windows may change the line endings of the bundled copy.
+            downloaded = workspace / "source/auxiliary" / entry["file"]
+            if read_json(bundled) != read_json(downloaded):
                 raise ValueError("La cartografía no coincide con el original versionado")
             result["derived_asset"] = "web/public/assets/countries.geojson"
             result["derived_sha256"] = file_digest(workspace / result["derived_asset"])

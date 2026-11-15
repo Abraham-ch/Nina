@@ -317,6 +317,38 @@ export type AnalystAnswer = {
   dataset_id: string
   validation_status: 'validated' | 'experimental'
   notice: string | null
+  visuals: AnalystVisual[]
+  actions: AnalystAction[]
+  follow_ups: string[]
+}
+// Charts and tables of an answer: built by the server from NINA's results, never typed by the model.
+export type AnalystVisual = {
+  id: string
+  kind: string
+  type: 'chart' | 'table'
+  chart: 'line' | 'bar' | null
+  title: string
+  unit: string | null
+  categories: string[]
+  series: { name: string; values: (number | null)[] }[]
+  reference_value: number | null
+  reference_label: string | null
+  highlight: string | null
+  columns: string[]
+  rows: (string | number | null)[][]
+  note: string | null
+  source: string
+}
+// Interface actions offered as buttons; the user presses them, the assistant never does.
+export type AnalystAction = {
+  id: string
+  kind: 'show_on_map' | 'open_calendar' | 'open_priorities' | 'open_report' | 'download_data'
+  label: string
+  country: string | null
+  department: string | null
+  year: number | null
+  month: number | null
+  report_id: string | null
 }
 export type AnalystStatus = { engine: 'deterministic' | 'claude'; model: string | null }
 export type ReportCreated = {
