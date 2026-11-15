@@ -89,7 +89,7 @@ def status():
         total = rows(c, 'SELECT count(*) AS observations, min(acquired) AS first_date, max(acquired) AS last_date, count(*) FILTER(WHERE department IS NULL) AS unassigned_department FROM observations')[0]
         sources = rows(c, '''SELECT source, platform, count(*) AS count, min(acquired)::DATE AS first_date,
             max(acquired)::DATE AS last_date FROM observations GROUP BY source,platform ORDER BY source,platform''')
-        batches = rows(c, 'SELECT * FROM batches ORDER BY source,coverage_start')
+        batches = rows(c, 'SELECT * EXCLUDE (created_by) FROM batches ORDER BY source,coverage_start')
     inventory_path = DATA / 'inventory.json'
     inventory = json.loads(inventory_path.read_text()) if inventory_path.exists() else None
     return {**total, 'sources':sources,'batches':batches,'inventory':inventory,

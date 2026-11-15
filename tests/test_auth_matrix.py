@@ -159,3 +159,84 @@ def test_las_columnas_que_pinta_la_interfaz_existen_en_respuesta(client):
     if auditoria:
         assert set(auditoria[0]) == {'id', 'user_id', 'action', 'target', 'detail', 'created_at'}
     assert store.code_revision()
+
+
+def test_status_no_expone_el_identificador_del_usuario(client):
+    """`GET /api/status` es anónimo: `created_by` es atribución interna, no lectura."""
+    c, _ = client
+    registro(c, 'lead@uni.pe')
+    with store.database() as con:
+        con.execute(
+            "INSERT INTO batches (id, filename, source, created_by) VALUES ('b1','f.csv','modis','usuario-secreto')"
+        )
+        # El valor sigue guardado: se oculta de la respuesta, no se borra.
+        assert (
+            con.execute("SELECT created_by FROM batches WHERE id='b1'").fetchone()[0]
+            == 'usuario-secreto'
+        )
+    c.post('/api/auth/logout')
+    lotes = c.get('/api/status').json()['batches']
+    assert lotes and 'created_by' not in lotes[0]
+
+
+def test_la_cookie_de_sesion_es_segura_detras_de_https():
+    from starlette.responses import Response
+
+    from nina.auth import attach
+
+    https = Response()
+    attach(https, 'token-de-prueba', secure=True)
+    assert 'secure' in https.headers['set-cookie'].lower()
+    http = Response()
+    attach(http, 'token-de-prueba', secure=False)
+    assert 'secure' not in http.headers['set-cookie'].lower()
+
+
+def test_un_hash_escrito_con_200k_sigue_verificando():
+    """Subir las rondas no debe invalidar las contraseñas ya guardadas."""
+    import hashlib
+
+    from nina.auth import verify_password
+
+    salt = 'ab' * 16
+    digest = hashlib.pbkdf2_hmac('sha256', b'secreta-1234', bytes.fromhex(salt), 200_000).hex()
+    antiguo = f'pbkdf2_sha256$200000${salt}${digest}'
+    assert verify_password('secreta-1234', antiguo)
+    assert not verify_password('otra-clave', antiguo)
+    assert not verify_password('secreta-1234', 'hash-corrompido')
+
+
+def test_el_pbkdf2_usa_como_minimo_los_600k_de_owasp():
+    from nina.auth import _PBKDF2_ROUNDS
+
+    assert _PBKDF2_ROUNDS >= 600_000
+
+
+def test_un_tope_de_descargas_invalido_no_reventa(client, monkeypatch):
+    """Un valor mal escrito en `.env` debe caer al valor por defecto, no a un 500."""
+    monkeypatch.setenv('MAX_DOWNLOADS_PER_HOUR', 'abc')
+    from nina.auth import max_downloads_per_hour
+
+    assert max_downloads_per_hour() == 60
+    assert max_downloads_per_hour() >= 1
+
+
+def test_openapi_documenta_401_y_403_en_las_rutas_protegidas():
+    import json
+    from pathlib import Path
+
+    espec = json.loads((Path(__file__).resolve().parent.parent / 'openapi.json').read_text('utf-8'))
+    rutas = [
+        '/api/downloads',
+        '/api/audit',
+        '/api/models/train',
+        '/api/sync',
+        '/api/acquisitions',
+        '/api/acquisitions/month',
+        '/api/import',
+        '/api/analyses/{identifier}/exports/{kind}',
+    ]
+    for ruta in rutas:
+        for metodo, operacion in espec['paths'][ruta].items():
+            assert '401' in operacion['responses'], f'{metodo.upper()} {ruta} sin 401'
+            assert '403' in operacion['responses'], f'{metodo.upper()} {ruta} sin 403'

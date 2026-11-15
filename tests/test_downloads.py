@@ -150,3 +150,27 @@ def test_no_se_puede_exceder_el_tope_de_descargas_por_hora(client, monkeypatch):
     segunda = c.get(url)
     assert segunda.status_code == 429
     assert 'hora' in segunda.json()['detail'].lower()
+
+
+def test_las_exportaciones_no_superan_el_tope_de_filas(client, monkeypatch):
+    """WORK_PLAN §10, T1: 'máximo de filas por exportación', con mensaje claro."""
+    monkeypatch.setenv('MAX_EXPORT_ROWS', '2')
+    c, path = client
+    cuenta(c, 'lead@uni.pe')
+    seed(path)
+    analisis = c.post('/api/analyses', json=selection()).json()
+    respuesta = c.get(f"/api/analyses/{analisis['id']}/exports/detections")
+    assert respuesta.status_code == 413
+    detalle = respuesta.json()['detail']
+    assert '2' in detalle and 'fila' in detalle.lower()
+    # Una exportación rechazada no debe aparecer en el historial.
+    assert c.get('/api/downloads').json() == []
+
+
+def test_el_tope_de_filas_no_afecta_por_debajo_del_limite(client):
+    c, path = client
+    cuenta(c, 'lead@uni.pe')
+    seed(path)
+    analisis = c.post('/api/analyses', json=selection()).json()
+    assert c.get(f"/api/analyses/{analisis['id']}/exports/detections").status_code == 200
+    assert len(c.get('/api/downloads').json()) == 1

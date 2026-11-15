@@ -123,6 +123,12 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
           }
         }
       }
@@ -140,6 +146,12 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
           }
         }
       }
@@ -517,6 +529,12 @@
               }
             }
           },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -594,6 +612,12 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
           }
         }
       }
@@ -674,6 +698,12 @@
               }
             }
           },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -710,6 +740,12 @@
               }
             }
           },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -745,6 +781,12 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
           },
           "422": {
             "description": "Validation Error",
@@ -839,6 +881,12 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "The current role does not allow this operation"
           },
           "422": {
             "description": "Validation Error",
