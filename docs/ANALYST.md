@@ -19,6 +19,7 @@ and official web sources are cited passage by passage.
 |---|---|---|
 | GET | `/api/analyst` | Active engine: `{"engine": "deterministic" \| "claude", "model": ...}` |
 | POST | `/api/analyst` | Answer one question |
+| POST | `/api/analyst/stream` | The same answer preceded by live progress (server-sent events: `tool` start/done, `thinking`, `verifying`, `fallback`, then `answer` or `error`); the web panel shows each step as it happens |
 
 Request:
 

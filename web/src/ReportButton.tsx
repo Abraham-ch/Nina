@@ -1,4 +1,4 @@
-import { FileText } from 'lucide-react'
+import { FileText, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { createReport, reportDocumentUrl } from './api'
@@ -24,10 +24,16 @@ export default function ReportButton({
     const tab = window.open('', '_blank')
     if (tab) {
       tab.document.title = 'NINA'
-      tab.document.body.innerHTML = `<p style="font:16px system-ui;margin:40px;color:#203a3c">${tr(
-        'Preparing the technical report…',
-        'Preparando el informe técnico…',
-      )}</p>`
+      // A waiting page with a moving indicator: building a report takes a few seconds.
+      tab.document.body.innerHTML = `<style>@keyframes s{to{transform:rotate(360deg)}}</style>
+        <div style="font:16px system-ui;margin:15vh auto;max-width:520px;color:#203a3c;text-align:center">
+        <div style="width:38px;height:38px;margin:0 auto 18px;border:4px solid #e9bc78;border-top-color:#c2410c;
+        border-radius:50%;animation:s .9s linear infinite"></div>
+        <p style="font-weight:600">${tr('Preparing the technical report…', 'Preparando el informe técnico…')}</p>
+        <p style="color:#697873;font-size:14px">${tr(
+          'NINA is computing the record, events, forest, climate and satellite images of this territory. It takes a few seconds.',
+          'NINA está calculando el registro, los eventos, el bosque, el clima y las imágenes satelitales de este territorio. Toma unos segundos.',
+        )}</p></div>`
     }
     setBusy(true)
     try {
@@ -52,7 +58,7 @@ export default function ReportButton({
         'Informe técnico imprimible de este territorio y mes',
       )}
     >
-      <FileText size={15} />
+      {busy ? <Loader2 size={15} className="spin" /> : <FileText size={15} />}
       {busy ? tr('Preparing…', 'Preparando…') : tr('Technical report', 'Informe técnico')}
     </button>
   )

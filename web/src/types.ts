@@ -353,6 +353,14 @@ export type AnalystAction = {
   month: number | null
   report_id: string | null
 }
+// Live progress of a question (POST /api/analyst/stream, server-sent events).
+export type AnalystEvent =
+  | { type: 'tool'; name: string; state: 'start' | 'done'; ok?: boolean }
+  | { type: 'thinking'; step: number }
+  | { type: 'verifying' }
+  | { type: 'fallback'; reason: string }
+  | { type: 'answer'; answer: AnalystAnswer }
+  | { type: 'error'; status: number; detail: string }
 export type AnalystStatus = { engine: 'deterministic' | 'claude'; model: string | null }
 export type ReportCreated = {
   id: string

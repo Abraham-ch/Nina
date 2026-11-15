@@ -13,6 +13,7 @@ import json
 import statistics
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
 import shapely
@@ -1025,7 +1026,8 @@ Generated: {generated}
 Request: {request}
 
 Files
-- report.html: the report, self-contained (open it in a browser; print it to PDF).
+- report.pdf: the report, ready to print or share.
+- report.html: the same report, self-contained (open it in a browser).
 - report.json: every figure of the report, with its section and status.
 - monthly_activity.csv: harmonized monthly activity, anomaly and status (null = no comparable value, never zero).
 - annual_series.csv: annual harmonized activity and raw pixel counts (raw counts mix sensors; compare only the harmonized series across 2012).
@@ -1052,7 +1054,8 @@ Generado: {generated}
 Solicitud: {request}
 
 Archivos
-- report.html: el informe, autocontenido (ábrelo en un navegador; imprímelo como PDF).
+- report.pdf: el informe, listo para imprimir o compartir.
+- report.html: el mismo informe, autocontenido (ábrelo en un navegador).
 - report.json: todas las cifras del informe, con su sección y estado.
 - monthly_activity.csv: actividad mensual armonizada, anomalía y estado (null = sin valor comparable, nunca cero).
 - annual_series.csv: actividad anual armonizada y conteo crudo de píxeles (el conteo crudo mezcla sensores; a través de 2012 compara solo la serie armonizada).
@@ -1083,6 +1086,47 @@ def csv_bytes(rows: list[dict[str, Any]], columns: list[str]) -> bytes:
     for row in rows:
         writer.writerow({k: ("" if row.get(k) is None else row.get(k)) for k in columns})
     return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+
+def report_images(identifier: str, report: dict[str, Any]) -> dict[str, Path]:
+    """Local paths of the cached GIBS images of a report (fetched once); missing ones are skipped."""
+    paths: dict[str, Path] = {}
+    if (report["sections"].get("imagery") or {}).get("status") == "available":
+        for which in ("before", "after"):
+            try:
+                paths[which] = Path(report_imagery(identifier, which).path)
+            except HTTPException:
+                continue
+    return paths
+
+
+def report_filename(report: dict[str, Any], extension: str) -> str:
+    slug = "".join(c if c.isalnum() else "-" for c in report["territory"]["name"]).strip("-")[:40] or "territory"
+    return f"NINA_report_{slug}_{report['period']['year']}-{report['period']['month']:02d}.{extension}"
+
+
+def report_pdf_bytes(identifier: str, report: dict[str, Any]) -> bytes:
+    """The PDF of a report, cached next to it (a report never changes once stored)."""
+    from .report_pdf import build_pdf
+
+    path = DATA / "jobs/reports" / f"{identifier}.pdf"
+    if path.exists():
+        return path.read_bytes()
+    content = build_pdf(report, report_images(identifier, report))
+    temporary = path.with_suffix(".tmp")
+    temporary.write_bytes(content)
+    temporary.replace(path)
+    return content
+
+
+@router.get("/api/reports/territorial/{identifier}/pdf")
+def report_pdf(identifier: str):
+    """The report as an A4 PDF, downloaded directly (no print dialog)."""
+    from fastapi.responses import Response
+
+    report = stored(identifier)
+    return Response(report_pdf_bytes(identifier, report), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{report_filename(report, "pdf")}"'})
 
 
 @router.get("/api/reports/territorial/{identifier}/package")
@@ -1118,6 +1162,7 @@ def report_package(identifier: str):
         legal=report["legal"], references="\n".join(report["references"]))
     files = {
         "README.txt": readme.encode("utf-8"),
+        "report.pdf": report_pdf_bytes(identifier, report),
         "report.html": render(report, embedded_images=images).encode("utf-8"),
         "report.json": json.dumps(report, ensure_ascii=False, indent=1, default=str).encode("utf-8"),
         "monthly_activity.csv": csv_bytes(s["current"].get("calendar") or [],
@@ -1136,8 +1181,7 @@ def report_package(identifier: str):
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, content in files.items():
             archive.writestr(name, content)
-    slug = "".join(c if c.isalnum() else "-" for c in report["territory"]["name"]).strip("-")[:40] or "territory"
-    filename = f"NINA_report_{slug}_{report['period']['year']}-{report['period']['month']:02d}.zip"
+    filename = report_filename(report, "zip")
     return Response(buffer.getvalue(), media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 

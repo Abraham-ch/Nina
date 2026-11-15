@@ -198,6 +198,7 @@ footer { margin-top: 4mm; font-size: 7.5pt; color: #5b6776; border-top: 1px soli
 .toolbar button, .toolbar a { font: inherit; font-size: 9.5pt; padding: 1.5mm 4mm; border: 1px solid #c2410c;
                   background: #c2410c; color: #fff; border-radius: 3px; cursor: pointer; text-decoration: none; }
 .toolbar a { background: #fff; color: #c2410c; }
+.toolbar a.primary { background: #c2410c; color: #fff; }
 .toolbar small { color: #5b6776; font-size: 8pt; }
 .points { border: 1px solid #e3e8ee; border-radius: 4px; padding: 2.5mm 4mm; margin: 2mm 0 3mm; break-inside: avoid; }
 .points h2 { margin: 0 0 1mm; font-size: 10.5pt; }
@@ -292,47 +293,42 @@ HATCH = ('<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpace
 # ------------------------------------------------------------------ sections
 
 
-def cards(doc: Doc) -> str:
+def card_items(doc: Doc) -> list[dict[str, str]]:
+    """The four headline figures (title, big value, anomaly chip, note), shared by the HTML and the PDF."""
     t, s = doc.t, doc.r["sections"]
     month = s["current"]["month"]
-    out = []
-
-    def card(title: str, big: str, small: str = "") -> str:
-        return f'<div class="card"><h3>{esc(title)}</h3><div class="big">{big}</div><div class="small">{small}</div></div>'
+    items: list[dict[str, str]] = []
 
     def chip(value: float | None) -> str:
-        if value is None:
-            return ""
-        kind = "up" if value >= 10 else "down" if value <= -10 else "flat"
-        return f' <span class="chip {kind}">{doc.n(value, sign=True)} %</span>'
+        return "" if value is None else f"{doc.n(value, sign=True)} %"
 
     if month["value"] is not None:
         rank = t["rank"].format(r=month["rank"], n=month["rank_of"]) if month["rank"] else ""
-        out.append(card(t["card_month"], doc.n(month["value"]) + chip(month["anomaly_percent"]),
-                        f'{esc(t["unit"])}<br>{esc(rank)}'))
+        items.append({"title": t["card_month"], "big": doc.n(month["value"]), "chip": chip(month["anomaly_percent"]),
+                      "small": f'{t["unit"]}\n{rank}'.strip()})
     else:
         current = s["current"]["month_to_date"]
         if current and current["value"] is not None:
-            out.append(card(t["card_month"], doc.n(current["value"]),
-                            esc(t["days_so_far"].format(d=current["valid_days"])) + f'<br>{esc(t["unit"])}'))
+            items.append({"title": t["card_month"], "big": doc.n(current["value"]), "chip": "",
+                          "small": f'{t["days_so_far"].format(d=current["valid_days"])}\n{t["unit"]}'})
         else:
-            out.append(card(t["card_month"], esc(t["na"])))
+            items.append({"title": t["card_month"], "big": t["na"], "chip": "", "small": ""})
     season = s["history"].get("season_jul_oct") or {}
     if season.get("rank"):
-        out.append(card(t["card_season"], esc(t["rank"].format(r=season["rank"], n=season["rank_of"])),
-                        chip(season.get("anomaly_percent"))))
+        items.append({"title": t["card_season"], "big": t["rank"].format(r=season["rank"], n=season["rank_of"]),
+                      "chip": chip(season.get("anomaly_percent")), "small": ""})
     else:
-        out.append(card(t["card_season"], esc(t["na"])))
+        items.append({"title": t["card_season"], "big": t["na"], "chip": "", "small": ""})
     trend = s["history"].get("trend_harmonized") or {}
     raw = s["history"].get("trend_raw_pixels") or {}
     if trend.get("slope_pct_per_year") is not None:
         arrow = {"increase": "↑", "decrease": "↓"}.get(trend["direction"], "→")
         big = (f'{arrow} {doc.n(trend["slope_pct_per_year"], 1, True)} {t["per_year"]}' if trend["significant"]
-               else f'→ {esc(t["no_trend"])}')
-        small = esc(t["raw_note"].format(v=doc.n(raw.get("slope_pct_per_year"), 1, True))) if raw.get("significant") else ""
-        out.append(card(t["card_trend"], big, small))
+               else f'→ {t["no_trend"]}')
+        small = t["raw_note"].format(v=doc.n(raw.get("slope_pct_per_year"), 1, True)) if raw.get("significant") else ""
+        items.append({"title": t["card_trend"], "big": big, "chip": "", "small": small})
     else:
-        out.append(card(t["card_trend"], esc(t["na"])))
+        items.append({"title": t["card_trend"], "big": t["na"], "chip": "", "small": ""})
     events = s["events"].get("selected_year") if s["events"]["status"] == "available" else None
     if events:
         emergencies = events.get("emergencies")
@@ -340,9 +336,24 @@ def cards(doc: Doc) -> str:
             small = t["per_emergency"].format(v=doc.n(events["significant_events"] / emergencies, 1))
         else:
             small = t["no_emergency"] if emergencies is None else ""
-        out.append(card(t["card_events"], f'{doc.n(events["significant_events"])} / {doc.n(emergencies)}', esc(small)))
+        items.append({"title": t["card_events"], "big": f'{doc.n(events["significant_events"])} / {doc.n(emergencies)}',
+                      "chip": "", "small": small})
     else:
-        out.append(card(t["card_events"], esc(t["na"])))
+        items.append({"title": t["card_events"], "big": t["na"], "chip": "", "small": ""})
+    return items
+
+
+def cards(doc: Doc) -> str:
+    out = []
+    for item in card_items(doc):
+        chip = ""
+        if item["chip"]:
+            value = float(item["chip"].replace(",", "").replace("%", "").strip())
+            kind = "up" if value >= 10 else "down" if value <= -10 else "flat"
+            chip = f' <span class="chip {kind}">{esc(item["chip"])}</span>'
+        small = "<br>".join(esc(line) for line in item["small"].split("\n"))
+        out.append(f'<div class="card"><h3>{esc(item["title"])}</h3><div class="big">{esc(item["big"])}{chip}</div>'
+                   f'<div class="small">{small}</div></div>')
     return '<div class="cards">' + "".join(out) + "</div>"
 
 
@@ -704,11 +715,11 @@ def render(report: dict[str, Any], embedded_images: dict[str, str] | None = None
     headline_text = head.get("text") or (report["summary"][0] if report["summary"] else "")
     badge = f'<div class="badge">{esc(t["experimental"])}</div>' if report["validation_status"] != "validated" else ""
     if embedded_images is None:
-        toolbar = (f'<div class="toolbar"><small>{esc(t["pdf_hint"])}</small>'
-                   f'<button onclick="window.print()">{esc(t["download_pdf"])}</button>'
+        toolbar = (f'<div class="toolbar">'
+                   f'<a class="primary" href="/api/reports/territorial/{esc(report["id"])}/pdf" download>{esc(t["download_pdf"])}</a>'
                    f'<a href="/api/reports/territorial/{esc(report["id"])}/package" download>{esc(t["download_zip"])}</a></div>')
     else:
-        toolbar = f'<div class="toolbar"><button onclick="window.print()">{esc(t["download_pdf"])}</button></div>'
+        toolbar = ""  # the package already holds report.pdf
     evidence = [trend_chart(doc), events_chart(doc)]
     detail = [forest_chart(doc), imagery(doc, embedded_images)]
     annex = [calendar_chart(doc), subdivision_table(doc), climate_table(doc), quality(doc)]

@@ -66,10 +66,13 @@ validated: any number in the text must match a fact.
 - A report in three levels: a summary page (headline, four key figures, this year against the normal range, key
   points), the evidence (trend raw vs harmonized, detected events vs registered emergencies with their validation,
   forest loss, before/after images) and an annex (activity calendar, subdivisions, climate, quality, sources).
-- **Download PDF** (the browser's print dialog, "Save as PDF", with A4 page breaks between the levels) and
-  **Download data (ZIP)**: `GET /api/reports/territorial/{id}/package` returns the self-contained report (images
-  embedded), `report.json`, CSV tables (UTF-8 with BOM) and a `README.txt` with the FIRMS citation and disclaimer,
-  dataset version, request and generation date.
+- **Download PDF**: `GET /api/reports/territorial/{id}/pdf` returns an A4 PDF built on the server with ReportLab
+  (`nina/report_pdf.py`), downloaded in one click: the same charts as the web page (its SVG converted to vector
+  graphics), the GIBS images with the territory outline, tables, page numbers and the FIRMS notice on every page.
+  It is cached next to the stored report.
+- **Download data (ZIP)**: `GET /api/reports/territorial/{id}/package` returns `report.pdf`, the self-contained
+  `report.html` (images embedded), `report.json`, CSV tables (UTF-8 with BOM) and a `README.txt` with the FIRMS
+  citation and disclaimer, dataset version, request and generation date.
 
 ## 6. Validation of each section
 
@@ -107,7 +110,7 @@ Delivered with the report (branch `feat/territorial-report`):
 | Priority table of Peru's 25 departments, one column per indicator, no composite score | `POST /api/reports/priority`, tab "Priorities" | Done |
 | "Technical report" buttons in the atlas brief and the calendar | `web/src/ReportButton.tsx` | Done |
 | Analytical assistant with tools and figure verification | `/api/analyst`, [ANALYST.md](ANALYST.md) | Done (deterministic engine evaluated; model engine pending a key) |
-| PDF and ZIP download | Document toolbar; `GET /api/reports/territorial/{id}/package` | Done (PDF through the browser's print dialog; no server-side PDF renderer) |
+| PDF and ZIP download | Document toolbar; `GET /api/reports/territorial/{id}/pdf` and `…/package` | Done (server-side PDF with ReportLab; no print dialog) |
 
 Department names sent from the map are resolved to INEI districts, while the map draws geoBoundaries outlines; values
 can differ by a few percent between the two (Ucayali, September 2024: 4,582 on the map, 4,491 in the report).
