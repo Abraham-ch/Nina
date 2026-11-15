@@ -291,3 +291,24 @@ def test_stream_reports_progress_then_the_same_answer(client):
     assert "territory_profile" in started
     answer = events[-1]["answer"]
     assert answer["engine"] == "deterministic" and answer["verification"]["passed"] and answer["visuals"]
+
+
+def test_burned_area_questions_are_answered_from_mcd64a1(client):
+    import duckdb
+
+    from nina import reports
+
+    test_client, _ = client
+    folder = reports.CONTEXT / "burned_area"
+    folder.mkdir(parents=True, exist_ok=True)
+    connection = duckdb.connect()
+    connection.execute("CREATE TABLE b AS SELECT y AS year, 9 AS month, 'PER' AS iso3, 'Peru' AS country, "
+                       "'PER.25_1' AS gid_1, 'Ucayali' AS region, 100.0 * (y - 2014) AS forest, 0.0 AS savannas, "
+                       "0.0 AS shrublands_grasslands, 0.0 AS croplands, 0.0 AS other FROM range(2015, 2026) t(y)")
+    connection.execute(f"COPY (SELECT *, forest AS burned_ha FROM b) TO "
+                       f"'{(folder / 'gwis_mcd64a1_admin1.parquet').as_posix()}' (FORMAT PARQUET)")
+    result = ask(test_client, "¿Cuántas hectáreas quemadas hubo en septiembre?", "es")
+    assert result["intent"] == "burned" and not result["abstained"]
+    assert "MCD64A1" in result["answer"] and "1,100 ha" in result["answer"]
+    assert result["verification"]["passed"], result["verification"]["unverified"]
+    assert [v["kind"] for v in result["visuals"]] == ["burned_area_by_year"]

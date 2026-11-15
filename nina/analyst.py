@@ -444,6 +444,20 @@ def compact_events(events: dict[str, Any]) -> dict[str, Any]:
             "validation_against_registry": events.get("validation")}
 
 
+def compact_burned(burned: dict[str, Any]) -> dict[str, Any]:
+    if burned.get("status") != "available":
+        return {"status": burned.get("status", "not_available"), "reason": burned.get("reason")}
+    return {"status": "available", "source": burned["source"], "note": burned["note"], "scope": burned["scope"],
+            "unit": burned["unit"], "coverage": burned["coverage"],
+            "selected_month": {k: rounded(v, 0) for k, v in burned["selected_month"].items()}
+            if burned.get("selected_month") else None,
+            "selected_year": {"year": burned["selected_year"]["year"],
+                              "burned_ha": rounded(burned["selected_year"]["burned_ha"], 0),
+                              "by_class": {k: rounded(v, 0) for k, v in burned["selected_year"]["by_class"].items()}}
+            if burned.get("selected_year") else None,
+            "by_year": [{"year": r["year"], "burned_ha": rounded(r["burned_ha"], 0)} for r in burned["by_year"]]}
+
+
 def compact_forest(forest: dict[str, Any]) -> dict[str, Any]:
     if forest["status"] != "available":
         return {"status": forest["status"], "reason": forest.get("reason")}
@@ -509,6 +523,7 @@ def compact_report(report: dict[str, Any]) -> dict[str, Any]:
         "annual": [{"year": a["year"], "harmonized": rounded(a["harmonized"], 0), "raw_pixels": rounded(a["raw_pixels"], 0)}
                    for a in history["annual"]],
         "events": compact_events(s["events"]),
+        "burned_area": compact_burned(s.get("burned_area") or {"status": "not_available"}),
         "forest": compact_forest(s["forest"]),
         "climate": compact_climate(s["climate"]),
         "quality": {k: rounded(quality[k], 3) for k in ("valid_region_days", "expected_region_days", "noaa20_filled_days",
@@ -890,6 +905,7 @@ def run_show_visual(session: Session, kind: str, place: str | None, year: int | 
         builder = {"monthly_series": analyst_ui.monthly_series, "same_month_by_year": analyst_ui.same_month_by_year,
                    "annual_totals": analyst_ui.annual_totals, "events_by_year": analyst_ui.events_by_year,
                    "forest_loss_by_year": analyst_ui.forest_loss_by_year,
+                   "burned_area_by_year": analyst_ui.burned_area_by_year,
                    "climate_departments": analyst_ui.climate_departments}[kind]
         spec = builder(identifier, session.report(place, year, month), language)
         if spec is None:
@@ -1028,8 +1044,6 @@ SCOPE = {
                            r"ENVIAR (?:EQUIPOS|RECURSOS|BRIGADAS|AYUDA)"),
     "cause": matcher(r"CAUSE", r"WHO (?:STARTED|STARTS|SET)", "ARSON", "INTENTIONAL", "BLAME", r"CAUSA",
                      "PROVOCAD", "INTENCIONAL", r"CULPA", r"QUIEN (?:INICIO|PROVOCO|CAUSO)"),
-    "burned_area": matcher("BURNED AREA", "BURNT AREA", "AREA QUEMADA", "SUPERFICIE QUEMADA", "HECTAREAS QUEMADAS",
-                           r"HA QUEMADAS"),
     "damage": matcher("CASUALT", r"DEATHS?\b", r"DEAD\b", "INJURED", "PEOPLE AFFECTED", r"ECONOMIC (?:LOSS|DAMAGE)",
                       "AFECTADOS", "DAMNIFICAD", "FALLECID", "MUERTOS", "HERIDOS", r"DANOS\b"),
     "forecast": matcher("FORECAST", "PREDICT", "TOMORROW", r"NEXT (?:WEEK|MONTH|YEAR|SEASON)", r"WILL THERE BE",
@@ -1037,6 +1051,8 @@ SCOPE = {
                         r"PROXIM[OA] (?:SEMANA|MES|ANO|TEMPORADA)", r"HABRA\b", "VA A HABER", "SE QUEMARA", "PROPAGA"),
 }
 INTENTS = [
+    ("burned", matcher("BURNED AREA", "BURNT AREA", "AREA QUEMADA", "SUPERFICIE QUEMADA", "HECTAREAS QUEMADAS",
+                       r"HA QUEMADAS", "MCD64", "AREA BURNED", "HECTARES BURNED", "SE QUEMARON", "QUEMADAS")),
     ("compare", matcher(r"WHICH (?:DEPARTMENTS?|REGIONS?)", r"WHAT (?:DEPARTMENTS?|REGIONS?)", r"DEPARTMENTS\b",
                         r"REGIONS\b", "RANKING", "RANK THE", "PRIORIT", "STAND OUT", "MOST AFFECTED",
                         r"QUE (?:DEPARTAMENTOS?|REGION(?:ES)?)", r"CUAL(?:ES)? (?:DEPARTAMENTOS?|REGION(?:ES)?)",
@@ -1238,6 +1254,10 @@ TEXT: dict[str, dict[str, Any]] = {
         "compare_note": "Each indicator is reported separately; NINA does not combine them into a single score. The full "
         "sortable table is in the Priorities tab.",
         "method_more": "Ask how reliable the harmonization is to see its validation results for this territory.",
+        "burned_month": "Burned area in {unit}, {month} {year} (MODIS MCD64A1, aggregated by GWIS): {area} ha, rank {rank} of {of} for that month (median of the other years {median} ha).",
+        "burned_ends": "The MODIS MCD64A1 burned-area table (GWIS) ends in {end}; the month asked about is not covered yet.",
+        "burned_year": "Whole year {year}: {area} ha.",
+        "burned_caveat": "MCD64A1 is a 500 m product independent of the hotspots NINA harmonizes; it often misses fires much smaller than one pixel (about 25 ha).",
         "scope": {
             "forecast": "NINA does not forecast fires or their spread: it describes activity already detected by "
             "satellites and compares it with the territory's own history.",
@@ -1366,6 +1386,10 @@ TEXT: dict[str, dict[str, Any]] = {
         "ordenable está en la pestaña Prioridades.",
         "method_more": "Pregunta qué tan fiable es la armonización para ver sus resultados de validación en este "
         "territorio.",
+        "burned_month": "Área quemada en {unit}, {month} de {year} (MODIS MCD64A1, agregada por GWIS): {area} ha, puesto {rank} de {of} para ese mes (mediana de los demás años {median} ha).",
+        "burned_ends": "La tabla de área quemada MODIS MCD64A1 (GWIS) termina en {end}; el mes consultado aún no está cubierto.",
+        "burned_year": "Año completo {year}: {area} ha.",
+        "burned_caveat": "MCD64A1 es un producto de 500 m independiente de los focos que NINA armoniza; suele omitir incendios mucho menores que un píxel (unas 25 ha).",
         "scope": {
             "forecast": "NINA no pronostica incendios ni su propagación: describe la actividad ya detectada por satélites "
             "y la compara con la historia del propio territorio.",
@@ -1511,6 +1535,26 @@ class Composer:
                 parts.append(self.t["events_check_department"].format(
                     department=reports.display_name(department["department"]), records=self.n(department["records"]),
                     rate=self.n(100 * department["rate"]), chance=self.n(100 * department["chance_rate"])))
+        return " ".join(parts)
+
+    def burned(self, place, year, month, _scope) -> str:
+        p = self.profile(place, year, month)
+        burned = p["burned_area"]
+        if burned["status"] != "available":
+            return self.t["tool_failed"].format(reason=burned.get("reason") or burned["status"])
+        parts = []
+        month_row = burned.get("selected_month")
+        if month_row:
+            parts.append(self.t["burned_month"].format(
+                unit=burned["unit"], month=month_name(month_row["month"], self.language), year=month_row["year"],
+                area=self.n(month_row["burned_ha"]), rank=month_row["rank"], of=month_row["rank_of"],
+                median=self.n(month_row["median_other_years_ha"])))
+        else:
+            parts.append(self.t["burned_ends"].format(end=burned["coverage"][1]))
+        year_row = burned.get("selected_year") or (burned["by_year"][-1] if burned["by_year"] else None)
+        if year_row:
+            parts.append(self.t["burned_year"].format(year=year_row["year"], area=self.n(year_row["burned_ha"])))
+        parts.append(self.t["burned_caveat"])
         return " ".join(parts)
 
     def forest(self, place, year, month, _scope) -> str:
@@ -1702,6 +1746,7 @@ What the data mean
 - Attribute every figure to its real scope: validation link metrics are pooled over all calibration countries; per-country figures are only those in the country's strata; department figures belong to the department.
 - Satellite fire events and INDECI emergencies (official records with damage assessment) measure different things; neither validates the other.
 - Tree-cover loss is not deforestation and "with fire" is co-location, not causation. Climate is context only.
+- Burned area comes from a separate product, MODIS MCD64A1 (500 m, aggregated by GWIS), for a country or a Peruvian department, 2002-2025 (territory_profile, burned_area). Name it as such; it is not derived from NINA's harmonized hotspots and misses many small fires.
 
 Limits
 - Do not forecast fires or their spread, attribute causes, estimate damage or casualties, or give operational instructions (evacuations, brigades, resource allocation). For such a question, start with a sentence stating that NINA cannot answer it, explain why in one sentence, and list up to three related questions NINA can answer. Do not call data tools or quote figures in that reply: historical figures placed next to a forecast or cause question read as an answer to it.
@@ -2083,7 +2128,7 @@ def ask_stream(request: AnalystQuestion):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-DEFAULT_VISUAL = {"overview": "same_month_by_year", "trend": "annual_totals", "events": "events_by_year",
+DEFAULT_VISUAL = {"burned": "burned_area_by_year", "overview": "same_month_by_year", "trend": "annual_totals", "events": "events_by_year",
                   "forest": "forest_loss_by_year", "climate": "climate_departments", "compare": "department_ranking",
                   "validation": "validation_strata", "season": "monthly_series", "quality": "monthly_series"}
 FOLLOW_UPS = {
@@ -2094,6 +2139,8 @@ FOLLOW_UPS = {
                   "versus raw.", "What happened in the fire season (July to October)?"],
         "events": ["How were detected events validated against official records?", "Which subdivisions had the "
                    "most events?", "Is this year's activity unusual?"],
+        "burned": ["Is this year's fire activity unusual?", "How does burned area compare with detected fire "
+                   "events?", "Show the burned area per year."],
         "forest": ["How does Hansen loss compare with Geobosques?", "Which years had the most loss with fire?",
                    "What does tree-cover loss not measure?"],
         "climate": ["Why does NINA use CHIRPS for rainfall?", "Which departments were in drought this month?",
@@ -2118,6 +2165,8 @@ FOLLOW_UPS = {
                   "frente a crudos.", "¿Qué pasó en la temporada de incendios (julio a octubre)?"],
         "events": ["¿Cómo se validaron los eventos detectados contra registros oficiales?", "¿Qué subdivisiones "
                    "tuvieron más eventos?", "¿La actividad de este año es inusual?"],
+        "burned": ["¿La actividad de fuego de este año es inusual?", "¿Cómo se compara el área quemada con los "
+                   "eventos detectados?", "Muestra el área quemada por año."],
         "forest": ["¿Cómo se compara la pérdida de Hansen con Geobosques?", "¿Qué años tuvieron más pérdida con "
                    "fuego?", "¿Qué no mide la pérdida de cobertura arbórea?"],
         "climate": ["¿Por qué NINA usa CHIRPS para la lluvia?", "¿Qué departamentos estuvieron en sequía este mes?",

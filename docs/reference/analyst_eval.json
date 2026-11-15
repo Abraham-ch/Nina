@@ -1,37 +1,308 @@
 {
   "description": "Evaluation set for the NINA analyst (nina/analyst.py). Each item states the question type the deterministic classifier must recognise, whether NINA must abstain, and the tools a model-driven answer is expected to use. Run scripts/eval_analyst.py against a real dataset; tests/test_analyst.py checks the classifier on every item.",
-  "context": {"country": "Peru", "ubigeo": "25", "year": 2024, "month": 9},
+  "context": {
+    "country": "Peru",
+    "ubigeo": "25",
+    "year": 2024,
+    "month": 9
+  },
   "items": [
-    {"id": "overview-en", "language": "en", "question": "What does this period show?", "intent": "overview", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "overview-es", "language": "es", "question": "¿Qué muestra este período?", "intent": "overview", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "unusual-en", "language": "en", "question": "Is September 2024 unusual for Ucayali?", "intent": "overview", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "trend-artefact-en", "language": "en", "question": "Is the trend real or a sensor artefact?", "intent": "trend", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "trend-artefact-es", "language": "es", "question": "¿El aumento de incendios es real o un artefacto del cambio de sensor?", "intent": "trend", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "trend-cause-sensor", "language": "en", "question": "Is the increase caused by the switch from MODIS to VIIRS?", "intent": "trend", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "trend-trust", "language": "en", "question": "Can I trust the long-term trend before 2012 in Ucayali?", "intent": "trend", "abstain": false, "tools": ["territory_profile", "validation_summary"]},
-    {"id": "events-es", "language": "es", "question": "¿Cuántas emergencias registró INDECI en Madre de Dios en 2024?", "intent": "events", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "events-en", "language": "en", "question": "How do detected fire events compare with INDECI emergencies?", "intent": "events", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "forest-en", "language": "en", "question": "How much forest was lost in Ucayali?", "intent": "forest", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "forest-es", "language": "es", "question": "¿Cuánta pérdida de bosque coincidió con fuego en 2023?", "intent": "forest", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "climate-es", "language": "es", "question": "¿Hubo sequía este mes?", "intent": "climate", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "climate-en", "language": "en", "question": "Was September drier than normal?", "intent": "climate", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "quality-en", "language": "en", "question": "Is the coverage sufficient?", "intent": "quality", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "quality-es", "language": "es", "question": "¿Faltan datos o hay vacíos en este mes?", "intent": "quality", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "season-en", "language": "en", "question": "How did the 2024 fire season rank?", "intent": "season", "abstain": false, "tools": ["territory_profile"]},
-    {"id": "validation-en", "language": "en", "question": "How reliable is the harmonization here?", "intent": "validation", "abstain": false, "tools": ["validation_summary"]},
-    {"id": "validation-es", "language": "es", "question": "¿Qué sesgo tiene la calibración de MODIS en el Perú?", "intent": "validation", "abstain": false, "tools": ["validation_summary"]},
-    {"id": "compare-es", "language": "es", "question": "¿Qué departamentos destacan en setiembre de 2024?", "intent": "compare", "abstain": false, "tools": ["compare_departments"]},
-    {"id": "compare-en", "language": "en", "question": "Which departments had the most INDECI emergencies in 2024?", "intent": "compare", "abstain": false, "tools": ["compare_departments"]},
-    {"id": "method-es", "language": "es", "question": "¿Cómo se armonizan MODIS y VIIRS?", "intent": "method", "abstain": false, "tools": ["method_notes"]},
-    {"id": "method-unit", "language": "en", "question": "What does one unit of the harmonized series represent?", "intent": "method", "abstain": false, "tools": ["method_notes"]},
-    {"id": "method-limits", "language": "en", "question": "What can NINA not answer?", "intent": "method", "abstain": false, "tools": ["method_notes"]},
-    {"id": "scope-forecast-en", "language": "en", "question": "Will there be more fires next month?", "intent": "scope", "abstain": true, "tools": []},
-    {"id": "scope-forecast-es", "language": "es", "question": "¿Habrá más incendios la próxima semana en Ucayali?", "intent": "scope", "abstain": true, "tools": []},
-    {"id": "scope-cause-en", "language": "en", "question": "Were these fires intentional or arson?", "intent": "scope", "abstain": true, "tools": []},
-    {"id": "scope-cause-es", "language": "es", "question": "¿Quién provocó los incendios de setiembre?", "intent": "scope", "abstain": true, "tools": []},
-    {"id": "scope-operational-en", "language": "en", "question": "Where should we send firefighters tomorrow?", "intent": "scope", "abstain": true, "tools": []},
-    {"id": "scope-operational-es", "language": "es", "question": "¿Debemos evacuar la comunidad?", "intent": "scope", "abstain": true, "tools": []},
-    {"id": "scope-burned-es", "language": "es", "question": "¿Cuántas hectáreas quemadas hubo en 2024?", "intent": "scope", "abstain": true, "tools": []},
-    {"id": "scope-damage-en", "language": "en", "question": "How many people were affected and how many deaths were there?", "intent": "scope", "abstain": true, "tools": []}
+    {
+      "id": "overview-en",
+      "language": "en",
+      "question": "What does this period show?",
+      "intent": "overview",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "overview-es",
+      "language": "es",
+      "question": "¿Qué muestra este período?",
+      "intent": "overview",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "unusual-en",
+      "language": "en",
+      "question": "Is September 2024 unusual for Ucayali?",
+      "intent": "overview",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "trend-artefact-en",
+      "language": "en",
+      "question": "Is the trend real or a sensor artefact?",
+      "intent": "trend",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "trend-artefact-es",
+      "language": "es",
+      "question": "¿El aumento de incendios es real o un artefacto del cambio de sensor?",
+      "intent": "trend",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "trend-cause-sensor",
+      "language": "en",
+      "question": "Is the increase caused by the switch from MODIS to VIIRS?",
+      "intent": "trend",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "trend-trust",
+      "language": "en",
+      "question": "Can I trust the long-term trend before 2012 in Ucayali?",
+      "intent": "trend",
+      "abstain": false,
+      "tools": [
+        "territory_profile",
+        "validation_summary"
+      ]
+    },
+    {
+      "id": "events-es",
+      "language": "es",
+      "question": "¿Cuántas emergencias registró INDECI en Madre de Dios en 2024?",
+      "intent": "events",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "events-en",
+      "language": "en",
+      "question": "How do detected fire events compare with INDECI emergencies?",
+      "intent": "events",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "forest-en",
+      "language": "en",
+      "question": "How much forest was lost in Ucayali?",
+      "intent": "forest",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "forest-es",
+      "language": "es",
+      "question": "¿Cuánta pérdida de bosque coincidió con fuego en 2023?",
+      "intent": "forest",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "climate-es",
+      "language": "es",
+      "question": "¿Hubo sequía este mes?",
+      "intent": "climate",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "climate-en",
+      "language": "en",
+      "question": "Was September drier than normal?",
+      "intent": "climate",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "quality-en",
+      "language": "en",
+      "question": "Is the coverage sufficient?",
+      "intent": "quality",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "quality-es",
+      "language": "es",
+      "question": "¿Faltan datos o hay vacíos en este mes?",
+      "intent": "quality",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "season-en",
+      "language": "en",
+      "question": "How did the 2024 fire season rank?",
+      "intent": "season",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "validation-en",
+      "language": "en",
+      "question": "How reliable is the harmonization here?",
+      "intent": "validation",
+      "abstain": false,
+      "tools": [
+        "validation_summary"
+      ]
+    },
+    {
+      "id": "validation-es",
+      "language": "es",
+      "question": "¿Qué sesgo tiene la calibración de MODIS en el Perú?",
+      "intent": "validation",
+      "abstain": false,
+      "tools": [
+        "validation_summary"
+      ]
+    },
+    {
+      "id": "compare-es",
+      "language": "es",
+      "question": "¿Qué departamentos destacan en setiembre de 2024?",
+      "intent": "compare",
+      "abstain": false,
+      "tools": [
+        "compare_departments"
+      ]
+    },
+    {
+      "id": "compare-en",
+      "language": "en",
+      "question": "Which departments had the most INDECI emergencies in 2024?",
+      "intent": "compare",
+      "abstain": false,
+      "tools": [
+        "compare_departments"
+      ]
+    },
+    {
+      "id": "method-es",
+      "language": "es",
+      "question": "¿Cómo se armonizan MODIS y VIIRS?",
+      "intent": "method",
+      "abstain": false,
+      "tools": [
+        "method_notes"
+      ]
+    },
+    {
+      "id": "method-unit",
+      "language": "en",
+      "question": "What does one unit of the harmonized series represent?",
+      "intent": "method",
+      "abstain": false,
+      "tools": [
+        "method_notes"
+      ]
+    },
+    {
+      "id": "method-limits",
+      "language": "en",
+      "question": "What can NINA not answer?",
+      "intent": "method",
+      "abstain": false,
+      "tools": [
+        "method_notes"
+      ]
+    },
+    {
+      "id": "scope-forecast-en",
+      "language": "en",
+      "question": "Will there be more fires next month?",
+      "intent": "scope",
+      "abstain": true,
+      "tools": []
+    },
+    {
+      "id": "scope-forecast-es",
+      "language": "es",
+      "question": "¿Habrá más incendios la próxima semana en Ucayali?",
+      "intent": "scope",
+      "abstain": true,
+      "tools": []
+    },
+    {
+      "id": "scope-cause-en",
+      "language": "en",
+      "question": "Were these fires intentional or arson?",
+      "intent": "scope",
+      "abstain": true,
+      "tools": []
+    },
+    {
+      "id": "scope-cause-es",
+      "language": "es",
+      "question": "¿Quién provocó los incendios de setiembre?",
+      "intent": "scope",
+      "abstain": true,
+      "tools": []
+    },
+    {
+      "id": "scope-operational-en",
+      "language": "en",
+      "question": "Where should we send firefighters tomorrow?",
+      "intent": "scope",
+      "abstain": true,
+      "tools": []
+    },
+    {
+      "id": "scope-operational-es",
+      "language": "es",
+      "question": "¿Debemos evacuar la comunidad?",
+      "intent": "scope",
+      "abstain": true,
+      "tools": []
+    },
+    {
+      "id": "burned-es",
+      "language": "es",
+      "question": "¿Cuántas hectáreas quemadas hubo en 2024?",
+      "intent": "burned",
+      "abstain": false,
+      "tools": [
+        "territory_profile"
+      ]
+    },
+    {
+      "id": "scope-damage-en",
+      "language": "en",
+      "question": "How many people were affected and how many deaths were there?",
+      "intent": "scope",
+      "abstain": true,
+      "tools": []
+    }
   ]
 }

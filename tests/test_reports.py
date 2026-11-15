@@ -230,3 +230,35 @@ def test_chirps_rainfall_overrides_power_in_the_drought_flag(client):
     assert row["precip_source"] == "CHIRPS v2.0" and row["precip_z"] == 0.2 and row["power_precip_z"] == -1.5
     assert row["drought"] is False
     assert "CHIRPS" in report["sections"]["climate"]["source"]
+
+
+def test_burned_area_comes_from_mcd64a1_by_department_and_country(client):
+    import duckdb
+
+    test_client, folder = client
+    context = reports.CONTEXT / "burned_area"
+    context.mkdir(parents=True, exist_ok=True)
+    rows = [(y, 9, "PER", "Peru", "PER.25_1", "Ucayali", 10.0 * (y - 2010), 0.0, 0.0, 0.0, 0.0)
+            for y in range(2015, 2026)]
+    rows += [(2025, 9, "USA", "United States", "USA.1_1", "Alabama", 5.0, 1.0, 0.0, 0.0, 0.0)]
+    connection = duckdb.connect()
+    connection.execute("CREATE TABLE b(year INT, month INT, iso3 VARCHAR, country VARCHAR, gid_1 VARCHAR, "
+                       "region VARCHAR, forest DOUBLE, savannas DOUBLE, shrublands_grasslands DOUBLE, "
+                       "croplands DOUBLE, other DOUBLE)")
+    connection.executemany("INSERT INTO b VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
+    connection.execute(f"COPY (SELECT *, forest+savannas+shrublands_grasslands+croplands+other AS burned_ha FROM b) "
+                       f"TO '{(context / 'gwis_mcd64a1_admin1.parquet').as_posix()}' (FORMAT PARQUET)")
+    report = test_client.post("/api/reports/territorial", json={"ubigeo": "25", "year": 2025, "month": 9}).json()
+    burned = report["sections"]["burned_area"]
+    assert burned["status"] == "available" and burned["scope"] == "department"
+    assert burned["selected_month"]["burned_ha"] == 150.0 and burned["selected_month"]["rank"] == 1
+    assert burned["selected_month"]["rank_of"] == 11 and burned["coverage"] == ["2015-09", "2025-09"]
+    assert any("MCD64A1" in line for line in report["summary"])
+    document = test_client.get(f"/api/reports/territorial/{report['id']}/document").text
+    assert "Burned area per year (MODIS MCD64A1)" in document
+    usa = reports.section_burned_area(connection, {"type": "country", "name": "United States of America",
+                                                   "country": "United States of America", "ubigeo": None},
+                                      2025, 9)
+    assert usa["status"] == "available" and usa["selected_month"]["burned_ha"] == 6.0
+    drawn = reports.section_burned_area(connection, {"type": "polygon", "name": "x", "country": "Peru"}, 2025, 9)
+    assert drawn["status"] == "not_available"
