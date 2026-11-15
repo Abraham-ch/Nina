@@ -6,7 +6,9 @@ import calendar
 from datetime import date, timedelta
 from typing import Any
 
-HISTORICAL_COUNTRIES = {"Brazil", "Australia", "Indonesia", "United States of America", "Peru"}
+from nina.config import CALIBRATION_COUNTRIES
+
+HISTORICAL_COUNTRIES = set(CALIBRATION_COUNTRIES)
 HISTORICAL_CUTOFF = date(2023, 12, 31)
 HELD_OUT_MONTHS = 3
 MIN_LABEL_DAYS = 2

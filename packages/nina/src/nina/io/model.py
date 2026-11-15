@@ -20,8 +20,11 @@ from nina.calibration import (
     relative_metrics,
     select_coefficient,
     validate_years,
+    apply_noise_ceiling,
+    validate_countries,
 )
 from nina.config import (
+    CALIBRATION_COUNTRIES,
     H3_RES,
     MIN_CONFIDENCE_CLASS,
     STATIC_SOURCE_H3_RES,
@@ -38,7 +41,7 @@ PLATFORMS = {
     "noaa20": "NOAA-20",
     "noaa21": "NOAA-21",
 }
-HISTORICAL_COUNTRIES = {"Brazil", "Australia", "Indonesia", "United States of America", "Peru"}
+HISTORICAL_COUNTRIES = set(CALIBRATION_COUNTRIES)
 MIN_TRAINING_YEAR = 2012
 RESERVED_TEST_YEAR = 2024
 MAX_BAD_DAY_FRACTION = 0.20
@@ -355,6 +358,29 @@ def build_model(workspace: Path) -> dict[str, Any]:
                 overall=validation["overall"],
                 reserved_test=tests[sampling]["metrics"],
             )
+        # ADR 0006: MODIS strata are judged only where the same-instrument bridge (NOAA-20 vs S-NPP)
+        # can order months; the 0.4.0 result stays visible as strict_passed_fraction.
+        for sampling in ["terra_only", "terra_aqua"]:
+            validations[sampling] = apply_noise_ceiling(validations[sampling], validations["noaa20"])
+            log(
+                "noise_ceiling",
+                sampling=sampling,
+                passed=validations[sampling]["passed"],
+                passed_fraction=validations[sampling]["passed_fraction"],
+                strict_passed_fraction=validations[sampling]["strict_passed_fraction"],
+                below_noise_ceiling=validations[sampling]["below_noise_ceiling"],
+            )
+        country_transfer = {
+            sampling: validate_countries(
+                [p for p in model_pairs if p.sampling == sampling],
+                max_bias=0.05 if sampling == "noaa20" else 0.10,
+            )
+            for sampling in ["terra_aqua", "noaa20"]
+        }
+        log(
+            "country_transfer",
+            **{s: v["passed_fraction"] for s, v in country_transfer.items()},
+        )
         configuration = {
             "h3_resolution": H3_RES,
             "static_resolution": STATIC_SOURCE_H3_RES,
@@ -363,6 +389,9 @@ def build_model(workspace: Path) -> dict[str, Any]:
             "target": "S-NPP active cell-days",
             "minimum_cells": 30,
             "model": "poisson_offset",
+            "fallback": ["country_biome", "world_biome", "country", "global"],
+            "gate_rule": "noise_ceiling_0.5.0",
+            "calibration_countries": sorted(HISTORICAL_COUNTRIES),
             "lifecycle": prepared["sensor_lifecycle"],
             "known_gaps": prepared["known_gaps"],
             "auxiliary_revision": [
@@ -393,6 +422,7 @@ def build_model(workspace: Path) -> dict[str, Any]:
             "validation": validations,
             "reserved_tests": tests,
             "geographic_diagnostic": transfers,
+            "country_transfer": country_transfer,
             "gates": gates,
             "quality": quality_report,
             "publishable": all(gates.values()),
@@ -418,6 +448,10 @@ def build_model(workspace: Path) -> dict[str, Any]:
                 "validation": {
                     key: {k: v for k, v in value.items() if k not in {"predictions", "strata"}}
                     for key, value in validations.items()
+                },
+                "country_transfer": {
+                    key: {k: v for k, v in value.items() if k != "countries"}
+                    for key, value in country_transfer.items()
                 },
                 "local_cloud_opportunities": "not_reconstructed",
             },

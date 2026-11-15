@@ -19,7 +19,23 @@ import truststore
 from nina.io.harmonization import file_digest, log, read_json, write_json
 
 BASE = "https://firms.modaps.eosdis.nasa.gov"
-COUNTRIES = {"Brazil", "Australia", "Indonesia", "United_States", "Peru"}
+# Calibration countries (FIRMS file names). The first five are the 0.4.0 set; the rest were added in 0.5.0
+# by fire weight, fire regime (biome) not yet covered, region and availability of an independent registry
+# (ADR 0006). Together they hold about 61 % of the bytes of the 2000-2025 FIRMS country archive.
+CORE_COUNTRIES = {"Brazil", "Australia", "Indonesia", "United_States", "Peru"}
+ADDED_COUNTRIES = {
+    # Approved first: largest fire country, two boreal regions, cropland burning, a public registry
+    "Democratic_Republic_of_the_Congo", "Russian_Federation", "India", "Canada", "Mexico",
+    # South and Central America: Peru's neighbours, Chaco, Llanos, Pampas/steppe, Mediterranean Chile
+    "Bolivia", "Colombia", "Ecuador", "Chile", "Argentina", "Paraguay", "Venezuela", "Honduras",
+    # Africa: southern miombo, northern Sudanian savanna and gas flares, highlands, island grasslands, fynbos
+    "Zambia", "Nigeria", "Ethiopia", "Madagascar", "South_Africa",
+    # Asia: cropland and industrial sources, mainland South-East Asia, Eurasian steppe, boreal-steppe edge
+    "China", "Myanmar", "Kazakhstan", "Mongolia",
+    # Mediterranean Europe and Anatolia
+    "Portugal", "Spain", "Greece", "Turkey",
+}
+COUNTRIES = CORE_COUNTRIES | ADDED_COUNTRIES
 SOURCES = {"modis", "viirs-snpp", "viirs-jpss1"}
 FIRST_YEAR, LAST_YEAR = 2000, 2025
 MAX_ATTEMPTS = 3
@@ -181,7 +197,7 @@ def acquire(workspace: Path) -> None:
         log("verified_history", file=entry["filename"])
         return result
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         files = list(pool.map(get_history, entries))
     write_json(
         manifest_file,
