@@ -213,3 +213,9 @@
   base *antes* de los registros, que sí escriben. Corregido midiendo **después** de montar la sesión y
   añadiendo un **control** (una operación legítima debe cambiar el hash) para que el test no pueda pasar
   en vacío. `Risk: none` — solo añade pruebas, no toca comportamiento.
+- **L32** · **Deriva de fuente detectada**: `a7a562c` (en la base desde el rebase) tradujo
+  `WORK_PLAN.md` al inglés — §10 hoy es *"Cross-cutting product tasks (leadership tasks)" / "T1 · Users
+  and download management"*. Los specs **S1–S3 de este documento siguen citando la versión en español
+  vigente en `90d2ed6`**, que es la que se usó para escribir el trabajo. **El contenido es el mismo**,
+  solo cambió el idioma: no se re-escriben los `S#` (no sería *verbatim* de ninguna de las dos fuentes),
+  pero quien compare contra el `WORK_PLAN.md` actual debe saber que está viendo una traducción.
