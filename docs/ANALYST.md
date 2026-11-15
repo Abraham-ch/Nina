@@ -123,6 +123,8 @@ verifier against invented figures, `calculate`, and the model loop with a script
 |---|---|---|---|---|---|---|
 | Deterministic | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 0.49 s |
 | Claude (`claude-sonnet-5-5`) | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31* | 31 / 31* | 7.0 s |
+| Deterministic, with charts and actions | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 1.1 s |
+| Claude, with charts, actions and web search | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 8.2 s |
 
 Live checks with charts, actions and web corroboration (2026-11-15, Claude engine, all figures traced):
 
