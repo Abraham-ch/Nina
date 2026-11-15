@@ -92,36 +92,35 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
       figure: `×${number(jump.raw_pixels, 1)} → ×${number(jump.harmonized, 1)}`,
       head: tr('A fake jump in 2012', 'Un salto falso en 2012'),
       body: tr(
-        `When the new satellite (VIIRS) arrived in 2012, Peru's September fire seemed to multiply ×${number(jump.raw_pixels, 1)} overnight: a sharper camera, not more fire. In NINA's record the same comparison gives ×${number(jump.harmonized, 1)}. And it breaks again now: one VIIRS satellite stopped on 2 November 2026 and MODIS is retiring.`,
-        `Cuando llegó el satélite nuevo (VIIRS) en 2012, el fuego de septiembre en el Perú pareció multiplicarse ×${number(jump.raw_pixels, 1)} de un día para otro: una cámara más fina, no más fuego. En el registro de NINA la misma comparación da ×${number(jump.harmonized, 1)}. Y se rompe otra vez ahora: un satélite VIIRS se detuvo el 2 de noviembre de 2026 y MODIS se retira.`,
+        `A sharper satellite camera made Peru's fire seem to multiply ×${number(jump.raw_pixels, 1)} overnight. NINA removes the jump.`,
+        `Una cámara satelital más fina hizo que el fuego del Perú pareciera multiplicarse ×${number(jump.raw_pixels, 1)} de golpe. NINA elimina el salto.`,
       ),
     },
     {
       figure: `+${number(sept.anomaly_vs_median_snpp_only_2012_2023)} %`,
-      head: tr(
-        `September 2024, the worst in ${sept.years_compared} years`,
-        `Septiembre de 2024, el peor en ${sept.years_compared} años`,
-      ),
+      head: tr(`September 2024, the worst in ${sept.years_compared} years`, `Septiembre de 2024, el peor en ${sept.years_compared} años`),
       body: tr(
-        `The highest September since 2003, ${number(sept.anomaly_vs_median_snpp_only_2012_2023)} % above the 2012–2023 median (previous record: ${sept.previous_record[1]}).${peru ? ` On 18 September, the day of the emergency decree, the previous 14 days were ${number(peru.on_declaration_day.ratio_to_median, 1)}× the median${peru.above_previous_max_continuously_since ? ` and had been above every year since ${day(peru.above_previous_max_continuously_since)}` : ''}.` : ''}${amazonas ? ` Amazonas was at ${number(amazonas.on_declaration_day.ratio_to_median, 1)}×.` : ''} ${records.length} departments set a September record.`,
-        `El septiembre más alto desde 2003, ${number(sept.anomaly_vs_median_snpp_only_2012_2023)} % por encima de la mediana 2012–2023 (récord anterior: ${sept.previous_record[1]}).${peru ? ` El 18 de septiembre, día del decreto de emergencia, los 14 días previos estaban a ${number(peru.on_declaration_day.ratio_to_median, 1)}× la mediana${peru.above_previous_max_continuously_since ? ` y superaban a todos los años desde el ${day(peru.above_previous_max_continuously_since)}` : ''}.` : ''}${amazonas ? ` Amazonas estaba a ${number(amazonas.on_declaration_day.ratio_to_median, 1)}×.` : ''} ${records.length} departamentos marcaron récord de septiembre.`,
+        `More fire than a normal September; ${records.length} regions had their worst September on record.`,
+        `Más fuego que un septiembre normal; ${records.length} regiones tuvieron su peor septiembre registrado.`,
       ),
     },
     {
       figure: `${share(topDetected)} / ${share(topReported)}`,
       head: tr('Where it burns most, it is reported least', 'Donde más arde, menos se reporta'),
       body: tr(
-        `In 2024, ${names} had ${share(topDetected)} of the fire seen from space over Peru, but only ${share(topReported)} of the emergencies reported to INDECI. Nationally, reports grew ×${number(dvr.reported_growth_2019_2023_vs_2003_2007)} between 2003–2007 and 2019–2023 while the fire seen from space stayed level (×${number(dvr.detected_growth_2019_2023_vs_2003_2007, 1)}).`,
-        `En 2024, ${names} tuvieron el ${share(topDetected)} del fuego visto desde el espacio sobre el Perú, pero solo el ${share(topReported)} de las emergencias reportadas al INDECI. A nivel nacional, los reportes crecieron ×${number(dvr.reported_growth_2019_2023_vs_2003_2007)} entre 2003–2007 y 2019–2023 mientras el fuego visto desde el espacio se mantuvo estable (×${number(dvr.detected_growth_2019_2023_vs_2003_2007, 1)}).`,
+        `In 2024, ${names}: ${share(topDetected)} of the fire seen from space, ${share(topReported)} of the emergencies reported.`,
+        `En 2024, ${names}: el ${share(topDetected)} del fuego visto desde el espacio, el ${share(topReported)} de las emergencias reportadas.`,
       ),
     },
     {
       figure: inpeTop.length ? `${sameTop} / ${inpeTop.length}` : `r = ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)}`,
       head: tr("Brazil's space agency agrees", 'La agencia espacial de Brasil coincide'),
-      body: tr(
-        `INPE, with a single satellite and its own method, ranks ${inpeTop.length ? `the same worst Septembers for Peru (${inpeTop.join(', ')})` : 'the years the same way'}; year to year the two series agree at ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)} out of 1. NINA is not a forecast: it reads the record, it does not predict the next season.`,
-        `El INPE, con un solo satélite y su propio método, ordena ${inpeTop.length ? `los mismos peores septiembres del Perú (${inpeTop.join(', ')})` : 'los años del mismo modo'}; año a año ambas series coinciden en ${number(e.inpe_agreement.annual_pearson_2012_2025, 2)} sobre 1. NINA no es un pronóstico: lee el registro, no predice la próxima temporada.`,
-      ),
+      body: inpeTop.length
+        ? tr(
+            `INPE, with its own method, ranks the same worst Septembers: ${inpeTop.join(', ')}.`,
+            `El INPE, con su propio método, ordena los mismos peores septiembres: ${inpeTop.join(', ')}.`,
+          )
+        : tr('INPE, with its own method, ranks the years the same way.', 'El INPE, con su propio método, ordena los años del mismo modo.'),
     },
   ]
   return (
@@ -141,8 +140,8 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
       </h2>
       <p className="landing-evidence-lead">
         {tr(
-          'One 25-year series across satellites, so anyone can see whether this season is unusual, where, and where burning goes unreported.',
-          'Una serie de 25 años entre satélites, para que cualquiera vea si esta temporada es inusual, dónde, y dónde se quema sin que se reporte.',
+          'One record across satellites, 25 years long: is this season unusual, and where?',
+          'Un registro entre satélites, de 25 años: ¿esta temporada es inusual, y dónde?',
         )}
       </p>
       <ul className="landing-evidence-cards">
@@ -168,8 +167,8 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
               <strong>{tr('countries, calibrated one by one', 'países, calibrados uno por uno')}</strong>
               <p>
                 {tr(
-                  `About ${share(w.archive_share)} of NASA's archived fire detections, from the Amazon to Siberia, each country and ecosystem with its own conversion.`,
-                  `Cerca del ${share(w.archive_share)} de las detecciones de fuego archivadas por la NASA, de la Amazonía a Siberia, cada país y ecosistema con su propia conversión.`,
+                  `About ${share(w.archive_share)} of NASA's fire archive, from the Amazon to Siberia.`,
+                  `Cerca del ${share(w.archive_share)} del archivo de fuego de la NASA, de la Amazonía a Siberia.`,
                 )}
               </p>
             </li>
@@ -180,8 +179,8 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
               <strong>{tr('the 2012 jump, removed', 'el salto de 2012, eliminado')}</strong>
               <p>
                 {tr(
-                  `Median change after VIIRS arrives in ${w.break_2012.countries} countries: raw counts versus NINA.`,
-                  `Cambio mediano tras la llegada de VIIRS en ${w.break_2012.countries} países: conteo crudo frente a NINA.`,
+                  `Typical jump in ${w.break_2012.countries} countries: raw counts, then NINA.`,
+                  `Salto típico en ${w.break_2012.countries} países: conteo crudo, luego NINA.`,
                 )}
               </p>
             </li>
@@ -190,8 +189,8 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
               <strong>{tr('of country–ecosystem pairs pass', 'de los pares país–ecosistema aprueban')}</strong>
               <p>
                 {tr(
-                  `${w.modis_gate.passed} of ${w.modis_gate.evaluable} pass a bar set in advance (80 %), checking each year with a conversion that never used it; typical difference ${share(w.modis_gate.typical_year_error)}.`,
-                  `${w.modis_gate.passed} de ${w.modis_gate.evaluable} superan una meta fijada de antemano (80 %), comprobando cada año con una conversión que no lo usó; diferencia típica ${share(w.modis_gate.typical_year_error)}.`,
+                  `${w.modis_gate.passed} of ${w.modis_gate.evaluable} tests pass a bar set in advance.`,
+                  `${w.modis_gate.passed} de ${w.modis_gate.evaluable} pruebas superan una meta fijada de antemano.`,
                 )}
               </p>
             </li>
@@ -201,8 +200,8 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
                 <strong>{tr('of recorded wildfires found', 'de los incendios registrados, encontrados')}</strong>
                 <p>
                   {tr(
-                    `Canada's official database: large wildfires that NINA also detects (${number(100 * w.registries.Canada.chance_rate, 1)} % by chance).`,
-                    `Base oficial de Canadá: incendios grandes que NINA también detecta (${number(100 * w.registries.Canada.chance_rate, 1)} % por azar).`,
+                    `Large wildfires in Canada's official records that NINA also finds.`,
+                    `Incendios grandes de los registros oficiales de Canadá que NINA también encuentra.`,
                   )}
                 </p>
               </li>
@@ -212,8 +211,8 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
       )}
       <p className="landing-caveat">
         {tr(
-          `Unit: VIIRS-equivalent active cell-days (one ~5 km² H3 cell with at least one valid detection in a day), not fires or burned area. Method ${e.method_version}, dataset ${e.dataset_id}. The harmonization is experimental: it has not passed every scientific validation gate. A retrospective reading, not a tested alert.`,
-          `Unidad: celdas-día activas equivalentes VIIRS (una celda H3 de ~5 km² con al menos una detección válida en un día), no incendios ni área quemada. Método ${e.method_version}, conjunto ${e.dataset_id}. La armonización es experimental: no ha superado todas las pruebas de validación científica. Es una lectura retrospectiva, no una alerta probada.`,
+          `Unit: ~5 km² squares with fire per day (VIIRS scale), not fires or hectares. Method ${e.method_version}, experimental. A reading of the past, not an alert. Human figures: INDECI.`,
+          `Unidad: cuadros de ~5 km² con fuego por día (escala VIIRS), no incendios ni hectáreas. Método ${e.method_version}, experimental. Una lectura del pasado, no una alerta. Cifras humanas: INDECI.`,
         )}
       </p>
     </section>

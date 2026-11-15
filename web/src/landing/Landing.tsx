@@ -251,14 +251,10 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                     figure: String(sept.deaths),
                     sub: tr('lives lost', 'vidas perdidas'),
                     title: tr(
-                      `in Peru's forest fires of September 2024; ${n(sept.homeless)} people lost their homes and ${n(sept.affected)} were affected`,
-                      `en los incendios forestales del Perú en septiembre de 2024; ${n(sept.homeless)} personas perdieron su casa y ${n(sept.affected)} resultaron afectadas`,
+                      `in Peru's fires of September 2024. ${n(sept.homeless)} people lost their homes.`,
+                      `en los incendios del Perú, septiembre de 2024. ${n(sept.homeless)} personas perdieron su casa.`,
                     ),
                     q: tr('What is at stake?', '¿Qué está en juego?'),
-                    body: tr(
-                      `Behind every point of light seen from space there are families, crops and forest. These are INDECI's own records for that month (${n(sept.emergencies)} emergencies in ${sept.departments} regions), and they are a floor: not every fire is reported.`,
-                      `Detrás de cada punto de luz visto desde el espacio hay familias, cultivos y bosque. Son los registros del propio INDECI para ese mes (${n(sept.emergencies)} emergencias en ${sept.departments} regiones), y son un piso: no todo incendio se reporta.`,
-                    ),
                   },
                 ]
               : []),
@@ -266,44 +262,25 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
               figure: String(k.lead ?? '—'),
               sub: tr('days earlier', 'días antes'),
               title: tr(
-                k.since
-                  ? `from ${day(k.since)} the satellites showed the worst season since 2003. The emergency was declared on 18 September${before ? `; by then ${before.deaths} people had died` : ''}`
-                  : 'before the 18 September emergency decree',
-                k.since
-                  ? `desde el ${day(k.since)} los satélites mostraban la peor temporada desde 2003. La emergencia se declaró el 18 de septiembre${before ? `; para entonces ya habían muerto ${before.deaths} personas` : ''}`
-                  : 'antes del decreto de emergencia del 18 de septiembre',
+                `the satellites already showed a record season before the emergency was declared.${before ? ` By then, ${before.deaths} people had died.` : ''}`,
+                `los satélites ya mostraban una temporada récord antes de declararse la emergencia.${before ? ` Para entonces habían muerto ${before.deaths} personas.` : ''}`,
               ),
               q: tr('Could it have been seen sooner?', '¿Se pudo ver antes?'),
-              body: tr(
-                'The signal was in the data; what was missing was one consistent record to compare it with. Comparing the last 14 days with the same dates in every year since 2003 makes it visible and shareable.',
-                'La señal estaba en los datos; lo que faltaba era un registro coherente con qué compararla. Comparar los últimos 14 días con las mismas fechas de cada año desde 2003 la hace visible y compartible.',
-              ),
             },
             {
               figure: `+${k.anomaly} %`,
               sub: tr('more fire than a normal September', 'más fuego que un septiembre normal'),
-              title: tr(
-                `September 2024 was the worst of the ${k.years} Septembers since 2003`,
-                `septiembre de 2024 fue el peor de los ${k.years} septiembres desde 2003`,
-              ),
+              title: tr(`The worst September in ${k.years} years.`, `El peor septiembre en ${k.years} años.`),
               q: tr('How exceptional was it?', '¿Qué tan excepcional fue?'),
-              body: tr(
-                'It sizes the brigades, budget and smoke-related health care a season like this demands, before it peaks.',
-                'Dimensiona las brigadas, el presupuesto y la atención de salud por humo que exige una temporada así, antes del pico.',
-              ),
             },
             {
               figure: share(k.topShare),
-              sub: tr(`of the fire, but ${share(k.topReported)} of the reports`, `del fuego, pero el ${share(k.topReported)} de los reportes`),
+              sub: tr(`of the fire, ${share(k.topReported)} of the reports`, `del fuego, ${share(k.topReported)} de los reportes`),
               title: tr(
-                `in 2024 in ${k.top.join(', ')}: where it burns most is where it is reported least`,
-                `en 2024 en ${k.top.join(', ')}: donde más arde es donde menos se reporta`,
+                `${k.top.join(', ')}: where it burns most, it is reported least.`,
+                `${k.top.join(', ')}: donde más arde, menos se reporta.`,
               ),
               q: tr('Where to prioritize?', '¿Dónde priorizar?'),
-              body: tr(
-                'The fire seen from space shows where prevention and brigades are needed, even where no one files a report.',
-                'El fuego visto desde el espacio muestra dónde hacen falta prevención y brigadas, incluso donde nadie presenta un reporte.',
-              ),
             },
           ]
           const goTo = (i: number) => {
@@ -346,7 +323,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
                       </span>
                       <strong>{it.title}</strong>
                       <span className="landing-ind-body">
-                        <em>{it.q}</em> {it.body}
+                        <em>{it.q}</em>
                       </span>
                     </button>
                   ))}
