@@ -11,6 +11,7 @@ import os
 import re
 import statistics
 import tempfile
+import threading
 import zipfile
 from contextlib import contextmanager
 from datetime import date
@@ -365,8 +366,20 @@ def selected_countries(selection):
     return names
 
 
+# One harmonized query at a time. A cold planet query peaks at about 1.15 GB (DuckDB is capped at 1 GB) and the Fly
+# machine has 2 GB, so a second one (another visitor, the start-up warm-up, a report) waits its turn instead of
+# risking an out-of-memory restart. Re-entrant, so a query that opens another in the same thread does not block.
+HEAVY_QUERY = threading.RLock()
+
+
 @contextmanager
 def selection_database(selection, folder):
+    with HEAVY_QUERY, open_selection_database(selection, folder) as opened:
+        yield opened
+
+
+@contextmanager
+def open_selection_database(selection, folder):
     connection = duckdb.connect()
     try:
         connection.execute("SET memory_limit='1GB'")
@@ -692,6 +705,8 @@ def create_analysis(selection: HarmonizedSelection):
             pass
     as_of_year = int(manifest["as_of_date"][:4]) if manifest.get("as_of_date") else None
     with selection_database(selection, folder) as (connection, number_countries, excluded):
+        if stored_path.exists():  # computed by the request that held the turn while this one waited
+            return load_json(stored_path)
         months = monthly_calendar(connection, selection, number_countries, as_of_year=as_of_year)
         selected = next(
             m
@@ -798,6 +813,8 @@ def points(identifier: str, limit: int = 5000):
             pass
     selection = HarmonizedSelection(**result["selection"])
     with selection_database(selection, folder) as (connection, _, _excluded):
+        if cached.exists():  # computed by the request that held the turn while this one waited
+            return load_json(cached)
         connection.execute(
             """CREATE TEMP TABLE monthly_points AS SELECT cell,latitude,longitude,
             sum(active_harmonized) AS activity,bool_and(calibration_validated) AS validated,
