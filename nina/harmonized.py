@@ -1,4 +1,4 @@
-"""Consultas de artefactos comunes publicados. La API no calibra sensores."""
+"""Queries over the published harmonized product. The API never calibrates sensors."""
 
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 import duckdb
+import numpy as np
 import shapely
+import shapely.affinity
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -32,14 +34,23 @@ REVIEW_ARTIFACTS = SOURCE / "review"
 REPORTS = SOURCE / "interim/harmonization"
 router = APIRouter(tags=["Harmonized activity"])
 UNIT = "equivalent_VIIRS_active_cell_days"
-ANALYSIS_VERSION = "1"
+ANALYSIS_VERSION = "2"
 MAX_GEOMETRY_BYTES = 100000
 MAX_LONGITUDE = 180
 MAX_LATITUDE = 90
-CLIMATOLOGY_FIRST_YEAR = 2001
+# Terra-only months (before Aqua, July 2002) are not served (ADR 0005).
+CLIMATOLOGY_FIRST_YEAR = 2002
 MAX_BAD_DAY_FRACTION = 0.20
 MIN_HISTORY_YEARS = 5
 MAX_MAP_POINTS = 10000
+# A month keeps its value when at most this share of its observed cell-days lacks a validated
+# coefficient; the share is reported and the value is the validated sum (ADR 0005).
+MAX_UNVALIDATED_SHARE = 0.01
+# With a free polygon, countries holding less than this share of the selected cells are border
+# slivers of the generalized 1:110m outlines and are left out (reported in the response).
+BORDER_SLIVER_SHARE = 0.02
+# Shorter windows have strong sampling bias (MODIS guide); no anomaly below 8 days.
+MIN_AGGREGATION_DAYS = 8
 
 
 class HarmonizedSelection(BaseModel):
@@ -54,7 +65,7 @@ class HarmonizedSelection(BaseModel):
     @model_validator(mode="after")
     def validate_selection(self):
         if not self.year_start <= self.selected_year <= self.year_end:
-            raise ValueError("El año seleccionado debe estar dentro del rango")
+            raise ValueError("The selected year must be inside the year range")
         if self.geometry is not None:
             try:
                 shape = shapely.geometry.shape(self.geometry)
@@ -70,7 +81,7 @@ class HarmonizedSelection(BaseModel):
                 if not valid:
                     raise ValueError()
             except Exception as error:
-                raise ValueError("Polígono WGS84 inválido") from error
+                raise ValueError("Invalid WGS84 polygon") from error
         return self
 
 
@@ -104,10 +115,33 @@ class CalendarMonth(BaseModel):
     valid_region_days: int
     calendar_days: int
     unvalidated_cell_days: int
+    unvalidated_share: float = 0.0
+    noaa20_filled_days: int = 0
     eligible_for_climatology: bool
     historical_median: float | None
     historical_n: int
+    historical_p10: float | None = None
+    historical_p90: float | None = None
     anomaly_percent: float | None
+    rank: int | None = Field(default=None, description="1 = highest of the compared years")
+    rank_of: int = 0
+
+
+class MonthToDate(BaseModel):
+    """The month in progress compared with the same days of the other eligible years."""
+
+    year: int
+    month: int
+    through_day: int
+    valid_days: int = Field(description="Days of the window with valid support; others are skipped")
+    value: float | None
+    historical_median: float | None
+    historical_n: int
+    anomaly_percent: float | None
+    rank: int | None = None
+    rank_of: int = 0
+    sampling_bias_warning: bool
+    unvalidated_share: float = 0.0
 
 
 class HarmonizedAnalysis(BaseModel):
@@ -118,6 +152,8 @@ class HarmonizedAnalysis(BaseModel):
     unit: str
     months: list[CalendarMonth]
     selected: CalendarMonth
+    month_to_date: MonthToDate | None = None
+    excluded_border_countries: list[str] = Field(default_factory=list)
     harmonized: Literal[True]
     synthetic: Literal[False]
     grid_resolution: int
@@ -206,7 +242,7 @@ def published():
         raise HTTPException(
             409,
             {
-                "message": "La serie armonizada todavía no supera la validación.",
+                "message": "The harmonized series has not passed validation yet.",
                 "readiness": readiness(),
             },
         )
@@ -218,7 +254,7 @@ def published():
         or not manifest.get("gates")
         or (not is_review and not all(manifest["gates"].values()))
     ):
-        raise HTTPException(409, "No existe un producto aprobado")
+        raise HTTPException(409, "There is no approved product")
     folder = artifact_root / identifier
     if not all(
         (folder / name).is_file()
@@ -229,9 +265,9 @@ def published():
             "manifest.json",
         ]
     ):
-        raise HTTPException(503, "El producto publicado está incompleto")
+        raise HTTPException(503, "The published product is incomplete")
     if load_json(folder / "manifest.json") != manifest:
-        raise HTTPException(503, "El manifiesto del producto no coincide con su publicación")
+        raise HTTPException(503, "The product manifest does not match its publication")
     try:
         signature = tuple(
             (
@@ -244,7 +280,7 @@ def published():
         )
         verify_files(signature)
     except (KeyError, ValueError, OSError):
-        raise HTTPException(503, "Falló la verificación de integridad del producto") from None
+        raise HTTPException(503, "The product failed its integrity check") from None
     return manifest, folder
 
 
@@ -256,21 +292,51 @@ def verify_files(signature):
             while block := stream.read(8 * 1024 * 1024):
                 digest.update(block)
         if digest.hexdigest() != expected:
-            raise ValueError("Hash inválido")
+            raise ValueError("Invalid hash")
+
+
+def split_antimeridian(geometry):
+    """Cut parts wider than 180° at ±180° instead of letting them cover a band around the globe.
+
+    Natural Earth 1:110m encodes Chukotka (Russia) and Fiji as rings that jump from +180 to
+    −180; read naively they cover every longitude. Same rule as the pipeline (ADR 0005).
+    """
+    parts = list(geometry.geoms) if geometry.geom_type == "MultiPolygon" else [geometry]
+    fixed = []
+    for part in parts:
+        west, south, east, north = part.bounds
+        if east - west <= 180 or south <= -89.9 or north >= 89.9:
+            fixed.append(part)
+            continue
+        shifted = shapely.make_valid(
+            shapely.transform(part, lambda xy: np.where(xy[:, :1] < 0, xy + [360.0, 0.0], xy))
+        )
+        inside = shifted.intersection(shapely.box(-180, -90, 180, 90))
+        beyond = shifted.intersection(shapely.box(180, -90, 540, 90))
+        fixed.append(shapely.union(inside, shapely.affinity.translate(beyond, xoff=-360)))
+    return shapely.union_all(fixed)
+
+
+@lru_cache(maxsize=2)
+def country_shapes(path: str, modified: int):
+    features = load_json(Path(path))["features"]
+    return [
+        (f["properties"]["name"], split_antimeridian(shapely.geometry.shape(f["geometry"])))
+        for f in features
+    ]
 
 
 def selected_countries(selection):
-    features = load_json(ROOT / "web/public/assets/countries.geojson")["features"]
+    path = ROOT / "web/public/assets/countries.geojson"
+    shapes = country_shapes(str(path), path.stat().st_mtime_ns)
     if selection.country != "world":
-        features = [f for f in features if f["properties"]["name"] == selection.country]
-        if not features:
-            raise HTTPException(422, "País desconocido; usa los nombres de /api/places")
+        shapes = [(name, shape) for name, shape in shapes if name == selection.country]
+        if not shapes:
+            raise HTTPException(422, "Unknown country; use the names from /api/places")
     if selection.geometry:
         geometry = shapely.geometry.shape(selection.geometry)
-        features = [
-            f for f in features if geometry.intersects(shapely.geometry.shape(f["geometry"]))
-        ]
-    names = [f["properties"]["name"] for f in features]
+        shapes = [(name, shape) for name, shape in shapes if geometry.intersects(shape)]
+    names = [name for name, _ in shapes]
     if selection.country == "world" and not selection.geometry:
         names.append("unassigned")
     return names
@@ -312,32 +378,73 @@ def selection_database(selection, folder):
                 OR NOT inside_selection(latitude,longitude)""",
                 [west, east, south, north],
             )
+        excluded: list[str] = []
+        if selection.geometry and selection.country == "world" and names:
+            names, excluded = drop_border_slivers(connection, selection, names)
         connection.execute("""CREATE VIEW selected_activity AS SELECT h.* FROM harmonized_cell_day h
             JOIN selected_cells s USING(cell)""")
-        yield connection, len(names)
+        yield connection, len(names), excluded
     finally:
         connection.close()
 
 
+def drop_border_slivers(connection, selection, names):
+    """Keep the countries that really hold the polygon's cells.
+
+    The 1:110m outlines overlap at borders, so a Peruvian department drawn by hand touches
+    Bolivia or Brazil. Requiring those archives would blank its history; countries with less
+    than `BORDER_SLIVER_SHARE` of the selected cells are left out and reported instead.
+    """
+    shares = dict(connection.execute("SELECT country,count(*) FROM selected_cells GROUP BY 1").fetchall())
+    total = sum(shares.values())
+    if total:
+        kept = [name for name in names if shares.get(name, 0) / total >= BORDER_SLIVER_SHARE]
+    else:  # No fire cell inside the polygon: keep the country that covers most of it.
+        geometry = shapely.geometry.shape(selection.geometry)
+        path = ROOT / "web/public/assets/countries.geojson"
+        areas = {
+            name: geometry.intersection(shape).area
+            for name, shape in country_shapes(str(path), path.stat().st_mtime_ns)
+            if name in names
+        }
+        kept = [max(areas, key=areas.__getitem__)]
+    connection.execute("DELETE FROM selected_countries")
+    connection.executemany("INSERT INTO selected_countries VALUES (?)", [(n,) for n in kept])
+    connection.execute(
+        "DELETE FROM selected_cells WHERE country NOT IN (SELECT country FROM selected_countries)"
+    )
+    return kept, sorted(set(names) - set(kept))
+
+
 def monthly_calendar(connection, selection, number_countries, *, as_of_year=None):
+    """Monthly calendar of the selection (ADR 0005).
+
+    - A month has a comparable `value` only when every region-day has valid support and at most
+      `MAX_UNVALIDATED_SHARE` of its observed cell-days lacks a validated coefficient.
+    - Its anomaly compares it with the same calendar month of every other eligible year
+      (complete, standard quality, declared archive, before the snapshot year). The current
+      year therefore gets anomalies too, but never enters the baseline.
+    """
     snapshot_year = as_of_year or date.today().year
     first, last = date(selection.year_start, 1, 1), date(selection.year_end + 1, 1, 1)
     counts = {
-        (int(y), int(m)): (float(n or 0), int(invalid))
-        for y, m, n, invalid in connection.execute(
+        (int(y), int(m)): (float(n or 0), int(invalid), int(total))
+        for y, m, n, invalid, total in connection.execute(
             """SELECT year(day),month(day),sum(active_harmonized),
-                count(*) FILTER(WHERE NOT calibration_validated) FROM selected_activity
+                count(*) FILTER(WHERE NOT calibration_validated),count(*) FROM selected_activity
                 WHERE day>=? AND day<? GROUP BY 1,2""",
             [first, last],
         ).fetchall()
     }
+    columns = {row[0] for row in connection.execute("DESCRIBE support").fetchall()}
+    filled = "count(*) FILTER(WHERE snpp_filled)" if "snpp_filled" in columns else "0"
     support = {
-        (int(y), int(m)): (int(n), int(valid), bool(declared), bool(provisional))
-        for y, m, n, valid, declared, provisional in connection.execute(
-            """SELECT
+        (int(y), int(m)): (int(n), int(valid), bool(declared), bool(provisional), int(fill))
+        for y, m, n, valid, declared, provisional, fill in connection.execute(
+            f"""SELECT
                 year(day),month(day),count(*),
                 count(*) FILTER(WHERE valid_platforms=required_platforms
-                AND NOT transition_day),bool_and(declared_archive),bool_or(is_provisional)
+                AND NOT transition_day),bool_and(declared_archive),bool_or(is_provisional),{filled}
                 FROM support WHERE country IN (SELECT country FROM selected_countries)
                 AND day>=? AND day<? GROUP BY 1,2""",
             [first, last],
@@ -348,36 +455,25 @@ def monthly_calendar(connection, selection, number_countries, *, as_of_year=None
         for month in range(1, 13):
             days = calendar.monthrange(year, month)[1]
             expected = days * number_countries
-            n, invalid = counts.get((year, month), (0.0, 0))
-            archived, valid, declared, provisional = support.get(
-                (year, month), (0, 0, False, False)
+            n, invalid, total = counts.get((year, month), (0.0, 0, 0))
+            archived, valid, declared, provisional, fill = support.get(
+                (year, month), (0, 0, False, False, 0)
             )
             missing_scope = not expected or archived < expected
             gap = not expected or valid == 0
-            bad_fraction = 1 - valid / expected if expected else 1
-            eligible = (
-                year >= CLIMATOLOGY_FIRST_YEAR
-                and year < snapshot_year
-                and not missing_scope
-                and bad_fraction <= MAX_BAD_DAY_FRACTION
-                and declared
-                and not provisional
-                and invalid == 0
-            )
-            value = (
-                None
-                if gap or missing_scope or invalid or bad_fraction > MAX_BAD_DAY_FRACTION
-                else n
-            )
-            if value == 0 and (not declared or valid < expected):
-                value = None
+            complete = not missing_scope and valid == expected
+            unvalidated_share = invalid / total if total else 0.0
+            unvalidated = unvalidated_share > MAX_UNVALIDATED_SHARE
+            value = n if complete and not unvalidated else None
+            if value == 0 and not declared:
+                value = None  # without a declared archive a zero is not a demonstrated zero
             status = (
                 "not_available"
                 if gap
                 else "unvalidated_domain"
-                if invalid
+                if unvalidated
                 else "incomplete_coverage"
-                if missing_scope or bad_fraction > MAX_BAD_DAY_FRACTION
+                if missing_scope or (expected - valid) / expected > MAX_BAD_DAY_FRACTION
                 else "partial_archive"
                 if not declared or valid < expected
                 else "provisional"
@@ -399,10 +495,19 @@ def monthly_calendar(connection, selection, number_countries, *, as_of_year=None
                     "valid_region_days": valid,
                     "calendar_days": days,
                     "unvalidated_cell_days": invalid,
-                    "eligible_for_climatology": eligible,
+                    "unvalidated_share": unvalidated_share,
+                    "noaa20_filled_days": fill,
+                    "eligible_for_climatology": value is not None
+                    and CLIMATOLOGY_FIRST_YEAR <= year < snapshot_year
+                    and declared
+                    and not provisional,
                     "historical_median": None,
                     "historical_n": 0,
+                    "historical_p10": None,
+                    "historical_p90": None,
                     "anomaly_percent": None,
+                    "rank": None,
+                    "rank_of": 0,
                 }
             )
     for row in months:
@@ -410,20 +515,110 @@ def monthly_calendar(connection, selection, number_countries, *, as_of_year=None
             m["value"]
             for m in months
             if m["month"] == row["month"]
-            and m["year"] < row["year"]
+            and m["year"] != row["year"]
             and m["eligible_for_climatology"]
-            and m["value"] is not None
         ]
         row["historical_n"] = len(history)
-        if (
-            len(history) >= MIN_HISTORY_YEARS
-            and row["value"] is not None
-            and row["eligible_for_climatology"]
-        ):
-            median = statistics.median(history)
-            row["historical_median"] = median
-            row["anomaly_percent"] = 100 * (row["value"] / median - 1) if median > 0 else None
+        if len(history) >= MIN_HISTORY_YEARS and row["value"] is not None:
+            row.update(compare(row["value"], history))
     return months
+
+
+def compare(value, history):
+    """Median, p10–p90 band, anomaly and rank of `value` against `history`."""
+    median = statistics.median(history)
+    deciles = statistics.quantiles(history, n=10, method="inclusive")
+    return {
+        "historical_median": median,
+        "historical_p10": deciles[0],
+        "historical_p90": deciles[-1],
+        "anomaly_percent": 100 * (value / median - 1) if median > 0 else None,
+        "rank": 1 + sum(v > value for v in history),
+        "rank_of": len(history) + 1,
+    }
+
+
+def month_to_date(connection, selection, number_countries, *, as_of_year=None):
+    """Compare a month in progress with the same days of the other eligible years.
+
+    The calendar only compares whole months, so the current month would never get a reference.
+    The window is the set of days of this month, up to the last supported one, on which every
+    selected region has valid support (a transition or outage day is skipped, not counted as zero).
+    Each reference year is summed over exactly the same day numbers. Below
+    `MIN_AGGREGATION_DAYS` valid days there is no anomaly (sampling bias).
+    """
+    snapshot_year = as_of_year or date.today().year
+    year, month = selection.selected_year, selection.selected_month
+    valid_by_day = dict(
+        connection.execute(
+            """SELECT day(day),count(*) FILTER(WHERE valid_platforms=required_platforms
+            AND NOT transition_day) FROM support
+            WHERE country IN (SELECT country FROM selected_countries)
+            AND year(day)=? AND month(day)=? GROUP BY 1""",
+            [year, month],
+        ).fetchall()
+    )
+    days = sorted(d for d, valid in valid_by_day.items() if number_countries and valid == number_countries)
+    if not days or len(days) >= calendar.monthrange(year, month)[1]:
+        return None
+    through = days[-1]
+    connection.execute("CREATE OR REPLACE TEMP TABLE window_days AS SELECT unnest(?::INTEGER[]) AS d", [days])
+    activity = {
+        int(y): (float(n or 0), int(invalid), int(total))
+        for y, n, invalid, total in connection.execute(
+            """SELECT year(day),sum(active_harmonized),
+            count(*) FILTER(WHERE NOT calibration_validated),count(*) FROM selected_activity
+            WHERE month(day)=? AND day(day) IN (SELECT d FROM window_days) GROUP BY 1""",
+            [month],
+        ).fetchall()
+    }
+    support = {
+        int(y): (int(valid), bool(declared), bool(provisional))
+        for y, valid, declared, provisional in connection.execute(
+            """SELECT year(day),count(*) FILTER(WHERE valid_platforms=required_platforms
+            AND NOT transition_day),bool_and(declared_archive),bool_or(is_provisional) FROM support
+            WHERE country IN (SELECT country FROM selected_countries)
+            AND month(day)=? AND day(day) IN (SELECT d FROM window_days) GROUP BY 1""",
+            [month],
+        ).fetchall()
+    }
+
+    def window_value(y):
+        n, invalid, total = activity.get(y, (0.0, 0, 0))
+        share = invalid / total if total else 0.0
+        valid = support.get(y, (0, False, False))[0]
+        complete = valid == len(days) * number_countries and share <= MAX_UNVALIDATED_SHARE
+        return (n if complete else None), share
+
+    value, share = window_value(year)
+    history = []
+    for y in range(CLIMATOLOGY_FIRST_YEAR, snapshot_year):
+        if y == year:
+            continue
+        candidate, _ = window_value(y)
+        _, declared, provisional = support.get(y, (0, False, False))
+        if candidate is not None and declared and not provisional:
+            history.append(candidate)
+    result = {
+        "year": year,
+        "month": month,
+        "through_day": through,
+        "valid_days": len(days),
+        "value": value,
+        "historical_median": None,
+        "historical_n": len(history),
+        "anomaly_percent": None,
+        "rank": None,
+        "rank_of": 0,
+        "sampling_bias_warning": len(days) < MIN_AGGREGATION_DAYS,
+        "unvalidated_share": share,
+    }
+    if value is not None and len(history) >= MIN_HISTORY_YEARS:
+        comparison = compare(value, history)
+        result.update({k: comparison[k] for k in ["historical_median", "rank", "rank_of"]})
+        if len(days) >= MIN_AGGREGATION_DAYS:
+            result["anomaly_percent"] = comparison["anomaly_percent"]
+    return result
 
 
 @router.post("/api/harmonized/analyses", response_model=HarmonizedAnalysis)
@@ -436,24 +631,30 @@ def create_analysis(selection: HarmonizedSelection):
         "validation_status": "validated" if manifest["status"] == "published" else "experimental",
     }
     identifier = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
-    with selection_database(selection, folder) as (connection, number_countries):
-        months = monthly_calendar(
-            connection,
-            selection,
-            number_countries,
-            as_of_year=int(manifest["as_of_date"][:4]) if manifest.get("as_of_date") else None,
+    as_of_year = int(manifest["as_of_date"][:4]) if manifest.get("as_of_date") else None
+    with selection_database(selection, folder) as (connection, number_countries, excluded):
+        months = monthly_calendar(connection, selection, number_countries, as_of_year=as_of_year)
+        selected = next(
+            m
+            for m in months
+            if (m["year"], m["month"]) == (selection.selected_year, selection.selected_month)
         )
-    selected = next(
-        m
-        for m in months
-        if (m["year"], m["month"]) == (selection.selected_year, selection.selected_month)
-    )
+        in_progress = (
+            selected["value"] is None and selected["valid_region_days"] > 0 and not selected["data_gap"]
+        )
+        current = (
+            month_to_date(connection, selection, number_countries, as_of_year=as_of_year)
+            if in_progress
+            else None
+        )
     result = {
         "id": identifier,
         **payload,
         "unit": UNIT,
         "months": months,
         "selected": selected,
+        "month_to_date": current,
+        "excluded_border_countries": excluded,
         "harmonized": True,
         "synthetic": False,
         "scientifically_validated": manifest["status"] == "published",
@@ -473,10 +674,11 @@ def create_analysis(selection: HarmonizedSelection):
             "input_mask_method_version": manifest.get("input_mask_method_version"),
         },
         "limitations": [
-            "Actividad detectada equivalente; no es número de incendios ni área quemada.",
-            "Un hueco o una región sin soporte no equivale a cero incendios.",
-            "Los puntos representan centros de celdas, no nuevas detecciones satelitales.",
-            "No se han reconstruido las oportunidades locales de observación ni la nubosidad.",
+            "VIIRS-equivalent detected activity; not a number of fires and not burned area.",
+            "A gap or a region without support is not zero fires.",
+            "Points are H3 cell centres, not new satellite detections.",
+            "Local observation opportunities and cloud cover have not been reconstructed.",
+            "Year-to-year error of the MODIS-era values is about ±10 % (validated strata).",
         ],
     }
     cache = DATA / "jobs/harmonized"
@@ -491,14 +693,14 @@ def create_analysis(selection: HarmonizedSelection):
 
 def existing(identifier):
     if not re.fullmatch(r"[a-f0-9]{24}", identifier):
-        raise HTTPException(404, "Análisis no encontrado")
+        raise HTTPException(404, "Analysis not found")
     path = DATA / "jobs/harmonized" / f"{identifier}.json"
     if not path.exists():
-        raise HTTPException(404, "Análisis no encontrado")
+        raise HTTPException(404, "Analysis not found")
     result = load_json(path)
     manifest, folder = published()
     if manifest["id"] != result["dataset_id"] or result.get("analysis_version") != ANALYSIS_VERSION:
-        raise HTTPException(409, "El dataset cambió; vuelve a generar el análisis")
+        raise HTTPException(409, "The dataset changed; create the analysis again")
     return result, folder
 
 
@@ -534,10 +736,10 @@ def selected_month_rows(connection, selection, *, limit=None):
 @router.get("/api/harmonized/analyses/{identifier}/points", response_model=PointsResponse)
 def points(identifier: str, limit: int = 5000):
     if not 1 <= limit <= MAX_MAP_POINTS:
-        raise HTTPException(422, "El límite debe estar entre 1 y 10000")
+        raise HTTPException(422, "The limit must be between 1 and 10000")
     result, folder = existing(identifier)
     selection = HarmonizedSelection(**result["selection"])
-    with selection_database(selection, folder) as (connection, _):
+    with selection_database(selection, folder) as (connection, _, _excluded):
         connection.execute(
             """CREATE TEMP TABLE monthly_points AS SELECT cell,latitude,longitude,
             sum(active_harmonized) AS activity,bool_and(calibration_validated) AS validated,
@@ -644,17 +846,20 @@ def export(identifier: str, kind: Literal["series", "manifest", "package"]):
         with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("series.csv", payload)
             archive.writestr("manifest.json", json.dumps(result, ensure_ascii=False, indent=2))
-            readme = "NINA · Actividad armonizada\n\n" + "\n".join(result["limitations"])
-            readme += "\n\nEstado de validación: " + result["validation_status"]
-            readme += "\n\nUnidad: " + UNIT + "\nVersión: " + result["dataset_id"]
+            readme = "NINA · Harmonized fire activity\n\n" + "\n".join(result["limitations"])
+            readme += "\n\nValidation status: " + result["validation_status"]
+            readme += "\nMethod version: " + result["method_version"]
+            readme += "\n\nUnit: " + UNIT + "\nDataset: " + result["dataset_id"]
+            readme += "\nSelection: " + json.dumps(result["selection"], ensure_ascii=False)
+            readme += "\nGenerated: " + date.today().isoformat()
             readme += "\n\n" + result["legal"] + "\n" + "\n".join(result["references"])
             readme += (
-                "\n\nLas celdas de cells.csv corresponden al mes seleccionado. "
-                "Las filas diarias tienen sesgo de muestreo; no calcular anomalías diarias.\n"
+                "\n\ncells.csv holds every cell-day of the selected month. "
+                "Daily rows have strong sampling bias; do not compute daily anomalies.\n"
             )
-            archive.writestr("LEEME.md", readme)
+            archive.writestr("README.md", readme)
             selection = HarmonizedSelection(**result["selection"])
-            with selection_database(selection, folder) as (connection, _):
+            with selection_database(selection, folder) as (connection, _, _excluded):
                 cursor, fields = selected_month_rows(connection, selection)
                 with (
                     archive.open("cells.csv", "w") as binary,
@@ -687,54 +892,108 @@ def export(identifier: str, kind: Literal["series", "manifest", "package"]):
 class HarmonizedQuestion(BaseModel):
     analysis_id: str = Field(min_length=24, max_length=24)
     question: str = Field(min_length=1, max_length=600)
+    language: Literal["en", "es"] = "en"
+
+
+ANSWERS = {
+    "en": {
+        "value": "{period} has {value:,.0f} VIIRS-equivalent active cell-days.",
+        "no_value": "{period} has no comparable value ({status}).",
+        "median": (
+            " The median of the same month in {n} other eligible years is {median:,.0f}"
+            " ({anomaly:+.1f} %); it ranks {rank} of {rank_of}."
+        ),
+        "no_median": " There is no eligible comparison of at least five years for this month.",
+        "coverage": (
+            "The month's status is {status}: {valid} of {expected} region-days have valid support"
+            "{filled}. This describes archive support; it does not reconstruct clouds or local"
+            " observation opportunities."
+        ),
+        "filled": ", {days} of them filled from NOAA-20 through the validated bridge",
+        "method": (
+            "The unit is one active H3 cell (about 5 km²) per day on a VIIRS S-NPP-equivalent scale."
+            " MODIS is converted with coefficients trained on 2012–2025 and validated on held-out"
+            " years; NOAA-20 is bridged to S-NPP. An adjusted unit is not a new fire location."
+        ),
+        "scope": (
+            "This analysis gives context on detected activity. It contains no spread, cause or"
+            " forecast model that could answer that question."
+        ),
+        "partial": " The archive is partial: the figure does not certify the total of the area.",
+        "footer": " These values describe detected activity, not individual fires, burned area or spread.",
+        "experimental": "Experimental result. ",
+    },
+    "es": {
+        "value": "{period} tiene {value:,.0f} celdas-día activas equivalentes VIIRS.",
+        "no_value": "{period} no tiene un valor comparable ({status}).",
+        "median": (
+            " La mediana del mismo mes en otros {n} años elegibles es {median:,.0f}"
+            " ({anomaly:+.1f} %); ocupa el puesto {rank} de {rank_of}."
+        ),
+        "no_median": " No hay una comparación elegible de al menos cinco años para este mes.",
+        "coverage": (
+            "El estado del mes es {status}: {valid} de {expected} combinaciones región/día tienen"
+            " soporte válido{filled}. Esto describe el archivo; no reconstruye nubes ni"
+            " oportunidades locales de observación."
+        ),
+        "filled": ", {days} completadas con NOAA-20 mediante el puente validado",
+        "method": (
+            "La unidad es una celda H3 activa (unos 5 km²) por día, en escala equivalente a VIIRS"
+            " S-NPP. MODIS se convierte con coeficientes entrenados en 2012–2025 y validados con"
+            " años reservados; NOAA-20 se enlaza con S-NPP. Una unidad ajustada no es un fuego nuevo."
+        ),
+        "scope": (
+            "Este análisis aporta contexto de actividad detectada. No contiene un modelo de"
+            " propagación, causas ni pronóstico que responda esa pregunta."
+        ),
+        "partial": " El archivo es parcial: la cifra no certifica el total del área.",
+        "footer": " Estos valores describen actividad detectada, no incendios individuales, área quemada ni propagación.",
+        "experimental": "Resultado experimental. ",
+    },
+}
+COVERAGE_TERMS = ["coverage", "cloud", "quality", "reliab", "cobertura", "nube", "calidad", "fiable"]
+METHOD_TERMS = ["sensor", "modis", "viirs", "harmoniz", "armoniz", "method", "método"]
+SCOPE_TERMS = ["evac", "tomorrow", "mañana", "predict", "predic", "forecast", "cause", "causa", "spread", "propaga"]
 
 
 @router.post("/api/harmonized/assistant", response_model=AssistantResponse)
 def assistant(question: HarmonizedQuestion):
     result, _ = existing(question.analysis_id)
+    text_for = ANSWERS[question.language]
     selected = result["selected"]
-    value = selected["value"]
-    answer = f"El período {selected['year']}-{selected['month']:02d} tiene " + (
-        f"{value:,.2f} unidades de actividad equivalente VIIRS."
-        if value is not None
-        else f"cobertura insuficiente para un valor comparable ({selected['status']})."
-    )
-    if selected["historical_median"] is not None:
-        answer += (
-            f" La mediana del mismo mes en {selected['historical_n']} años anteriores es "
-            f"{selected['historical_median']:,.2f}; "
-            f"diferencia {selected['anomaly_percent']:+.1f} %."
+    period = f"{selected['year']}-{selected['month']:02d}"
+    if selected["value"] is not None:
+        answer = text_for["value"].format(period=period, value=selected["value"])
+    else:
+        answer = text_for["no_value"].format(period=period, status=selected["status"])
+    if selected["historical_median"] is not None and selected["anomaly_percent"] is not None:
+        answer += text_for["median"].format(
+            n=selected["historical_n"],
+            median=selected["historical_median"],
+            anomaly=selected["anomaly_percent"],
+            rank=selected["rank"],
+            rank_of=selected["rank_of"],
         )
     else:
-        answer += " No hay una comparación histórica elegible de al menos cinco años para este mes."
+        answer += text_for["no_median"]
     text = question.question.lower()
-    if any(term in text for term in ["cobertura", "nube", "calidad", "fiable"]):
-        answer = (
-            f"El estado del mes es {selected['status']}. Hay soporte válido en "
-            f"{selected['valid_region_days']} de {selected['expected_region_days']} "
-            "combinaciones región/día. Este soporte describe el archivo disponible; "
-            "no reconstruye nubes ni todas las oportunidades de observación locales."
+    if any(term in text for term in COVERAGE_TERMS):
+        filled = selected.get("noaa20_filled_days", 0)
+        answer = text_for["coverage"].format(
+            status=selected["status"],
+            valid=selected["valid_region_days"],
+            expected=selected["expected_region_days"],
+            filled=text_for["filled"].format(days=filled) if filled else "",
         )
-    elif any(term in text for term in ["sensor", "modis", "viirs", "armoniz"]):
-        answer = (
-            "La unidad es una celda geográfica activa por día, llevada a una escala "
-            "equivalente a VIIRS. MODIS se ajusta con años de solapamiento reservados "
-            "para validar; el origen y los ajustes quedan en la exportación. "
-            "Una unidad ajustada no representa un nuevo punto de fuego observado."
-        )
-    elif any(term in text for term in ["evac", "mañana", "predic", "causa", "propaga"]):
-        answer = (
-            "Este análisis aporta contexto de actividad detectada. No contiene un modelo "
-            "de propagación, causalidad ni predicción que permita responder esa pregunta."
-        )
+    elif any(term in text for term in METHOD_TERMS):
+        answer = text_for["method"]
+    elif any(term in text for term in SCOPE_TERMS):
+        answer = text_for["scope"]
     if selected["partial_coverage"]:
-        answer += " El archivo es parcial: la cifra disponible no certifica el total del ámbito solicitado."
-    answer += (
-        " Estos valores describen actividad detectada; no estiman incendios individuales, "
-        "área quemada ni propagación."
-    )
+        answer += text_for["partial"]
+    answer += text_for["footer"]
     if not result["scientifically_validated"]:
-        answer = "Resultado experimental. " + answer
+        answer = text_for["experimental"] + answer
     return {
         "answer": answer,
         "analysis_id": result["id"],

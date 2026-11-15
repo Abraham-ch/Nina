@@ -610,14 +610,38 @@ export interface components {
             calendar_days: number;
             /** Unvalidated Cell Days */
             unvalidated_cell_days: number;
+            /**
+             * Unvalidated Share
+             * @default 0
+             */
+            unvalidated_share: number;
+            /**
+             * Noaa20 Filled Days
+             * @default 0
+             */
+            noaa20_filled_days: number;
             /** Eligible For Climatology */
             eligible_for_climatology: boolean;
             /** Historical Median */
             historical_median: number | null;
             /** Historical N */
             historical_n: number;
+            /** Historical P10 */
+            historical_p10?: number | null;
+            /** Historical P90 */
+            historical_p90?: number | null;
             /** Anomaly Percent */
             anomaly_percent: number | null;
+            /**
+             * Rank
+             * @description 1 = highest of the compared years
+             */
+            rank?: number | null;
+            /**
+             * Rank Of
+             * @default 0
+             */
+            rank_of: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -638,6 +662,9 @@ export interface components {
             /** Months */
             months: components["schemas"]["CalendarMonth"][];
             selected: components["schemas"]["CalendarMonth"];
+            month_to_date?: components["schemas"]["MonthToDate"] | null;
+            /** Excluded Border Countries */
+            excluded_border_countries?: string[];
             /**
              * Harmonized
              * @constant
@@ -678,6 +705,12 @@ export interface components {
             analysis_id: string;
             /** Question */
             question: string;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "es";
         };
         /** HarmonizedSelection */
         HarmonizedSelection: {
@@ -710,6 +743,45 @@ export interface components {
             geometry?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * MonthToDate
+         * @description The month in progress compared with the same days of the other eligible years.
+         */
+        MonthToDate: {
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /** Through Day */
+            through_day: number;
+            /**
+             * Valid Days
+             * @description Days of the window with valid support; others are skipped
+             */
+            valid_days: number;
+            /** Value */
+            value: number | null;
+            /** Historical Median */
+            historical_median: number | null;
+            /** Historical N */
+            historical_n: number;
+            /** Anomaly Percent */
+            anomaly_percent: number | null;
+            /** Rank */
+            rank?: number | null;
+            /**
+             * Rank Of
+             * @default 0
+             */
+            rank_of: number;
+            /** Sampling Bias Warning */
+            sampling_bias_warning: boolean;
+            /**
+             * Unvalidated Share
+             * @default 0
+             */
+            unvalidated_share: number;
         };
         /** PointsResponse */
         PointsResponse: {

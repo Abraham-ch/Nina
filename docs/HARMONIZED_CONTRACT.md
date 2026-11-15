@@ -60,7 +60,7 @@ archive support; it does not turn an experimental draft into a scientifically ap
 
 | Monthly field | How to read it |
 |---|---|
-| `value` | Comparable activity, or `null` when support or validation is missing. |
+| `value` | Comparable activity, or `null` when any region-day lacks valid support or more than 1 % of the month's observed cell-days lacks a validated coefficient. |
 | `observed_activity` | Sum of the available equivalent activity, even when the requested scope is incomplete. Do not present it as a global total when `value=null`. |
 | `unit` | `equivalent_VIIRS_active_cell_days`. Not individual fires or hectares. |
 | `status` | `complete`, `provisional`, `partial_archive`, `incomplete_coverage`, `unvalidated_domain`, `not_available`. |
@@ -68,13 +68,29 @@ archive support; it does not turn an experimental draft into a scientifically ap
 | `partial_coverage` | Regions/days are missing, or only the dates with detections in the archive are known. |
 | `is_provisional` | NRT observations are involved. |
 | `expected_region_days`, `valid_region_days` | Archive support by region and day; not a cloud-cover measurement. |
-| `unvalidated_cell_days` | Cell-days whose adjustment has no accepted validation. They prevent a comparable total. |
-| `eligible_for_climatology` | The month can be used as a historical reference. |
-| `historical_median`, `historical_n`, `anomaly_percent` | Descriptive comparison with the same month in at least five earlier eligible years. |
+| `unvalidated_cell_days`, `unvalidated_share` | Cell-days without a validated coefficient and their share of the month. Up to 1 % the value is the validated sum; above it, `value=null` and `status=unvalidated_domain`. |
+| `noaa20_filled_days` | Region-days of the S-NPP era filled from NOAA-20 through the validated bridge (S-NPP missing, or seeing under 40 % of NOAA-20's cells). |
+| `eligible_for_climatology` | The month can be used as a reference: complete, standard quality, declared archive, from 2002, before the snapshot year. |
+| `historical_median`, `historical_n`, `anomaly_percent` | Comparison with the same calendar month in all *other* eligible years (at least five). Every month with a value gets it, including the current year, which never enters the baseline. |
+| `historical_p10`, `historical_p90` | Band of the reference years, for the climatology ribbon. |
+| `rank`, `rank_of` | Position of the month among the reference years plus itself (1 = highest). |
 
-A `null` is shown as missing data. A zero is only an archive zero under its documented support. The year 2000 is partial
-and does not enter the climatology. Recent global archives do not by themselves certify that each month is complete;
+A `null` is shown as missing data. A zero is only an archive zero under its documented support. Terra-only months
+(before July 2002) are not served and the climatology starts in 2002. Recent global archives do not by themselves certify that each month is complete;
 outside the five historical countries, the multi-year comparison stays unavailable.
+
+### Month in progress
+
+When the selected month is still running (`value=null` with some valid days), the response adds `month_to_date`: day 1
+to the last day with valid support for every selected region (`through_day`), compared with the same days of the other
+eligible years (`historical_median`, `rank`). `anomaly_percent` is only given from 8 days on
+(`sampling_bias_warning=true` below that). This answers "how does the current month compare with history?".
+
+### Free-drawn polygons
+
+With `country="world"` and a `geometry`, countries holding less than 2 % of the selected cells are border slivers of
+the generalized outlines; they are left out and listed in `excluded_border_countries`. For a Peruvian region, sending
+`country="Peru"` is still the clearest choice.
 
 ## Map, evidence and exports
 
@@ -84,7 +100,7 @@ outside the five historical countries, the multi-year comparison stays unavailab
 | `GET /api/harmonized/analyses/{id}/points?limit=5000` | GeoJSON for the selected month: H3 centres, activity, total and displayed sample. Up to 10,000 points. |
 | `GET /api/harmonized/analyses/{id}/exports/series` | Monthly CSV with unit, version, citation and legal notice. |
 | `GET /api/harmonized/analyses/{id}/exports/manifest` | JSON with the analysis, selection, limits and references. |
-| `GET /api/harmonized/analyses/{id}/exports/package` | ZIP with `series.csv`, every cell/day row of the selected month in `cells.csv`, `manifest.json` and a readme. |
+| `GET /api/harmonized/analyses/{id}/exports/package` | ZIP with `series.csv`, every cell/day row of the selected month in `cells.csv`, `manifest.json` and `README.md` (FIRMS citation, version, selection, date). |
 
 Harmonized-product points are **cell centres**, not new fire locations. A weight can be fractional or larger than one: it
 is adjusted equivalent activity, not a probability. Downloads are not limited to the map sample. The daily CSV carries
@@ -102,8 +118,10 @@ check, the API returns **503**. Always keep `dataset_id` to tie calendar, map an
 `POST /api/harmonized/assistant`
 
 ```json
-{"analysis_id":"ID_RETURNED_BY_THE_POST","question":"How does this month compare with other years?"}
+{"analysis_id":"ID_RETURNED_BY_THE_POST","question":"How does this month compare with other years?","language":"en"}
 ```
+
+`language` is `en` (default) or `es`.
 
 Returns `answer`, `facts`, `references`, `analysis_id` and `dataset_id`. It answers about comparisons, archive quality and
 what the harmonization means. It is a deterministic, evidence-based engine; **it does not use an external LLM**. Do not

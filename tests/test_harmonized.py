@@ -81,6 +81,22 @@ def published_artifact(tmp_path, monkeypatch):
             for day in range(1, calendar.monthrange(year, 2)[1] + 1)
         ],
     )
+    # March: complete in 2019–2024; 2025 is in progress (days 1–10, day 4 without valid support).
+    connection.executemany(
+        "INSERT INTO support VALUES (?,?,?,?,?,?,?)",
+        [
+            ("Peru", date(year, 3, day), 0 if (year, day) == (2025, 4) else 1, 1, True, False, False)
+            for year in range(2019, 2026)
+            for day in range(1, (11 if year == 2025 else 32))
+        ],
+    )
+    connection.executemany(
+        "INSERT INTO harmonized_cell_day VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [
+            ("cell1", date(year, 3, 3), "Peru", 1, (year - 2018) * 2, 1, "S-NPP", False, "reference", True)
+            for year in range(2019, 2026)
+        ],
+    )
     for table in ["harmonized_cell_day", "support", "grid_cells"]:
         connection.execute(
             f"COPY {table} TO ? (FORMAT PARQUET)", [str(folder / f"{table}.parquet")]
@@ -138,7 +154,7 @@ def test_calendar_exports_assistant_and_points_use_one_published_revision(publis
     assert float(row["value"]) == selected["value"] and row["legal"]
     package = client.get(f"/api/harmonized/analyses/{identifier}/exports/package")
     with zipfile.ZipFile(io.BytesIO(package.content)) as archive:
-        assert set(archive.namelist()) == {"series.csv", "cells.csv", "manifest.json", "LEEME.md"}
+        assert set(archive.namelist()) == {"series.csv", "cells.csv", "manifest.json", "README.md"}
         cells = list(csv.DictReader(io.StringIO(archive.read("cells.csv").decode("utf-8-sig"))))
         assert len(cells) == 1 and float(cells[0]["active_harmonized"]) == 70
         assert float(cells[0]["latitude"]) == float(cells[0]["longitude"]) == 1
@@ -146,7 +162,7 @@ def test_calendar_exports_assistant_and_points_use_one_published_revision(publis
         assert cells[0]["sampling_bias_warning"] == "True"
     answer = client.post(
         "/api/harmonized/assistant",
-        json={"analysis_id": identifier, "question": "¿Cómo se compara con otros años?"},
+        json={"analysis_id": identifier, "question": "How does it compare with other years?"},
     ).json()
     assert answer["facts"] == selected and answer["dataset_id"] == result["dataset_id"]
     assert not answer["external_llm_used"]
@@ -234,3 +250,52 @@ def test_experimental_draft_requires_explicit_activation_and_keeps_failed_gates(
         assert data["provenance"]["gates"] == {"static_mask": False}
     finally:
         os.environ["NINA_EXPERIMENTAL_HARMONIZATION"] = previous
+
+
+def test_current_year_gets_an_anomaly_but_never_enters_the_baseline(published_artifact):
+    client, folder = published_artifact
+    # Snapshot in 2025: February 2025 is compared with 2019–2024 but is not one of their references.
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    manifest["as_of_date"] = "2025-03-01"
+    for path in [folder / "manifest.json", harmonized.ARTIFACTS / "current.json"]:
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+    result = client.post("/api/harmonized/analyses", json=request()).json()
+    selected = result["selected"]
+    assert not selected["eligible_for_climatology"]
+    assert selected["anomaly_percent"] == 100 and selected["rank"] == 1 and selected["rank_of"] == 7
+    february_2024 = next(m for m in result["months"] if (m["year"], m["month"]) == (2024, 2))
+    assert february_2024["historical_n"] == 5  # 2019–2023; 2025 is not a reference year
+
+
+def test_border_slivers_of_generalized_outlines_do_not_blank_a_polygon(published_artifact):
+    client, _ = published_artifact
+    # Touches Brazil's outline (west edge 20°) but holds only Peruvian cells.
+    geometry = {"type": "Polygon", "coordinates": [[[0, 0], [21, 0], [21, 10], [0, 10], [0, 0]]]}
+    result = client.post(
+        "/api/harmonized/analyses", json=request(country="world", geometry=geometry)
+    ).json()
+    assert result["excluded_border_countries"] == ["Brazil"]
+    assert result["selected"]["value"] == 70
+
+
+def test_assistant_answers_in_both_languages(published_artifact):
+    client, _ = published_artifact
+    identifier = client.post("/api/harmonized/analyses", json=request()).json()["id"]
+    english = client.post(
+        "/api/harmonized/assistant", json={"analysis_id": identifier, "question": "Is it normal?"}
+    ).json()["answer"]
+    spanish = client.post(
+        "/api/harmonized/assistant",
+        json={"analysis_id": identifier, "question": "¿Es normal?", "language": "es"},
+    ).json()["answer"]
+    assert "median" in english and "+100.0 %" in english and "mediana" in spanish
+
+
+def test_month_in_progress_is_compared_with_the_same_valid_days(published_artifact):
+    client, _ = published_artifact
+    result = client.post("/api/harmonized/analyses", json=request(selected_month=3)).json()
+    assert result["selected"]["value"] is None  # the whole month is not comparable yet
+    current = result["month_to_date"]
+    assert current["through_day"] == 10 and current["valid_days"] == 9  # day 4 skipped, not zero
+    assert current["value"] == 14 and current["historical_median"] == 7
+    assert current["anomaly_percent"] == 100 and not current["sampling_bias_warning"]

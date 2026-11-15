@@ -1302,6 +1302,16 @@
             "type": "integer",
             "title": "Unvalidated Cell Days"
           },
+          "unvalidated_share": {
+            "type": "number",
+            "title": "Unvalidated Share",
+            "default": 0.0
+          },
+          "noaa20_filled_days": {
+            "type": "integer",
+            "title": "Noaa20 Filled Days",
+            "default": 0
+          },
           "eligible_for_climatology": {
             "type": "boolean",
             "title": "Eligible For Climatology"
@@ -1321,6 +1331,28 @@
             "type": "integer",
             "title": "Historical N"
           },
+          "historical_p10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Historical P10"
+          },
+          "historical_p90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Historical P90"
+          },
           "anomaly_percent": {
             "anyOf": [
               {
@@ -1331,6 +1363,23 @@
               }
             ],
             "title": "Anomaly Percent"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank",
+            "description": "1 = highest of the compared years"
+          },
+          "rank_of": {
+            "type": "integer",
+            "title": "Rank Of",
+            "default": 0
           }
         },
         "type": "object",
@@ -1398,6 +1447,23 @@
           },
           "selected": {
             "$ref": "#/components/schemas/CalendarMonth"
+          },
+          "month_to_date": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthToDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excluded_border_countries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Border Countries"
           },
           "harmonized": {
             "type": "boolean",
@@ -1493,6 +1559,15 @@
             "maxLength": 600,
             "minLength": 1,
             "title": "Question"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es"
+            ],
+            "title": "Language",
+            "default": "en"
           }
         },
         "type": "object",
@@ -1554,6 +1629,103 @@
         "additionalProperties": false,
         "type": "object",
         "title": "HarmonizedSelection"
+      },
+      "MonthToDate": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "month": {
+            "type": "integer",
+            "title": "Month"
+          },
+          "through_day": {
+            "type": "integer",
+            "title": "Through Day"
+          },
+          "valid_days": {
+            "type": "integer",
+            "title": "Valid Days",
+            "description": "Days of the window with valid support; others are skipped"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "historical_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Historical Median"
+          },
+          "historical_n": {
+            "type": "integer",
+            "title": "Historical N"
+          },
+          "anomaly_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anomaly Percent"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "rank_of": {
+            "type": "integer",
+            "title": "Rank Of",
+            "default": 0
+          },
+          "sampling_bias_warning": {
+            "type": "boolean",
+            "title": "Sampling Bias Warning"
+          },
+          "unvalidated_share": {
+            "type": "number",
+            "title": "Unvalidated Share",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "month",
+          "through_day",
+          "valid_days",
+          "value",
+          "historical_median",
+          "historical_n",
+          "anomaly_percent",
+          "sampling_bias_warning"
+        ],
+        "title": "MonthToDate",
+        "description": "The month in progress compared with the same days of the other eligible years."
       },
       "PointsResponse": {
         "properties": {
