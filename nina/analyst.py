@@ -524,6 +524,9 @@ def compact_report(report: dict[str, Any]) -> dict[str, Any]:
                    for a in history["annual"]],
         "events": compact_events(s["events"]),
         "burned_area": compact_burned(s.get("burned_area") or {"status": "not_available"}),
+        "burned_area_case_study_30m": ({k: s["burn_case"][k] for k in ("name", "event_window", "scenes", "range_ha", "rows",
+                                                                       "caveats")}
+                                       if (s.get("burn_case") or {}).get("status") == "available" else None),
         "forest": compact_forest(s["forest"]),
         "climate": compact_climate(s["climate"]),
         "quality": {k: rounded(quality[k], 3) for k in ("valid_region_days", "expected_region_days", "noaa20_filled_days",

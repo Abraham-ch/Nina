@@ -318,6 +318,29 @@ def build_pdf(report: dict[str, Any], image_paths: dict[str, Path] | None = None
         flow += section(f'{t["chart_burned"]} (ha)', rd.fill(t["chart_burned_note"], unit=unit), burned, None,
                         checks(burned))
 
+    case = s.get("burn_case") or {}
+    case_image = (image_paths or {}).get("case")
+    if case.get("status") == "available":
+        low, high = (doc.n(round(v, -2)) for v in case["range_ha"])
+        block: list[Any] = [Paragraph(para(t["case_title"]), STYLES["h2"]),
+                            Paragraph(para(rd.fill(t["case_note"], name=case["name"], pre=case["scenes"]["pre"],
+                                                   post=case["scenes"]["post"], hotspots=doc.n(case["hotspots"]))),
+                                      STYLES["note"]), Spacer(1, 4)]
+        table = table_block([t["col_method"], t["col_resolution"], t["col_area"]],
+                            [[r["method"], f'{r["resolution_m"]} m', doc.n(r["burned_ha"])] for r in case["rows"]],
+                            [CONTENT_W * 0.45, CONTENT_W * 0.13, CONTENT_W * 0.14])
+        right = [Paragraph(para(rd.fill(t["case_range"], low=low, high=high)), STYLES["check"]), table]
+        if case_image and Path(case_image).exists():
+            picture = Drawing(52 * mm, 73 * mm)
+            picture.add(DrawingImage(0, 0, 52 * mm, 73 * mm, str(case_image)))
+            row = Table([[picture, right]], colWidths=[56 * mm, CONTENT_W - 56 * mm], hAlign="LEFT")
+            row.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+            block.append(row)
+        else:
+            block += right
+        block += [Paragraph("&bull; " + para(c), STYLES["note"]) for c in case["caveats"]]
+        flow.append(KeepTogether(block))
+
     forest = rd.forest_chart(doc)
     pictures = imagery_block(doc, image_paths or {})
     if forest or pictures:
