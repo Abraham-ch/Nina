@@ -308,10 +308,7 @@ export default function Calendar({
               : analysis?.selected.value == null
                 ? tr('No archive for this month', 'Sin archivo para este mes')
                 : isHarmonized
-                  ? tr(
-                      'Harmonized MODIS + VIIRS series · experimental',
-                      'Serie armonizada MODIS + VIIRS · experimental',
-                    )
+                  ? tr('Harmonized MODIS + VIIRS series', 'Serie armonizada MODIS + VIIRS')
                   : tr(
                       'Observed archive · coverage not corrected',
                       'Archivo observado · cobertura no corregida',

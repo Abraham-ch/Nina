@@ -1,0 +1,28 @@
+{
+  "landing": {
+    "start": 1.97,
+    "click": 2.81,
+    "ready": 5.6
+  },
+  "countries": {
+    "start": 3.63,
+    "select:Brazil": 3.87,
+    "ready:Brazil": 8.46,
+    "select:Peru · historical archive": 10.87,
+    "ready:Peru · historical archive": 11.47
+  },
+  "lab": {
+    "start": 5.01,
+    "end": 8.24
+  },
+  "polygon": {
+    "start": 3.81,
+    "closed": 6.98,
+    "ready": 8.18
+  },
+  "calendar": {
+    "start": 1.96,
+    "september": 4.07,
+    "end": 6.83
+  }
+}
