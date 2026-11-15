@@ -1,6 +1,6 @@
 # NINA · Backend and data delivery
 
-Status on 14 November 2026. Method `0.3.0`; candidate `95506369dcd7a7768aebfcd3`.
+Status on 14 November 2026. Method `0.4.0`; candidate `e9f9a7a7a47bd640f9d27999`. What problem this serves: [PROBLEM.md](PROBLEM.md).
 
 **Global exploration works, and the new backend can be tried as a local experimental demo. The harmonization has not yet
 passed its scientific gates.** The existing interface still queries observations. Wiring the visual interface to the
@@ -21,7 +21,7 @@ derivatives, databases and caches. The five auxiliary sources provide biomes, ur
 countries; their licences, versions and hashes are recorded locally.
 
 The run read **155,263,896 rows**: 155,263,626 were accepted before deduplication, 270 were rejected with recorded reasons
-and 2,824,866 duplicates were removed. That left **152,438,760 normalized rows** and **62,437,070
+and 2,824,866 duplicates were removed. That left **152,438,760 normalized rows** and **62,437,190
 cell/day/platform/quality activity rows before merging**. These totals are not individual fires.
 
 ## How the data are processed
@@ -67,11 +67,12 @@ Two selections for `POST /api/harmonized/analyses`:
 {"country":"Peru","year_start":2001,"year_end":2025,"selected_year":2025,"selected_month":9}
 ```
 
-The global HTTP test took **1.41 s** and returned **607,194 available units**; the month is `partial_archive`, with partial
-coverage and no historical anomaly. It is not a certified complete global total. The ZIP contains all 607,194 cell/day
-rows, even though the map shows a sample. The Peru test took **0.15 s**: 9,003 units against a descriptive median of
-14,113 over 23 earlier eligible years, a difference of **−36.21 %**. These are single local measurements, not a p95
-performance commitment.
+Peru, September 2024 (0.63 s): **20,909 units**, complete (one day filled from NOAA-20), against a median of 14,081 over
+22 other eligible years: **+48.5 %, rank 1 of 23**. The ZIP's `cells.csv` sums to the same 20,909. October 2026
+(provisional): +43.6 %, rank 3 of 25. November 2026 is in progress: `month_to_date` compares its 5 valid days with the same
+days of 24 years (no anomaly below 8 days). The world, July 2026, has `observed_activity` 619,707 but no comparable value:
+its NOAA-20-filled days fall in countries without a validated bridge (`unvalidated_domain`). These are single local
+measurements, not a performance commitment.
 
 The assistant explains results, archive support and limits using facts computed by the server. **It is deterministic and
 does not use an external LLM.** The optional LLM adapter of the observations MVP is kept, but no provider is configured.
@@ -84,12 +85,16 @@ limits. 41 strata were evaluated with years held out of training.
 
 | Gate | Measured result | Threshold | Status |
 |---|---|---|---|
-| Static mask | Recovers 43.70 % of reference cells; removes 1.18 % of vegetation rows | Recovery ≥ 80 % and removal ≤ 2 % | Fails |
-| MODIS Terra only | 58.54 % of strata pass; aggregate bias +1.38 % | ≥ 80 %; absolute bias ≤ 10 % and Spearman ≥ 0.8 | Fails |
-| MODIS Terra+Aqua | 65.85 % of strata pass; aggregate bias +0.42 % | Same as above | Fails |
-| NOAA-20 bridge | 75.61 % of strata pass; aggregate bias −0.008 % | ≥ 80 %; absolute bias ≤ 5 % and Spearman ≥ 0.8 | Fails |
+| Static mask | Recovers 43.72 % of reference cells (10,943 of 25,032); removes 1.18 % of vegetation rows | Recovery ≥ 80 % and removal ≤ 2 % | Fails |
+| MODIS Terra only | 58.54 % of strata pass; aggregate bias +1.33 %; yearly error median 11 %, p90 34 % | ≥ 80 %; absolute bias ≤ 10 % and Spearman ≥ 0.8 | Fails (not served) |
+| MODIS Terra+Aqua | 65.85 % of strata pass, holding 99.1 % of activity; aggregate bias +0.37 %; yearly error median 6.2 %, p90 20.5 %, 67 % of years within ±10 % | Same as above | Fails |
+| NOAA-20 bridge | 80.49 % of strata pass, holding 99.96 % of activity; aggregate bias −0.01 %; yearly error median 2.0 %, p90 8.8 %, 91 % of years within ±10 % | ≥ 80 %; absolute bias ≤ 5 % and Spearman ≥ 0.8 | **Passes** |
 
-A diagnostic outside the five historical countries gives **−33.88 % bias for MODIS Terra+Aqua in 2026**. This calibration
+The bridge passes in 0.4.0 because the coastal and antimeridian fixes changed two small "unclassified biome" strata
+(Brazil and Indonesia); thresholds were not changed. Uncalibrated MODIS already passes the Spearman criterion in 28 of 41
+strata, so that criterion says little on its own: the per-year error is the informative number.
+
+A diagnostic outside the five historical countries gives **−33.85 % bias for MODIS Terra+Aqua in 2026** (−0.06 % for the NOAA-20 bridge). This calibration
 must therefore not be extrapolated to the whole planet's history. The NOAA-20 bridge has near-zero aggregate bias in that
 diagnostic, but that does not replace the per-stratum criterion.
 
@@ -104,6 +109,26 @@ scope and are not applied to the rest of the planet.
 To approve the harmonization: improve and independently evaluate the mask; review the failed strata and geographic
 transfer; and complete the evidence for all mandatory criteria. Every method change needs an ADR, a version bump and
 regeneration. Do not edit gates or lower thresholds to enable a publication.
+
+## Audit and fixes in 0.4.0
+
+An independent audit of 0.3.0 confirmed the arithmetic (all coefficients recomputed) and found rules that served wrong
+numbers. They are fixed in 0.4.0 ([ADR 0005](adr/0005-audit-fixes-0.4.0.md)):
+
+| Finding in 0.3.0 | Fix in 0.4.0 |
+|---|---|
+| S-NPP outage days were neither filled nor flagged (Peru, July 2022: −16 % served, about +14 % real) | NOAA-20 fills them through the validated bridge, also on partial outages; months still missing days get no value |
+| Antimeridian outlines: Alaska counted as Russia, Australia partly as Fiji; coastal cells unassigned | Outlines cut at ±180°; coastal cells snapped within 0.25° |
+| Gates pool bias over all years and cannot see per-year error | Per-year error and the uncalibrated baseline are reported per stratum |
+| One unvalidated cell-day blanked a whole month (35 of 113 pre-2012 months in Peru) | Up to 1 % unvalidated cell-days: validated sum with `unvalidated_share` |
+| False gap deleted 15–31 August 2007 | Readme gaps are confirmed with daily counts |
+| The current year never got an anomaly | Every complete month is compared with all other eligible years; months in progress get `month_to_date` |
+| Terra-only years (2000–2002) had ±40 % yearly error | Not served; series and climatology start in 2002 |
+
+Known limitations that remain: the inter-sensor ratio depends on activity level (log-log slope 0.74–0.89, so very
+active MODIS-era years may be overestimated by up to ~20 %); persistence for the static mask pools all VIIRS platforms;
+NRT months lack the `type` field (+0.4 % globally, up to +22 % in some gas-flaring countries); after 2 November 2026 only
+the five historical countries have a validated NOAA-20 bridge.
 
 ## Hand-over to UX/UI
 
@@ -124,15 +149,15 @@ redistribute NASA data and contains no credentials.
 | `source/history-inputs.json` | 240 yearly archives and hashes. |
 | `source/auxiliary-inputs.json` | Auxiliary sources, versions and licences. |
 | `source/interim/observed_batch_coverage.json` | Real global windows. |
-| `source/reports/qa_0.3.0.json` | Row reconciliation, rejections, coverage and gaps. |
-| `source/reports/validation_0.3.0.json` | Validation by stratum and year. |
-| `source/reports/static_mask_validation_0.3.0.json` | Mask evaluation. |
-| `source/reports/acceptance_95506369dcd7a7768aebfcd3.md` | Passed, failed and pending-audit criteria. |
+| `source/reports/qa_0.4.0.json` | Row reconciliation, rejections, coverage and gaps. |
+| `source/reports/validation_0.4.0.json` | Validation by stratum and year. |
+| `source/reports/static_mask_validation_0.4.0.json` | Mask evaluation. |
+| `source/reports/acceptance_e9f9a7a7a47bd640f9d27999.md` | Passed, failed and pending-audit criteria. |
 | `source/reports/tests-*.xml` | Software tests. |
 | `source/reports/technical-checks.json` | Lint and types. |
-| `source/reports/live-harmonized-final.json` | HTTP consistency of calendar, map, assistant and full downloads. |
+| `data/reports/peru_evidence_e9f9a7a7a47bd640f9d27999.json` | Every figure of [PROBLEM.md](PROBLEM.md), from `scripts/evidence/peru_case.py`. |
 
-**27 scientific tests and 39 server tests pass**, including 6 for the harmonized contract. They verify the software and
+**31 pipeline tests and 42 server tests pass**, including 9 for the harmonized contract. They verify the software and
 do not turn failed scientific gates into passes. Criteria without audited evidence stay pending in the acceptance report.
 
 Acquisition, processing and draft-building commands are in the [contract](HARMONIZED_CONTRACT.md) and in

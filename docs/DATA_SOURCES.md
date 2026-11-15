@@ -205,3 +205,16 @@ The first acquisition is organized for all of Peru. Historical detections per so
 The total volume in bytes is not known yet: it must be measured in the inventory, distinguishing cumulative download, permanent storage and temporary space. Overpass files can extend beyond the country; selecting Peru does not mean automatically receiving all the scientific products clipped.
 
 The first functional milestone of querying and exporting real national observations is already implemented. The harmonized calendar requires valid opportunities and evaluation on held-out regions/periods with diverse conditions. The local assistant already queries the observed outputs; connecting an LLM provider and the full scientific phase keep their pending states.
+
+## 7. National and regional references (problem statement and validation)
+
+Used by `scripts/evidence/peru_case.py`. Stored under `source/downloads/national/` (not versioned). None of them feeds the
+harmonization: they frame the problem and give an independent check.
+
+| Source | What it is | Download | Use in NINA |
+|---|---|---|---|
+| INDECI / SINPAD emergencies, 2003–2025 | One row per registered emergency (date, ubigeo, department, hazard, deaths, injured…), `;`-separated, Latin-1, ODC-BY | <https://www.datosabiertos.gob.pe/sites/default/files/BD_2003-2025_EMERGENCIAS.csv> (2026 first semester: `BD_2026_Semestre_I.csv`, new schema) · dictionary: <https://www.datosabiertos.gob.pe/dataset/emergencias-y-da%C3%B1os-nivel-nacional-por-departamento> | "Reported" side of *detected and reported*: rows with `PELIGRO = INCENDIO FORESTAL`. Counts emergencies with damage assessment, not all burns; INDECI's own 2024 totals differ between releases (1,754 to 2,746). |
+| INPE Programa Queimadas, Peru | Monthly hotspots by department from one reference satellite (NOAA-12 until 2002-07-03, MODIS Aqua afternoon pass since 2002-07-04) | <https://data.inpe.br/queimadas/estatisticas/media/estatistica/paises/peru.json> | Independent cross-sensor check of NINA's series in 2012–2025 (INPE = MODIS Aqua, NINA = VIIRS S-NPP). INPE has not published how it will join its series once Aqua stops. |
+| DS 097-2024-PCM, El Peruano | First state of emergency for forest fires, 18 Sep 2024, 23 districts of Amazonas, San Martín and Ucayali | <https://busquedas.elperuano.pe/dispositivo/NL/2326734-1> | Date of the retrospective replay. DS 099-2024-PCM (Cajamarca, Huánuco, Lambayeque): <https://busquedas.elperuano.pe/dispositivo/NL/2329467-1> |
+| CENEPRED national risk scenario for forest fires (July 2024) | Uses hotspots 2003–2022 from VIIRS S-NPP and MODIS Terra/Aqua as an input, with no stated harmonization; it sets the priority districts of the Plan Multisectorial 2025–2027 | <https://sigrid.cenepred.gob.pe/sigridv3/documento/17792/descargar> | Shows an official user of multi-year hotspot counts that mixes sensors. |
+| Defensoría del Pueblo, Informe Defensorial 225 (Sep 2024) | Conclusion 9.1: absence of centralized official information on forest fires | <https://www.defensoria.gob.pe/wp-content/uploads/2024/09/Informe-Defensorial-n.%C2%B0-225-Incendios-forestales.pdf> | Problem statement. |
