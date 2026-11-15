@@ -11,6 +11,7 @@ el `type` de Pydantic. Cada mensaje existe en los dos idiomas.
 """
 
 import json
+import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +33,8 @@ REGLAS = {
     'geometry_invalid',
     'date_future',
     'days_range',
+    'date_range',
+    'coverage_before_start',
 }
 
 # code → (english, español)
@@ -60,8 +63,48 @@ REGLAS_MENSAJE = {
         'Polígono inválido; utiliza coordenadas geográficas WGS84',
     ),
     'date_future': ('The date cannot be in the future', 'La fecha no puede ser posterior a hoy'),
-    'days_range': ('Days must be between 1 and 5', 'El número de días debe estar entre 1 y 5'),
+    'days_range': ('Days must be between 1 and {maximo}', 'El número de días debe estar entre 1 y {maximo}'),
+    'date_range': (
+        'The start date must be on or before the end date',
+        'La fecha inicial debe ser anterior o igual a la final',
+    ),
+    'coverage_before_start': (
+        '{producto} data starts on {date}; an earlier date cannot be requested',
+        '{producto}: los datos empiezan el {date}; no se puede pedir una fecha anterior',
+    ),
 }
+
+# Producto FIRMS → origen interno, para acotar las fechas contra la cobertura real.
+ORIGEN_PRODUCTO = {
+    'MODIS_NRT': 'modis',
+    'MODIS_SP': 'modis',
+    'VIIRS_SNPP_SP': 'viirs-snpp',
+    'VIIRS_NOAA20_NRT': 'viirs-jpss1',
+    'VIIRS_NOAA20_SP': 'viirs-jpss1',
+    'VIIRS_NOAA21_NRT': 'viirs-jpss2',
+    'VIIRS_NOAA21_SP': 'viirs-jpss2',
+}
+
+
+def entero_de_entorno(name: str, default: int) -> int:
+    """Un valor mal escrito en `.env` cae al predeterminado, nunca a un 500."""
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def dias_maximos() -> int:
+    """§10 T2 · 'configurable maximum range' → `FIRMS_MAX_DAY_RANGE`."""
+    return entero_de_entorno('FIRMS_MAX_DAY_RANGE', 5)
+
+
+class ReglaHTTP(HTTPException):
+    """`HTTPException` con un `code` propio para el contrato problem+json."""
+
+    def __init__(self, code: str, detail: str, status: int = 422, headers=None):
+        self.code = code
+        super().__init__(status_code=status, detail=detail, headers=headers)
 
 # `type` de Pydantic → (code del proyecto, plantilla en inglés, plantilla en español).
 # `{...}` se rellena con el `ctx` que Pydantic adjunta.
@@ -184,7 +227,11 @@ def desde_pydantic(error: dict, indice: int = INDICE_EN) -> tuple[str, str]:
     if tipo in REGLAS:
         par = REGLAS_MENSAJE.get(tipo)
         if par:
-            return tipo, par[indice]
+            plantilla = par[indice]
+            try:
+                return tipo, plantilla.format(**(error.get('ctx') or {}))
+            except (KeyError, IndexError, ValueError):
+                return tipo, plantilla
         # Una regla propia cuya traducción no esté en la tabla: usar el texto literal.
         return tipo, str(error.get('msg') or GENERICO[indice])
     entrada = PYDANTIC.get(tipo)

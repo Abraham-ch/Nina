@@ -19,12 +19,12 @@ from starlette.background import BackgroundTask
 from pydantic import BaseModel,Field,model_validator
 from pydantic_core import PydanticCustomError
 from .config import ROOT, DATA, RAW, FIRMS, SOURCES
-from .errors import instalar
+from .errors import ORIGEN_PRODUCTO, ReglaHTTP, dias_maximos, instalar
 from .auth import Login, Register, attach, audit_entries, clear_session, detach
 from .auth import downloads_for, downloads_last_hour, max_downloads_per_hour, max_export_rows, optional
 from .auth import record_audit, record_download, require
 from .auth import login as login_user, register as register_user
-from .store import initialize,database,rows,boundaries,status,now,code_revision,atomic_read
+from .store import initialize,database,rows,boundaries,status,now,code_revision,atomic_read,cobertura
 from .analytics import Selection,analyze,get_analysis,points_for_analysis,selected_rows,iter_selected_rows,month_dates
 from .ingest import ingest_file
 from .assistant import respond
@@ -258,7 +258,9 @@ def job(identifier:str):
 
 @app.post('/api/import',responses=PROTEGIDO)
 async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','viirs-jpss1','viirs-jpss2']=Form(...),coverage_start:date|None=Form(None),coverage_end:date|None=Form(None),spatial_scope:Literal['PER','world','custom']=Form('PER'),spatial_geometry:str|None=Form(None),user:dict=Depends(require('admin'))):
-    if coverage_start and coverage_end and coverage_start>coverage_end: raise HTTPException(422,'Invalid coverage range')
+    if coverage_start and coverage_end and coverage_start>coverage_end: raise ReglaHTTP('date_range','The start date must be on or before the end date')
+    if (coverage_start and coverage_start>date.today()) or (coverage_end and coverage_end>date.today()):
+        raise ReglaHTTP('date_future','The declared coverage cannot be in the future')
     try:
         geometry=json.loads(spatial_geometry) if spatial_geometry else None
         Selection(scope=spatial_scope,geometry=geometry)
@@ -276,6 +278,26 @@ async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','
     record_audit(user,'import',file.filename,'queued')
     return submit('import_csv',lambda:ingest_file(path,source,'local_upload',coverage_start,coverage_end,'user_declared' if coverage_start and coverage_end else 'unknown',spatial_scope=spatial_scope,spatial_geometry=geometry,created_by=user['id']))
 
+def _cobertura_inicio(producto, cuando):
+    """§10 T2/A: nada anterior al primer dato del sensor, medido en la base.
+
+    Sin filas para ese origen no hay contra qué acotar y no se rechaza.
+    """
+    origen=ORIGEN_PRODUCTO.get(producto)
+    if not origen: return
+    desde=cobertura(origen)['first_date']
+    if desde is None or cuando>=desde: return
+    raise PydanticCustomError('coverage_before_start','{producto} data starts on {date}',{'producto':producto,'date':str(desde)})
+
+def _cobertura_mes(producto, year, month):
+    """Igual para un mes completo: solo se rechaza si el mes entero precede a la cobertura."""
+    origen=ORIGEN_PRODUCTO.get(producto)
+    if not origen: return
+    desde=cobertura(origen)['first_date']
+    if desde is None: return
+    if desde.replace(day=1)>date(year,month,1):
+        raise PydanticCustomError('coverage_before_start','{producto} data starts on {date}',{'producto':producto,'date':str(desde)})
+
 class Sync(BaseModel):
     source:Literal['MODIS_NRT','VIIRS_NOAA20_NRT','VIIRS_NOAA21_NRT']='VIIRS_NOAA20_NRT'
     start:date
@@ -283,8 +305,9 @@ class Sync(BaseModel):
 
     @model_validator(mode='after')
     def reglas(self):
-        if not 1<=self.days<=5: raise PydanticCustomError('days_range','El número de días debe estar entre 1 y 5')
-        if self.start>date.today(): raise PydanticCustomError('date_future','La fecha no puede ser posterior a hoy')
+        if not 1<=self.days<=dias_maximos(): raise PydanticCustomError('days_range','Days must be between 1 and {maximo}',{'maximo':dias_maximos()})
+        if self.start>date.today(): raise PydanticCustomError('date_future','The date cannot be in the future')
+        _cobertura_inicio(self.source,self.start)
         return self
 
 @app.post('/api/sync',responses=PROTEGIDO)
@@ -303,8 +326,10 @@ class Acquisition(BaseModel):
 
     @model_validator(mode='after')
     def reglas(self):
-        if not 1<=self.days<=5: raise PydanticCustomError('days_range','El número de días debe estar entre 1 y 5')
-        if self.start is not None and self.start>date.today(): raise PydanticCustomError('date_future','La fecha no puede ser posterior a hoy')
+        if not 1<=self.days<=dias_maximos(): raise PydanticCustomError('days_range','Days must be between 1 and {maximo}',{'maximo':dias_maximos()})
+        if self.start is not None and self.start>date.today(): raise PydanticCustomError('date_future','The date cannot be in the future')
+        if self.start is not None:
+            for producto in self.products: _cobertura_inicio(producto,self.start)
         return self
 
 @app.post('/api/acquisitions',responses=PROTEGIDO)
@@ -326,6 +351,9 @@ class ArchiveMonth(BaseModel):
     month:int=Field(ge=1,le=12)
     scope:Literal['world','PER','custom']='custom'
     geometry:dict|None=None
+
+    @model_validator(mode='after')
+    def reglas(self): _cobertura_mes(self.product,self.year,self.month); return self
 
 @app.post('/api/acquisitions/month',responses=PROTEGIDO)
 def archive_month(body:ArchiveMonth,user:dict=Depends(require('admin'))):

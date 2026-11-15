@@ -10,7 +10,6 @@ sin una cuenta administrativa. A partir de ahí nadie puede auto-proclamarse adm
 
 import hashlib
 import json
-import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -19,6 +18,7 @@ from typing import Literal
 from fastapi import HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
+from .errors import entero_de_entorno
 from .store import database, now, rows
 
 COOKIE = 'nina_session'
@@ -188,20 +188,12 @@ def optional():
     return dependency
 
 
-def _env_int(name: str, default: int) -> int:
-    """Un valor mal escrito en `.env` cae al predeterminado, nunca a un 500."""
-    try:
-        return max(1, int(os.getenv(name, str(default))))
-    except (TypeError, ValueError):
-        return default
-
-
 def max_downloads_per_hour() -> int:
-    return _env_int('MAX_DOWNLOADS_PER_HOUR', DEFAULT_DOWNLOADS_PER_HOUR)
+    return entero_de_entorno('MAX_DOWNLOADS_PER_HOUR', DEFAULT_DOWNLOADS_PER_HOUR)
 
 
 def max_export_rows() -> int:
-    return _env_int('MAX_EXPORT_ROWS', DEFAULT_EXPORT_ROWS)
+    return entero_de_entorno('MAX_EXPORT_ROWS', DEFAULT_EXPORT_ROWS)
 
 
 def record_download(user_id, analysis_id, kind, count, filters, dataset_version) -> None:

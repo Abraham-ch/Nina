@@ -75,6 +75,20 @@ def rows(c, sql, args=None):
     columns = [d[0] for d in cur.description]
     return [dict(zip(columns, row)) for row in cur.fetchall()]
 
+def cobertura(source):
+    """Fechas reales de un sensor en la base — WORK_PLAN §10, T2 celda A.
+
+    No se codifican fechas: lo que existe es `min/max(acquired)`. Sin filas
+    devuelve fechas nulas y quien valida no acota nada.
+    """
+    with database() as c:
+        return rows(
+            c,
+            '''SELECT min(acquired)::DATE AS first_date, max(acquired)::DATE AS last_date
+               FROM observations WHERE source=?''',
+            [source],
+        )[0]
+
 @lru_cache(maxsize=1)
 def boundaries():
     path = DATA / 'boundaries' / 'departments.geojson'
