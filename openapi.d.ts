@@ -665,6 +665,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/territorial/{identifier}/package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report Package
+         * @description ZIP with the self-contained report, its figures as JSON and CSV, and a README with the FIRMS citation.
+         */
+        get: operations["report_package_api_reports_territorial__identifier__package_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/territorial/{identifier}/document": {
         parameters: {
             query?: never;
@@ -2549,6 +2569,37 @@ export interface operations {
             path: {
                 identifier: string;
                 which: "before" | "after";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_package_api_reports_territorial__identifier__package_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
             };
             cookie?: never;
         };

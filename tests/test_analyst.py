@@ -17,7 +17,8 @@ EVAL = json.loads((Path(__file__).parents[1] / "docs/reference/analyst_eval.json
 
 @pytest.fixture(autouse=True)
 def no_model(monkeypatch):
-    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "NINA_ANALYST_ENGINE", "NINA_ANALYST_MODEL"):
+    for name in ("ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "ANTHROPIC_AUTH_TOKEN", "NINA_ANALYST_ENGINE",
+                 "NINA_ANALYST_MODEL"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -102,8 +103,8 @@ def test_calculate_only_uses_figures_already_returned():
 def test_status_reports_the_engine(client, monkeypatch):
     test_client, _ = client
     assert test_client.get("/api/analyst").json() == {"engine": "deterministic", "model": None}
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    assert test_client.get("/api/analyst").json() == {"engine": "claude", "model": "claude-opus-5-5"}
+    monkeypatch.setenv("CLAUDE_API_KEY", "test-key")  # alias accepted
+    assert test_client.get("/api/analyst").json() == {"engine": "claude", "model": "claude-sonnet-5-5"}
 
 
 def scripted_client(monkeypatch, responses):
@@ -121,11 +122,11 @@ def scripted_client(monkeypatch, responses):
 
 def tool_use(name, arguments):
     block = SimpleNamespace(type="tool_use", id=f"toolu_{name}", name=name, input=arguments)
-    return SimpleNamespace(stop_reason="tool_use", model="claude-opus-5-5", content=[block])
+    return SimpleNamespace(stop_reason="tool_use", model="claude-sonnet-5-5", content=[block])
 
 
 def text(answer):
-    return SimpleNamespace(stop_reason="end_turn", model="claude-opus-5-5",
+    return SimpleNamespace(stop_reason="end_turn", model="claude-sonnet-5-5",
                            content=[SimpleNamespace(type="text", text=answer)])
 
 
@@ -137,12 +138,12 @@ def test_model_answer_is_rewritten_until_its_figures_are_traced(client, monkeypa
         text("September 2025 had 150 VIIRS-equivalent active cell-days, the highest of 14 compared years."),
     ])
     result = ask(test_client, "Is this September unusual?")
-    assert result["engine"] == "claude" and result["model"] == "claude-opus-5-5"
+    assert result["engine"] == "claude" and result["model"] == "claude-sonnet-5-5"
     assert result["verification"]["passed"] and [t["name"] for t in result["tools"]] == ["territory_profile"]
     rewrite = [m["content"] for m in calls[2]["messages"] if m["role"] == "user" and isinstance(m["content"], str)]
     assert len(calls) == 3 and "151" in rewrite[-1] and "Automatic check" in rewrite[-1]
     first = calls[0]
-    assert first["model"] == "claude-opus-5-5" and first["fallbacks"] == "default"
+    assert first["model"] == "claude-sonnet-5-5" and first["fallbacks"] == "default"
     assert all(tool["strict"] for tool in first["tools"]) and "tool_choice" not in first
     assert first["messages"][0]["content"].startswith("Answer language: English")
 

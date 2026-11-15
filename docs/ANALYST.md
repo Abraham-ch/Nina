@@ -36,13 +36,13 @@ The response carries `answer`, `engine`, `model`, `intent` (question type recogn
 
 | | Deterministic | Claude |
 |---|---|---|
-| Availability | Always; no network | When `ANTHROPIC_API_KEY` is set on the server |
+| Availability | Always; no network | When `ANTHROPIC_API_KEY` (or its alias `CLAUDE_API_KEY`) is set on the server |
 | Question understanding | Keyword classifier (11 intents) and parser of place and period | The model plans the tool calls |
 | Answer | Bilingual templates filled from tool results | Written by the model from tool results |
 | Figures | From the tools | From the tools; checked before the answer is shown |
-| Median latency (real data) | 0.49 s | Not yet measured |
+| Median latency (real data) | 0.49 s | 7.0 s (`claude-sonnet-5-5`) |
 
-Claude settings: model `claude-opus-5-5` (`NINA_ANALYST_MODEL`), effort `medium` (`NINA_ANALYST_EFFORT`), strict tool
+Claude settings: model `claude-sonnet-5-5` (`NINA_ANALYST_MODEL`), effort `medium` (`NINA_ANALYST_EFFORT`), strict tool
 schemas, at most ten model steps per question, prompt caching on the stable prefix, and server-side refusal fallback
 (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). The deterministic answer is returned, with a notice,
 when the model refuses, runs out of tokens, cannot be reached, rejects the key, or produces figures that cannot be
@@ -81,7 +81,9 @@ emergencies, forest loss, climate as context).
 
 NINA does not forecast fires or their spread, attribute causes, give operational instructions (evacuations, brigades,
 resources), measure burned area, or report damage and casualties. Questions of these kinds are answered with the
-reason and with what NINA can answer instead; no data tools are called. The model receives the same rules.
+reason and with what NINA can answer instead; no data tools are called. The model receives the same rules, and when
+the classifier recognises such a question the model is given only the method notes, so it cannot place figures next
+to a forecast or cause question.
 
 ## 6. Evaluation
 
@@ -96,13 +98,18 @@ verifier against invented figures, `calculate`, and the model loop with a script
 | Engine | Date | Dataset | Figures traced | Correct abstention | Expected tools | Median time |
 |---|---|---|---|---|---|---|
 | Deterministic | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 0.49 s |
-| Claude | — | — | pending (no key configured) | pending | pending | pending |
+| Claude (`claude-sonnet-5-5`) | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31* | 31 / 31* | 7.0 s |
+
+\* The full run gave 30 / 31 on both: "What can NINA not answer?" was answered from the instructions without calling
+`method_notes`. The instructions now require the method notes for method and limits questions; the three method
+items were rerun and all called the tool. Two earlier runs led to the out-of-scope guard described in §5 (the model
+had added historical figures after declining a forecast question). Reports: `data/reports/analyst_eval_*.json`.
 
 ## 7. Configuration and privacy
 
 ```
 ANTHROPIC_API_KEY=          # enables the Claude engine; keep it in .env locally or as a Fly.io secret
-NINA_ANALYST_MODEL=claude-opus-5-5
+NINA_ANALYST_MODEL=claude-sonnet-5-5
 NINA_ANALYST_EFFORT=medium
 NINA_ANALYST_ENGINE=        # "deterministic" forces the offline engine
 ```

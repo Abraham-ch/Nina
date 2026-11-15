@@ -41,6 +41,12 @@ Context layers for the territorial report (outputs in `source/context/`, see `do
 uv run python -m nina.io.territory --workspace ../..          # districts, INDECI, fire events (~20 s)
 uv run python -m nina.io.forest_loss --workspace ../.. --download   # Hansen tiles 1.4 GB, ~2 min
 uv run python -m nina.io.climate --workspace ../.. --download       # NASA POWER, ~16 min first time
+uv run python -m nina.io.territory --workspace ../.. --countries Peru Brazil Australia Indonesia "United States of America"  # events, ~10 min
+uv run python -m nina.io.registries --workspace ../.. usa_nifc australia indonesia_bnpb brazil_ibama_roi  # needs source/downloads/validation/
+uv run python -m nina.io.context_validation --workspace ../.. --part events-peru   # INDECI, ~3 min
+uv run python -m nina.io.context_validation --workspace ../.. --part events-registry --country "United States of America" --registry usa_nifc --label "NIFC/WFIGS wildfire incidents"
+uv run python -m nina.io.context_validation --workspace ../.. --part forest        # Geobosques
+uv run python -m nina.io.context_validation --workspace ../.. --part climate       # CHIRPS (network)
 ```
 
 ## Layout
@@ -57,5 +63,8 @@ uv run python -m nina.io.climate --workspace ../.. --download       # NASA POWER
 | `src/nina/io/territory.py` | Context layers for the territorial report: Peruvian districts (UBIGEO → H3 cells), INDECI forest-fire emergencies, fire events |
 | `src/nina/io/forest_loss.py` | Tree-cover loss per H3 cell and year from Hansen/UMD GFC (Peru) |
 | `src/nina/io/climate.py` | Monthly climate anomalies per Peruvian department from NASA POWER |
+| `src/nina/io/registries.py` | Registered fire incidents of USA, Australia, Indonesia and Brazil normalised to one table per country |
+| `src/nina/io/context_validation.py` | Validation of fire events, forest loss and climate against independent records |
+| `src/nina/io/xlsx.py` | Minimal .xlsx reader (Geobosques tables) |
 
 Inputs and outputs live in the repository's `source/` folder, which is not committed.

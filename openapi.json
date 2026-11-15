@@ -1350,6 +1350,47 @@
         }
       }
     },
+    "/api/reports/territorial/{identifier}/package": {
+      "get": {
+        "tags": [
+          "Territorial report"
+        ],
+        "summary": "Report Package",
+        "description": "ZIP with the self-contained report, its figures as JSON and CSV, and a README with the FIRMS citation.",
+        "operationId": "report_package_api_reports_territorial__identifier__package_get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reports/territorial/{identifier}/document": {
       "get": {
         "tags": [

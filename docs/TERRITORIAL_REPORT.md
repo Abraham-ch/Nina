@@ -63,9 +63,13 @@ validated: any number in the text must match a fact.
 ### Web
 
 - A **Generate report** action in the territory panel (country, department, polygon) and in the calendar.
-- A report view with print styles (A4), section anchors, charts (calendar strip, series with p10–p90 band, trend raw
-  vs harmonized), the priority table and the before/after images.
-- Download as PDF and as ZIP (JSON facts + CSV + README with citation).
+- A report in three levels: a summary page (headline, four key figures, this year against the normal range, key
+  points), the evidence (trend raw vs harmonized, detected events vs registered emergencies with their validation,
+  forest loss, before/after images) and an annex (activity calendar, subdivisions, climate, quality, sources).
+- **Download PDF** (the browser's print dialog, "Save as PDF", with A4 page breaks between the levels) and
+  **Download data (ZIP)**: `GET /api/reports/territorial/{id}/package` returns the self-contained report (images
+  embedded), `report.json`, CSV tables (UTF-8 with BOM) and a `README.txt` with the FIRMS citation and disclaimer,
+  dataset version, request and generation date.
 
 ## 6. Validation of each section
 
@@ -86,7 +90,7 @@ Fire forecasting, spread modelling, causal attribution of individual fires, tact
 |---|---|---|---|
 | Districts | `nina.io.territory` | `source/context/districts/` (1,826 districts with UBIGEO, 218,676 H3 cells) | Source: INEI/MINAM limits via github.com/juaneladio/peru-geojson (MPL-2.0); 8 small districts have no geometry |
 | INDECI emergencies | `nina.io.territory` | `source/context/indeci/forest_fire_emergencies.parquet` (4,798 records, 2003 – 2026-06-30) | Every record kept; dates checked against the stated year and month (mixed day-first/month-first formats); 159 codes of districts newer than the boundary layer are matched by prefix |
-| Fire events | `nina.io.territory` | `source/context/events/` (Peru: 481,871 events from 817,698 cell-days; 18,010 with ≥ 5 cell-days) | Rule from FET / ST-DBSCAN practice (≈ 2 km neighbourhood, ≤ 2-day gap); compare years within the VIIRS era only |
+| Fire events | `nina.io.territory --countries Peru Brazil Australia Indonesia "United States of America"` | `source/context/events/` — Peru 481,871 events (817,698 cell-days); Brazil 5,061,395 (10,995,584); Australia 1,171,678 (6,130,324); Indonesia 1,007,134 (2,196,283); United States 1,523,587 (2,731,152) | Rule from FET / ST-DBSCAN practice (≈ 2 km neighbourhood, ≤ 2-day gap); compare years within the VIIRS era only; validated against registries (below) |
 | Forest loss | `nina.io.forest_loss` | `source/context/forest_loss/` (Hansen GFC-2024-v1.12, 0.005° blocks → H3) | Peru totals 2001–2024 within 0.3–0.6 % of Global Forest Watch; MINAM Geobosques differs by design (humid Amazon forest only) |
 | Climate | `nina.io.climate` | `source/context/climate/climate_department_month.parquet` (26 units × 2001–2025) | Reproduces the Amazon droughts of 2005, 2023 and 2024 in Aug–Sep; 2016 not visible in Aug–Sep (drought centred in Brazil, Oct–Mar) |
 
@@ -103,7 +107,105 @@ Delivered with the report (branch `feat/territorial-report`):
 | Priority table of Peru's 25 departments, one column per indicator, no composite score | `POST /api/reports/priority`, tab "Priorities" | Done |
 | "Technical report" buttons in the atlas brief and the calendar | `web/src/ReportButton.tsx` | Done |
 | Analytical assistant with tools and figure verification | `/api/analyst`, [ANALYST.md](ANALYST.md) | Done (deterministic engine evaluated; model engine pending a key) |
-| PDF renderer and ZIP download | — | Pending (the browser prints the page to PDF) |
+| PDF and ZIP download | Document toolbar; `GET /api/reports/territorial/{id}/package` | Done (PDF through the browser's print dialog; no server-side PDF renderer) |
 
 Department names sent from the map are resolved to INEI districts, while the map draws geoBoundaries outlines; values
 can differ by a few percent between the two (Ucayali, September 2024: 4,582 on the map, 4,491 in the report).
+
+## 9. Validation against independent records (2026-11-15)
+
+Code: `packages/nina/src/nina/io/context_validation.py`; outputs in `source/context/validation/*.json`, read by the
+report (green notes under each chart) and by the analytical assistant.
+
+### Fire events vs INDECI emergencies (Peru)
+
+Every INDECI forest-fire emergency with a real date in the VIIRS era (4,367 records, 17 Apr 2012 – 30 Jun 2026; 159
+records of districts newer than the boundary layer are excluded) is matched against the harmonized fire events touching
+its district (plus a one-cell border, about 2.5 km). The chance level repeats the match with the same district and the
+date shifted one year earlier and later: it keeps place and season, so it is a demanding baseline.
+
+| Measure | Observed | Chance level |
+|---|---|---|
+| Emergencies with a detected event within ±1 day | 56.7 % | 21.4 % |
+| Emergencies with a detected event within ±3 days | 67.2 % | 33.6 % |
+| Emergencies with a significant event (≥ 5 cell-days) within ±3 days | 17.9 % | 6.6 % |
+| Significant events with a registered emergency within ±3 days | 7.5 % | 3.9 % |
+| Department totals, events vs emergencies (Spearman, 24 departments) | ρ = 0.36 (p = 0.08) | — |
+| Department-years (318 pairs) | ρ = 0.10 (p = 0.09) | — |
+
+Reading: detected events and registered emergencies are associated in place and time (two to three times the chance
+level), but they are not interchangeable. Satellites see almost every registered emergency in the Amazon (Ucayali
+99 %, Madre de Dios 98 %, San Martín 97 %; there fires are so frequent that chance alone reaches 89 % in Ucayali), and
+fewer in the Andes (Cusco 59 %, Puno 60 %, Apurímac 63 %), where many registered fires are small or under cloud. Most
+satellite-detected fires are never registered (only 7.5 % of significant events are). The report therefore shows both
+and never presents one as a check of the other.
+
+Sensitivity of the clustering gap (VIIRS era): gap of 1, 2 or 3 days gives 13,192, 15,324 or 16,228 significant
+events; detection of emergencies by significant events 15.8 %, 17.9 %, 19.9 %; registered share 7.9 %, 7.5 %, 7.4 %.
+The 2-day rule is not a fragile choice.
+
+### Fire events vs registries of the other four countries
+
+Same method (registered record ↔ detected event in the same place and window; chance = same place and date one year
+earlier and later). Registries are normalised by `packages/nina/src/nina/io/registries.py` into
+`source/context/registries/` with every excluded row counted.
+
+| Country | Registry | Records (period) | Zone, window | Detected | Chance | Significant events registered (chance) |
+|---|---|---|---|---|---|---|
+| United States | NIFC/WFIGS wildfire incidents (IRWIN) | 6,499 of ≥ 400 ha among 392,595 (Feb 2014 – Nov 2026) | point + 2 rings (≈ 5 km), −2/+7 days | **85.7 %** | 5.1 % | 22.3 % (6.8 %) |
+| Australia | Geoscience Australia mapped bushfires (prescribed burns excluded) | 3,982 of ≥ 400 ha among 24,165 (2012 – Aug 2025) | centroid + 2 rings, −2/+7 days | **79.8 %** | 20.0 % | 3.5 % (1.2 %) |
+| Indonesia | BNPB/DIBI forest and land fires (DesInventar export) | 1,679 (2012 – Dec 2019) | regency cells + 1 ring, ±3 days | 81.3 % | 62.2 % | 3.4 % (1.7 %) |
+| Brazil | IBAMA/Prevfogo fire occurrences (federal brigades) | 4,676 (Dec 2014 – Nov 2022) | municipality cells + 1 ring, −3/+7 days | 98.9 % | 97.7 % | 4.0 % (3.4 %) |
+
+United States by fire size (all 392,595 records): ≥ 4,000 ha 93.0 % (chance 1.9 %); 400–4,000 ha 83.4 % (6.1 %);
+40–400 ha 62.3 % (8.2 %); < 40 ha 9.2 % (3.4 %). Australia: 77.6 %, 81.1 %, 73.0 % and 41.2 % for the same classes.
+
+Reading:
+- Where the registry gives a point and a size (United States, Australia), detection of large fires is 80–93 %, four to
+  forty times the chance level, and it falls with fire size as expected from the sensor resolution.
+- Where records are placed only by a large administrative unit (Brazilian municipalities, Indonesian regencies), the
+  chance level is high because fire is detected there almost every week; the Brazilian comparison is **not
+  informative** (lift of 1 point) and the report says so instead of showing a high rate as success. The Indonesian
+  export ends in 2019 and under-records large seasons (2015: 46 records).
+- In every country only a small share of satellite events is registered: registries record incidents that agencies
+  attended, not all fire activity.
+- Not used: Brazil's civil-defence S2iD/Atlas Digital (the portal blocks scripted access; to be added when downloaded
+  manually), Indonesia after 2019 (the live DIBI dashboard is compromised; BNPB's public service holds only the
+  current week), the Global Fire Atlas (MODIS burned-area objects; large files, left for later).
+
+### Tree-cover loss vs MINAM Geobosques (Peru)
+
+Hansen/UMD annual loss aggregated to INEI departments against Geobosques humid-Amazon-forest loss (Excel by department
+"al 2025", 2001–2024; 12 departments with at least 10,000 ha of loss).
+
+| Measure | Result |
+|---|---|
+| Ranking of departments by total loss (Spearman) | 0.99 |
+| Hansen / Geobosques national total | 1.36 (Hansen includes all tree cover ≥ 30 % and fire-killed forest) |
+| Year-to-year national agreement 2001–2024 | 0.76 |
+| … 2001–2011 | 0.95 |
+| … 2012–2024 | −0.02 |
+| Median department agreement (12 departments) | 0.83 (Madre de Dios 0.96, Ucayali 0.94; San Martín 0.37, Cajamarca 0.51) |
+
+Reading: the layer is reliable for comparing places and the scale of loss; national year-to-year changes after 2012 do
+not agree with the official series (Hansen's 2011–2012 method change and fire-driven canopy loss in drought years
+are the likely reasons; the second is a hypothesis). The report states this under the forest chart.
+
+### Climate (NASA POWER) vs CHIRPS
+
+Monthly precipitation anomalies (z against 2002–2024, same calendar month) of NASA POWER (MERRA-2, ~0.5°) against
+CHIRPS v2.0 (satellite and gauges, 0.05°, read from the monthly COGs over the Peru window), by INEI department,
+2002–2025, months with at least 10 mm of normal rainfall:
+
+| Measure | Result |
+|---|---|
+| Correlation of anomalies, median of 24 departments | r = 0.45 (pooled 0.43); lowest Tacna 0.14, Áncash 0.14, Lima 0.20; highest Tumbes 0.75, Madre de Dios 0.61 |
+| Drought flag (rainfall z ≤ −1 and VPD z ≥ +1) with POWER vs CHIRPS rainfall | same value in 94.3 % of department-months |
+| POWER drought months confirmed by CHIRPS (z ≤ −0.5) | 69.5 % of 318 |
+
+**Method change (context layer, not the harmonization):** because reanalysis rainfall agrees only moderately with
+the gauge-corrected product, the climate section now takes rainfall (amount, percentile, anomaly) from CHIRPS and keeps
+NASA POWER only for air dryness (vapour-pressure deficit); the drought flag uses CHIRPS rainfall. Where CHIRPS has no
+value (Lima Metropolitana as a separate unit; months after the last CHIRPS file) the report falls back to POWER and
+says which source it used (`precip_source`). PISCO (SENAMHI) was not used: its public series ends in 2016 (stable)
+or February 2019, and the public FTP server showed signs of tampering on 2026-11-15.

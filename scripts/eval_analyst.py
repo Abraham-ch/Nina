@@ -4,7 +4,8 @@ Uses the engine the server would use (Claude when ANTHROPIC_API_KEY is set, othe
 writes data/reports/analyst_eval_<engine>_<timestamp>.json with every answer for review, plus a summary:
 
 * traced: share of answers whose figures all appear in the tool results;
-* abstention: out-of-scope items answered without data tools, and in-scope items answered with them;
+* abstention: out-of-scope items declined in the first sentence and answered without data tools, and in-scope
+  items answered with them;
 * tools: in-scope items that called every expected tool;
 * latency per answer.
 
@@ -28,12 +29,21 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 DATA_TOOLS = {"territory_profile", "activity_series", "compare_departments", "validation_summary"}
+REFUSAL = ("cannot", "does not", "do not", "can't", "no puedo", "no puede", "no pronostica", "no mide", "no tiene", "no da",
+           "no atribuye", "no usa")
+
+
+def first_sentence_declines(answer: str) -> bool:
+    first = answer.strip().split(". ")[0].lower()
+    return any(marker in first for marker in REFUSAL)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--engine", choices=["auto", "deterministic"], default="auto")
     parser.add_argument("--limit", type=int, default=0, help="only the first N items")
+    parser.add_argument("--abstain-only", action="store_true", help="only the out-of-scope items")
+    parser.add_argument("--ids", nargs="*", default=None, help="only these item ids")
     args = parser.parse_args()
     if args.engine == "deterministic":
         os.environ["NINA_ANALYST_ENGINE"] = "deterministic"
@@ -42,7 +52,8 @@ def main() -> int:
     from nina.config import DATA
 
     spec = json.loads((ROOT / "docs/reference/analyst_eval.json").read_text(encoding="utf-8"))
-    items = spec["items"][: args.limit or None]
+    items = [i for i in spec["items"] if (i["abstain"] or not args.abstain_only) and (not args.ids or i["id"] in args.ids)]
+    items = items[: args.limit or None]
     engine = engine_name()
     rows = []
     for item in items:
@@ -51,7 +62,7 @@ def main() -> int:
         elapsed = time.perf_counter() - started
         called = {tool["name"] for tool in result["tools"]}
         if item["abstain"]:
-            abstention_ok = not (called & DATA_TOOLS)
+            abstention_ok = not (called & DATA_TOOLS) and first_sentence_declines(result["answer"])
         else:
             abstention_ok = bool(called & (DATA_TOOLS | {"method_notes"}))
         rows.append({
