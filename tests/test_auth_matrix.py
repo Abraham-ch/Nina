@@ -161,6 +161,20 @@ def test_las_columnas_que_pinta_la_interfaz_existen_en_respuesta(client):
     assert store.code_revision()
 
 
+def test_status_sobrevive_a_una_base_anterior_a_t1(client):
+    """`nina/AGENTS.md`: nunca romper bases existentes.
+
+    `scripts/check_release.py` llama a `store.status()` sin pasar por `initialize()`,
+    así que una base creada antes de T1 puede no tener `created_by`.
+    """
+    c, _ = client
+    with store.database() as con:
+        con.execute("INSERT INTO batches (id, filename, source) VALUES ('viejo','f.csv','modis')")
+        con.execute('ALTER TABLE batches DROP COLUMN created_by')
+    lotes = store.status()['batches']
+    assert lotes and 'created_by' not in lotes[0]
+
+
 def test_status_no_expone_el_identificador_del_usuario(client):
     """`GET /api/status` es anónimo: `created_by` es atribución interna, no lectura."""
     c, _ = client
