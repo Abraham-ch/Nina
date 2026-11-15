@@ -144,7 +144,10 @@ def test_model_answer_is_rewritten_until_its_figures_are_traced(client, monkeypa
     assert len(calls) == 3 and "151" in rewrite[-1] and "Automatic check" in rewrite[-1]
     first = calls[0]
     assert first["model"] == "claude-sonnet-5-5" and first["fallbacks"] == "default"
-    assert all(tool["strict"] for tool in first["tools"]) and "tool_choice" not in first
+    client_tools = [tool for tool in first["tools"] if "input_schema" in tool]
+    assert all(tool["strict"] for tool in client_tools) and "tool_choice" not in first
+    [web] = [tool for tool in first["tools"] if tool.get("name") == "web_search"]
+    assert web["allowed_domains"] and web["max_uses"] <= 3 and "blocked_domains" not in web
     assert first["messages"][0]["content"].startswith("Answer language: English")
 
 
@@ -224,3 +227,28 @@ def test_strict_tool_schemas_stay_within_the_union_parameter_limit():
                  if "anyOf" in p or isinstance(p.get("type"), list))
     assert unions <= 16
     assert analyst.unset(0) is None and analyst.unset("") is None and analyst.unset("Cusco") == "Cusco"
+
+
+def test_web_citations_become_sources_and_back_their_figures(client, monkeypatch):
+    test_client, _ = client
+    citation = SimpleNamespace(type="web_search_result_location", url="https://www.gob.pe/x", title="DS 097-2024-PCM",
+                               cited_text="Declárese el Estado de Emergencia en 23 distritos por 60 días")
+    content = [
+        SimpleNamespace(type="text", text="Searching official sources."),
+        SimpleNamespace(type="server_tool_use", name="web_search", input={"query": "estado de emergencia incendios"}),
+        SimpleNamespace(type="web_search_tool_result"),
+        SimpleNamespace(type="text", text="The decree declared an emergency in 23 districts for 60 days.",
+                        citations=[citation]),
+    ]
+    scripted_client(monkeypatch, [SimpleNamespace(stop_reason="end_turn", model="claude-sonnet-5-5", content=content)])
+    result = ask(test_client, "Was an emergency declared? Check official sources.")
+    assert result["engine"] == "claude" and result["verification"]["passed"]
+    assert result["answer"] == "The decree declared an emergency in 23 districts for 60 days."
+    assert result["sources"] == [{"title": "DS 097-2024-PCM", "url": "https://www.gob.pe/x",
+                                  "cited_text": citation.cited_text}]
+    assert "web_search" in [t["name"] for t in result["tools"]]
+
+
+def test_web_search_can_be_switched_off(monkeypatch):
+    monkeypatch.setenv("NINA_ANALYST_WEB", "false")
+    assert analyst.web_tool() == []

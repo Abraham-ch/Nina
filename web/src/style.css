@@ -4055,3 +4055,19 @@ h1 > .experimental-tag {
   font-size: 0.82rem;
   color: var(--muted);
 }
+.analyst-sources {
+  margin: 10px 0;
+  font-size: 0.8rem;
+}
+.analyst-sources h3 {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+}
+.analyst-sources ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.analyst-sources q {
+  display: block;
+  color: var(--muted);
+}

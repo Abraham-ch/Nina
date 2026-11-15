@@ -320,6 +320,7 @@ export type AnalystAnswer = {
   visuals: AnalystVisual[]
   actions: AnalystAction[]
   follow_ups: string[]
+  sources: { title: string; url: string; cited_text: string }[]
 }
 // Charts and tables of an answer: built by the server from NINA's results, never typed by the model.
 export type AnalystVisual = {

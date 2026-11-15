@@ -79,6 +79,12 @@ class AnalystFact(BaseModel):
     tool: str
 
 
+class AnalystSource(BaseModel):
+    title: str
+    url: str
+    cited_text: str = Field(description="Passage of the page the answer relies on (up to 150 characters)")
+
+
 class AnalystToolCall(BaseModel):
     name: str
     input: dict[str, Any]
@@ -108,6 +114,8 @@ class AnalystAnswer(BaseModel):
                                          description="Charts and tables built from NINA's results, never typed by the model")
     actions: list[AnalystAction] = Field(default_factory=list, description="Interface actions offered as buttons")
     follow_ups: list[str] = Field(default_factory=list, description="Questions NINA can answer next")
+    sources: list[AnalystSource] = Field(default_factory=list,
+                                         description="Official web sources cited in the answer (web search)")
 
 
 class AnalystStatus(BaseModel):
@@ -330,6 +338,7 @@ class Session:
         self.report_id: str | None = None
         self.visuals: list[dict[str, Any]] = []
         self.actions: list[dict[str, Any]] = []
+        self.sources: list[dict[str, str]] = []
 
     def period(self, year: int | None, month: int | None) -> tuple[int, int]:
         context = self.request.context
@@ -379,6 +388,7 @@ class Session:
         for call in self.calls:
             if call["ok"]:
                 collect(call["output"], numbers, texts)
+        texts += [source["cited_text"] for source in self.sources]  # web figures must be in the cited passage
         for text in texts:
             numbers += [value for value, _, _ in numbers_in(text)]
         numbers += [value * 100 for value in numbers if abs(value) <= 1.5]  # fractions written as percentages
@@ -1666,6 +1676,7 @@ How to work
 - "current" or null in a place argument means the territory on the user's screen; null year or month means the period on screen.
 - Show, do not only tell: when a series, a comparison across years or departments, or a validation table helps the reader, call show_visual (one or two per answer). The reader sees it under your answer; mention it in one sentence ("the chart below shows...") instead of listing all its values.
 - When the reader asks to see, open, go to, print or download something, call propose_action: they get a button under the answer. You cannot operate the interface yourself; never claim that you did.
+- Official reports and news: when the reader asks whether a fire, an emergency or a declaration was reported, or asks to corroborate NINA's reading with official sources, you may use web_search (restricted to official and scientific domains). Never use it for figures NINA's tools provide. A figure taken from the web must appear in the passage you cite. Keep the two apart: "NINA's record shows..." versus "the decree published in El Peruano states...".
 
 What the data mean
 - Unit: VIIRS-equivalent active cell-days (an H3 cell of about 5 km² with at least one detection that day). It measures detected activity, not the number of fires, burned area or damage.
@@ -1727,6 +1738,42 @@ def conversation(request: AnalystQuestion) -> list[dict[str, Any]]:
     return messages
 
 
+# Official, scientific and multilateral domains only: corroboration, never NINA's own figures.
+WEB_DOMAINS = [
+    "gob.pe", "elperuano.pe", "reliefweb.int", "nasa.gov", "fao.org", "copernicus.eu", "inpe.br", "gov.br",
+    "nifc.gov", "canada.ca", "gob.mx", "gob.bo", "gov.au", "bnpb.go.id", "undrr.org", "wmo.int",
+]
+
+
+def web_tool() -> list[dict[str, Any]]:
+    """Anthropic web search (server tool) with citations, unless NINA_ANALYST_WEB=false."""
+    if os.getenv("NINA_ANALYST_WEB", "true").strip().lower() in {"0", "false", "no"}:
+        return []
+    return [{"type": "web_search_20260209", "name": "web_search", "max_uses": 3, "allowed_domains": WEB_DOMAINS,
+             "allowed_callers": ["direct"]}]
+
+
+def final_text(content: list[Any], session: Session) -> str:
+    """Answer text after the last web search, with its citations kept as sources of the session."""
+    server = [i for i, block in enumerate(content) if block.type in {"server_tool_use", "web_search_tool_result"}]
+    blocks = [block for block in content[(server[-1] + 1 if server else 0):] if block.type == "text"]
+    for block in blocks:
+        for citation in getattr(block, "citations", None) or []:
+            if getattr(citation, "type", "") == "web_search_result_location":
+                source = {"title": str(citation.title or citation.url), "url": str(citation.url),
+                          "cited_text": str(citation.cited_text or "")}
+                if source not in session.sources:
+                    session.sources.append(source)
+    joiner = "" if server else "\n"
+    return joiner.join(block.text for block in blocks).strip()
+
+
+def record_searches(content: list[Any], session: Session) -> None:
+    for block in content:
+        if block.type == "server_tool_use" and block.name == "web_search":
+            session.calls.append({"name": "web_search", "input": dict(block.input or {}), "ok": True, "output": {}})
+
+
 def claude_answer(session: Session) -> tuple[str, str, int]:
     """(answer, model, figures checked); raises ModelUnavailable when no verified answer is obtained."""
     import anthropic
@@ -1736,7 +1783,8 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
     messages = conversation(session.request)
     # An out-of-scope question (forecast, cause, operations, burned area, damage) gets no data tools: the model can
     # explain the limit with the method notes but cannot place figures next to the question.
-    tools = [TOOLS["method_notes"].schema()] if classify(session.request.question)[0] == "scope" else TOOL_SCHEMAS
+    tools = ([TOOLS["method_notes"].schema()] if classify(session.request.question)[0] == "scope"
+             else TOOL_SCHEMAS + web_tool())
     rewrites = 0
     try:
         for _ in range(MAX_MODEL_STEPS):
@@ -1754,6 +1802,7 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
             if response.stop_reason in {"refusal", "max_tokens"}:
                 raise ModelUnavailable(response.stop_reason)
             messages.append({"role": "assistant", "content": response.content})
+            record_searches(response.content, session)
             if response.stop_reason == "pause_turn":
                 continue
             uses = [block for block in response.content if block.type == "tool_use"]
@@ -1766,7 +1815,7 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
                                     **({"is_error": True} if "error" in output else {})})
                 messages.append({"role": "user", "content": results})
                 continue
-            text = "\n".join(block.text for block in response.content if block.type == "text").strip()
+            text = final_text(response.content, session)
             checked, unverified = session.verify(text)
             if text and not unverified:
                 return text, response.model, checked
@@ -2016,4 +2065,5 @@ def respond(session: Session, text: str, engine: str, model: str | None, intent:
         "visuals": session.visuals,
         "actions": session.actions,
         "follow_ups": FOLLOW_UPS[session.request.language].get(intent, [])[:3],
+        "sources": session.sources,
     }
