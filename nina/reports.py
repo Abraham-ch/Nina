@@ -43,6 +43,9 @@ EVENT_MIN_CELL_DAYS = 5  # "significant" fire events: at least five active cell-
 SEASON_MONTHS = (7, 8, 9, 10)  # Peruvian fire season used for season totals
 TREND_FIRST_YEAR = 2003
 SIGNIFICANCE = 0.05
+DRY_MONTH_MM = 10.0  # below this normal monthly rainfall a drought flag is not meaningful
+# INEI department names → geoBoundaries ADM1 keys used by the climate layer.
+CLIMATE_ALIASES = {"CALLAO": ["EL CALLAO"], "LIMA": ["LIMA", "MUNICIPALIDAD METROPOLITANA DE LIMA"]}
 
 
 class ReportRequest(BaseModel):
@@ -319,7 +322,14 @@ def section_forest(connection, territory: dict[str, Any], year: int) -> dict[str
         "status": "available" if by_year else "not_available",
         "definition": "tree-cover loss (Hansen/UMD, canopy >= 30 % in 2000); 'with fire' = cell with "
         "satellite fire activity in the same or the previous year",
-        "source_version": manifest.get("version") or manifest.get("source_version"),
+        "caveats": [
+            "Tree-cover loss is not deforestation: it counts stand-replacing disturbance, including "
+            "fire-killed forest and plantation harvest.",
+            "'With fire' shows co-location, not causation.",
+            "Hansen's method changed in 2011–2012 (Landsat 8): do not read a trend across that break.",
+        ],
+        "validation": "Peru totals 2001–2024 within 0.3–0.6 % of Global Forest Watch (GADM, >30 % canopy)",
+        "source_version": (manifest.get("source") or {}).get("version"),
         "forest_2000_ha": forest_2000,
         "selected_year": selected,
         "last_year_available": by_year[-1]["year"] if by_year else None,
@@ -333,32 +343,49 @@ def section_climate(territory: dict[str, Any], year: int, month: int, connection
         return {"status": "not_available", "reason": "climate layer not built"}
     ubigeos = territory["ubigeos"] or territory_ubigeos(connection, territory) or []
     names = {p["ubigeo"][:2]: p["department"] for p, _ in districts()}
-    keys = sorted({_key(names[u[:2]]) for u in ubigeos if u[:2] in names})
+    keys = sorted({alias for u in ubigeos if u[:2] in names for alias in CLIMATE_ALIASES.get(
+        _key(names[u[:2]]), [_key(names[u[:2]])])})
     if not keys:
         return {"status": "not_available", "reason": "climate is available for Peruvian departments only"}
+    # The drought flag is meaningless where the month is climatologically dry (coastal desert,
+    # Andean dry season): below DRY_MONTH_MM of normal rainfall it is reported as not applicable.
     rows = connection.execute(
-        f"""SELECT department, month, precip_mm, precip_z, vpd_kpa, vpd_z, drought
-        FROM read_parquet('{path.as_posix()}') WHERE year=? AND department_key IN (SELECT unnest(?::VARCHAR[]))
-        ORDER BY department, month""",
-        [year, keys],
+        f"""WITH c AS (SELECT * FROM read_parquet('{path.as_posix()}')
+                WHERE department_key IN (SELECT unnest(?::VARCHAR[]))),
+            normal AS (SELECT department_key, month, avg(precip_mm) AS normal_mm FROM c
+                WHERE year BETWEEN 2002 AND 2024 GROUP BY ALL)
+        SELECT c.department, c.month, c.precip_mm::DOUBLE, c.precip_z::DOUBLE, c.precip_percentile::DOUBLE,
+            c.vpd_kpa::DOUBLE, c.vpd_z::DOUBLE, c.drought, n.normal_mm::DOUBLE
+        FROM c JOIN normal n USING(department_key, month) WHERE c.year=? ORDER BY c.department, c.month""",
+        [keys, year],
     ).fetchall()
+
+    def drought_state(flag: bool | None, normal_mm: float) -> bool | None:
+        return None if normal_mm < DRY_MONTH_MM or flag is None else bool(flag)
+
     selected = [
-        {"department": d, "precip_mm": p, "precip_z": pz, "vpd_kpa": v, "vpd_z": vz, "drought": bool(dr)}
-        for d, m, p, pz, v, vz, dr in rows if m == month
+        {"department": d, "precip_mm": p, "precip_z": pz, "precip_percentile": pp, "normal_precip_mm": nm,
+         "vpd_kpa": v, "vpd_z": vz, "drought": drought_state(dr, nm)}
+        for d, m, p, pz, pp, v, vz, dr, nm in rows if m == month
     ]
     season = {}
-    for d, m, _, pz, _, vz, dr in rows:
+    for d, m, _, pz, _, _, vz, dr, nm in rows:
         if m in SEASON_MONTHS:
-            season.setdefault(d, []).append((pz, vz, dr))
+            season.setdefault(d, []).append((pz, vz, drought_state(dr, nm)))
     season_summary = [
         {"department": d, "precip_z_mean": statistics.fmean(x[0] for x in v),
-         "vpd_z_mean": statistics.fmean(x[1] for x in v), "drought_months": sum(bool(x[2]) for x in v)}
+         "vpd_z_mean": statistics.fmean(x[1] for x in v), "drought_months": sum(bool(x[2]) for x in v if x[2] is not None)}
         for d, v in season.items()
     ]
+    if not selected:
+        last = connection.execute(f"SELECT max(year) FROM read_parquet('{path.as_posix()}')").fetchone()[0]
+        return {"status": "not_available", "reason": f"climate layer covers 2001–{last}"}
     return {
-        "status": "available" if selected else "not_available",
-        "source": "NASA POWER (monthly, ~0.5 degree); anomalies vs 2002–2024 climatology",
-        "note": "Context only: no causal attribution of fire activity.",
+        "status": "available",
+        "source": "NASA POWER v2.10 (MERRA-2, ~0.5 degree), monthly; anomalies vs 2002–2024 climatology",
+        "note": "Context only: no causal attribution of fire activity. Drought = precipitation z <= -1 and "
+        "vapour-pressure deficit z >= +1; not applicable in months with under "
+        f"{DRY_MONTH_MM:.0f} mm of normal rainfall. Reanalysis rainfall: anomalies are more reliable than totals.",
         "selected_month": selected,
         "season_jul_oct": season_summary,
     }
@@ -469,8 +496,10 @@ def summary(report: dict[str, Any]) -> list[str]:
                                         fire=n(fo["selected_year"]["loss_ha_with_fire"])))
     cl = s["climate"]
     if cl["status"] == "available":
-        lines.append(t["climate"].format(period=period, drought=sum(r["drought"] for r in cl["selected_month"]),
-                                         total=len(cl["selected_month"])))
+        applicable = [r for r in cl["selected_month"] if r["drought"] is not None]
+        if applicable:
+            lines.append(t["climate"].format(period=period, drought=sum(r["drought"] for r in applicable),
+                                             total=len(applicable)))
     return lines
 
 

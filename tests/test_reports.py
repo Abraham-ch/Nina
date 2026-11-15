@@ -73,6 +73,14 @@ def client(tmp_path, monkeypatch):
         FROM range(2012, 2026) t(y)) TO ? (FORMAT PARQUET)""", [str(context / "events/event_cell_days.parquet")])
     connection.execute("""COPY (SELECT 'cell1' cell, y AS year, 100.0 AS loss_ha FROM range(2012, 2025) t(y)
         UNION ALL SELECT 'cell2', 2024, 50.0) TO ? (FORMAT PARQUET)""", [str(context / "forest_loss/forest_loss_cell_year.parquet")])
+    (context / "climate").mkdir()
+    connection.execute("""COPY (SELECT 'Ucayali' department, 'UCAYALI' department_key, y AS year, m AS month,
+        CASE WHEN y = 2025 AND m = 9 THEN 20.0 ELSE 100.0 END AS precip_mm,
+        CASE WHEN y = 2025 AND m = 9 THEN -1.5 ELSE 0.0 END AS precip_z, 50.0 AS precip_percentile,
+        1.0 AS vpd_kpa, CASE WHEN y = 2025 AND m = 9 THEN 1.4 ELSE 0.0 END AS vpd_z,
+        (y = 2025 AND m = 9) AS drought
+        FROM range(2002, 2026) a(y), range(1, 13) b(m)) TO ? (FORMAT PARQUET)""",
+                       [str(context / "climate/climate_department_month.parquet")])
     connection.close()
 
     monkeypatch.setattr(harmonized, "ARTIFACTS", artifacts)
@@ -107,7 +115,9 @@ def test_department_report_combines_all_sections(client):
     assert all(row["code"].startswith("25") for row in sections["events"]["top_subdivisions"])
     forest = {row["year"]: row for row in sections["forest"]["by_year"]}
     assert forest[2024]["loss_ha"] == 150 and forest[2024]["loss_ha_with_fire"] == 100  # cell2 never burned
-    assert sections["climate"]["status"] == "not_available"
+    (climate,) = sections["climate"]["selected_month"]
+    assert climate["department"] == "Ucayali" and climate["drought"] is True
+    assert climate["precip_z"] == -1.5 and climate["normal_precip_mm"] == 100.0  # 2025 is outside the 2002-2024 normal
     assert any("rank 1 of 14" in line for line in report["summary"])
 
 
