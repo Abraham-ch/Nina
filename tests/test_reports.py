@@ -281,3 +281,28 @@ def test_forest_outside_peru_comes_from_gfw_drivers(client):
     assert forest["by_driver"][0] == {"driver": "Logging", "loss_ha": 60.0}
     drawn = reports.section_forest_drivers(connection, {"type": "polygon", "country": "Mexico", "name": "x"}, 2024)
     assert drawn["status"] == "not_available"
+
+
+def test_burn_case_appears_only_for_its_area_and_period(client):
+    import shapely
+
+    folder = reports.CONTEXT / "burn_case"
+    folder.mkdir(parents=True, exist_ok=True)
+    areas = lambda low, moderate: {"low": {"hotspot_anchored": low}, "moderate": {"hotspot_anchored": moderate}}  # noqa: E731
+    (folder / "summary.json").write_text(json.dumps({
+        "case": {"name": "Test fire", "reference": "test", "event_window": ["2026-07-27", "2026-08-10"]},
+        "hls": {"aoi": {"analysis_wgs84": [-67.9, -29.35, -67.05, -28.75]}, "pre_scene": {"date": "2026-07-14"},
+                "post_scene": {"date": "2026-08-07"},
+                "areas_ha": {"fmask_standard": areas(7962.3, 3894.7), "terrain_shadow_included": areas(11158.6, 6070.5)}},
+        "mcd64a1": {"burned_ha_jul_aug": 13845.5}, "prithvi": {"burned_ha_hotspot_anchored": 14755.0},
+        "firms": {"hotspots_used": 955}, "licences": {"HLS": "open"},
+    }), encoding="utf-8")
+    inside = {"type": "polygon", "name": "x", "country": "Argentina", "polygon": shapely.box(-67.5, -29.2, -67.3, -29.0)}
+    case = reports.section_burn_case(inside, 2026, 7)
+    assert case["status"] == "available" and case["range_ha"] == [3894.7, 11158.6]
+    assert [r["burned_ha"] for r in case["rows"]][3] == 13845.5
+    assert reports.section_burn_case(inside, 2026, 10)["status"] == "not_available"
+    outside = {**inside, "polygon": shapely.box(-60, -20, -59, -19)}
+    assert reports.section_burn_case(outside, 2026, 7)["status"] == "not_available"
+    assert reports.section_burn_case({"type": "country", "name": "Peru", "country": "Peru", "polygon": None},
+                                     2026, 7)["status"] == "not_available"

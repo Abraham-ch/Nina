@@ -41,6 +41,10 @@ LABELS = {
         "chart_subdivisions": "By subdivision, {y}",
         "chart_forest": "Tree-cover loss and fire activity",
         "chart_burned": "Burned area per year (MODIS MCD64A1)",
+        "case_title": "Burned area mapped at 30 m · case study",
+        "case_note": "{name}. Landsat (HLS) before {pre} and after {post}, compared with NASA's MODIS burned-area product and the NASA/IBM Prithvi-EO-2.0 AI model, anchored on {hotspots} FIRMS hotspots. Yellow: burned at 30 m (dNBR); magenta: Prithvi outline.",
+        "case_range": "About {low}–{high} ha burned, depending on threshold and terrain shadow.",
+        "col_method": "Method", "col_resolution": "Resolution", "col_area": "Burned area (ha)",
         "chart_burned_note": "Area burned according to the MODIS MCD64A1 burned-area product (500 m), aggregated by GWIS (JRC/Copernicus) for {unit}. It is independent of the hotspots NINA harmonizes and often misses fires much smaller than one pixel (~25 ha).",
         "burned_month": "{month} {year}: {area} ha burned, rank {rank} of {of} for that month (median of the other years {median} ha).",
         "burned_ends": "The burned-area table ends in {end}; the analysed month is not covered yet.",
@@ -115,6 +119,10 @@ LABELS = {
         "chart_subdivisions": "Por subdivisión, {y}",
         "chart_forest": "Pérdida de cobertura arbórea y actividad de fuego",
         "chart_burned": "Área quemada por año (MODIS MCD64A1)",
+        "case_title": "Área quemada cartografiada a 30 m · caso de estudio",
+        "case_note": "{name}. Landsat (HLS) antes, {pre}, y después, {post}, comparado con el producto MODIS de área quemada de la NASA y con el modelo de IA Prithvi-EO-2.0 (NASA/IBM), anclado en {hotspots} focos FIRMS. Amarillo: quemado a 30 m (dNBR); magenta: contorno de Prithvi.",
+        "case_range": "Entre unas {low} y {high} ha quemadas, según el umbral y la sombra del relieve.",
+        "col_method": "Método", "col_resolution": "Resolución", "col_area": "Área quemada (ha)",
         "chart_burned_note": "Área quemada según el producto MODIS MCD64A1 (500 m), agregada por GWIS (JRC/Copernicus) para {unit}. Es independiente de los focos que NINA armoniza y suele omitir incendios mucho menores que un píxel (~25 ha).",
         "burned_month": "{month} de {year}: {area} ha quemadas, puesto {rank} de {of} para ese mes (mediana de los demás años {median} ha).",
         "burned_ends": "La tabla de área quemada termina en {end}; el mes analizado aún no está cubierto.",
@@ -647,6 +655,27 @@ def burned_chart(doc: Doc) -> str:
             + "".join(f'<p class="check">{esc(line)}</p>' for line in lines if line) + "</section>")
 
 
+def burn_case(doc: Doc, embedded: dict[str, str] | None = None) -> str:
+    t, case = doc.t, doc.r["sections"].get("burn_case") or {}
+    if case.get("status") != "available":
+        return ""
+    src = f'/api/reports/territorial/{esc(doc.r["id"])}/case-figure/{case["figures"][0]}'
+    if embedded is not None:
+        if "case" not in embedded:
+            return ""
+        src = embedded["case"]
+    rows = "".join(f'<tr><td>{esc(r["method"])}</td><td>{r["resolution_m"]} m</td><td>{doc.n(r["burned_ha"])}</td></tr>'
+                   for r in case["rows"])
+    caveats = "".join(f"<li>{esc(c)}</li>" for c in case["caveats"])
+    low, high = (doc.n(round(v, -2)) for v in case["range_ha"])
+    return (f'<section><h2>{esc(t["case_title"])}</h2>'
+            f'<p class="note">{esc(fill(t["case_note"], name=case["name"], pre=case["scenes"]["pre"], post=case["scenes"]["post"], hotspots=doc.n(case["hotspots"])))}</p>'
+            f'<div style="display:flex;gap:5mm;align-items:flex-start"><img src="{src}" alt="{esc(case["name"])}" '
+            f'style="width:62mm;border-radius:2mm"><div><p class="check">{esc(fill(t["case_range"], low=low, high=high))}</p>'
+            f'<table><tr><th>{esc(t["col_method"])}</th><th>{esc(t["col_resolution"])}</th><th>{esc(t["col_area"])}</th></tr>{rows}</table>'
+            f'<div class="note"><ul style="margin:1mm 0 0 4mm;padding:0">{caveats}</ul></div></div></div></section>')
+
+
 def forest_labels(doc: Doc) -> dict[str, Any]:
     """Texts of the forest section for its source: Hansen cells (Peru) or GFW drivers (other countries)."""
     t, forest = doc.t, doc.r["sections"]["forest"]
@@ -785,7 +814,7 @@ def render(report: dict[str, Any], embedded_images: dict[str, str] | None = None
                    f'<a href="/api/reports/territorial/{esc(report["id"])}/package" download>{esc(t["download_zip"])}</a></div>')
     else:
         toolbar = ""  # the package already holds report.pdf
-    evidence = [trend_chart(doc), events_chart(doc), burned_chart(doc)]
+    evidence = [trend_chart(doc), events_chart(doc), burned_chart(doc), burn_case(doc, embedded_images)]
     detail = [forest_chart(doc), imagery(doc, embedded_images)]
     annex = [calendar_chart(doc), subdivision_table(doc), climate_table(doc), quality(doc)]
     parts = [

@@ -40,7 +40,7 @@ from .harmonized import (
 
 router = APIRouter(tags=["Territorial report"])
 CONTEXT = SOURCE / "context"
-REPORT_VERSION = "2"  # 2: burned area (MODIS MCD64A1 via GWIS)
+REPORT_VERSION = "3"  # 2: burned area (MCD64A1 via GWIS); 3: 30 m burned-area case study
 EVENT_MIN_CELL_DAYS = 5  # "significant" fire events: at least five active cell-days
 SEASON_MONTHS = (7, 8, 9, 10)  # Peruvian fire season used for season totals
 TREND_FIRST_YEAR = 2003
@@ -558,6 +558,55 @@ GFW_NAMES = {
 }
 
 
+CASE_FIGURES = ("prithvi_vs_dnbr_zoom.png", "post_truecolour_zoom.png", "dnbr_classes_zoom.png")
+
+
+def section_burn_case(territory: dict[str, Any], year: int, month: int) -> dict[str, Any]:
+    """Burned area mapped at 30 m for the documented case study (Chilecito, July 2026), when the report's territory
+    and period overlap it. Figures come from source/context/burn_case/summary.json (docs/BURN_CASE_CHILECITO.md)."""
+    path = CONTEXT / "burn_case/summary.json"
+    if not path.exists():
+        return {"status": "not_available", "reason": "no 30 m burned-area case study built"}
+    summary = load_json(path)
+    west, south, east, north = summary["hls"]["aoi"]["analysis_wgs84"]
+    first, last = summary["case"]["event_window"]
+    in_period = int(first[:4]) * 100 + int(first[5:7]) <= year * 100 + month <= int(last[:4]) * 100 + int(last[5:7])
+    polygon = territory.get("polygon")
+    if not in_period or polygon is None or not polygon.intersects(shapely.box(west, south, east, north)):
+        return {"status": "not_available", "reason": "the 30 m case study covers Chilecito (Argentina), July–August 2026"}
+    hls, mcd, prithvi = summary["hls"], summary["mcd64a1"], summary["prithvi"]
+    standard, shadow = hls["areas_ha"]["fmask_standard"], hls["areas_ha"]["terrain_shadow_included"]
+    rows = [
+        {"method": "HLS dNBR ≥ 0.27, pixels clear on both dates (lower bound)", "resolution_m": 30,
+         "burned_ha": standard["moderate"]["hotspot_anchored"]},
+        {"method": "HLS dNBR ≥ 0.10, pixels clear on both dates", "resolution_m": 30,
+         "burned_ha": standard["low"]["hotspot_anchored"]},
+        {"method": "HLS dNBR ≥ 0.10, terrain shadow included", "resolution_m": 30,
+         "burned_ha": shadow["low"]["hotspot_anchored"]},
+        {"method": "MODIS MCD64A1 burned area", "resolution_m": 500, "burned_ha": mcd["burned_ha_jul_aug"]},
+        {"method": "Prithvi-EO-2.0 BurnScars, patches touching the hotspots (out-of-domain test)",
+         "resolution_m": 30, "burned_ha": prithvi["burned_ha_hotspot_anchored"]},
+    ]
+    return {
+        "status": "available",
+        "name": summary["case"]["name"],
+        "reference": summary["case"]["reference"],
+        "event_window": [first, last],
+        "scenes": {"pre": hls["pre_scene"]["date"], "post": hls["post_scene"]["date"]},
+        "hotspots": summary["firms"]["hotspots_used"],
+        "range_ha": [standard["moderate"]["hotspot_anchored"], shadow["low"]["hotspot_anchored"]],
+        "rows": rows,
+        "figures": list(CASE_FIGURES),
+        "caveats": [
+            "Thresholds were not calibrated for this arid shrubland: the area roughly doubles between dNBR 0.27 and 0.10.",
+            "Steep winter shadow is masked as water by the HLS quality mask, so clear-pixel areas are lower bounds.",
+            "MCD64A1 counts whole 21.5 ha cells; Prithvi was trained on US burn scars and also marks unburned slopes.",
+            "Not validated against a field perimeter or an official CONAE figure.",
+        ],
+        "licences": summary["licences"],
+    }
+
+
 def section_forest_drivers(connection, territory: dict[str, Any], year: int) -> dict[str, Any]:
     """Tree-cover loss with its dominant driver for any country (Global Forest Watch statistics)."""
     path = CONTEXT / "forest_drivers/gfw_drivers.parquet"
@@ -836,6 +885,7 @@ TEXT = {
         "forest": "Tree-cover loss {year}: {loss} ha, of which {fire} ha in cells with fire activity.",
         "forest_gfw": "Tree-cover loss {year} (Global Forest Watch): {loss} ha, of which {fire} ha where wildfire was the dominant driver.",
         "burned": "Burned area {year} (MODIS MCD64A1, GWIS): {area} ha.",
+        "burn_case": "Burned area mapped at 30 m (Landsat, case study): about {low}–{high} ha depending on threshold and terrain shadow; MODIS MCD64A1 gives {mcd} ha.",
         "burned_month": "Burned area in {month} {year} (MODIS MCD64A1, GWIS): {area} ha, rank {rank} of {of} for that month.",
         "climate": "Climate {period}: {drought} of {total} department(s) under drought conditions (low precipitation and high vapour-pressure deficit).",
     },
@@ -854,6 +904,7 @@ TEXT = {
         "forest": "Pérdida de cobertura arbórea {year}: {loss} ha, de las cuales {fire} ha en celdas con actividad de fuego.",
         "forest_gfw": "Pérdida de cobertura arbórea {year} (Global Forest Watch): {loss} ha, de las cuales {fire} ha donde el incendio fue la causa dominante.",
         "burned": "Área quemada {year} (MODIS MCD64A1, GWIS): {area} ha.",
+        "burn_case": "Área quemada cartografiada a 30 m (Landsat, caso de estudio): entre unas {low} y {high} ha según el umbral y la sombra del relieve; MODIS MCD64A1 da {mcd} ha.",
         "burned_month": "Área quemada en {month} de {year} (MODIS MCD64A1, GWIS): {area} ha, puesto {rank} de {of} para ese mes.",
         "climate": "Clima {period}: {drought} de {total} departamento(s) en condición de sequía (baja precipitación y alto déficit de presión de vapor).",
     },
@@ -970,6 +1021,11 @@ def summary_items(report: dict[str, Any]) -> list[tuple[str, str]]:
             lines.append(("events", line))
         else:
             lines.append(("events", t["events_only"].format(year=row["year"], events=n(row["significant_events"]))))
+    bc = s.get("burn_case") or {}
+    if bc.get("status") == "available":
+        mcd = next(r["burned_ha"] for r in bc["rows"] if r["resolution_m"] == 500)
+        lines.append(("burned", t["burn_case"].format(low=n(round(bc["range_ha"][0], -2)), high=n(round(bc["range_ha"][1], -2)),
+                                                      mcd=n(round(mcd, -2)))))
     ba = s.get("burned_area") or {}
     if ba.get("status") == "available":
         if ba.get("selected_month"):
@@ -1015,6 +1071,7 @@ def build_report(request: ReportRequest) -> dict[str, Any]:
             "events": section_events(connection, territory, request.year, request.language),
             "forest": section_forest(connection, territory, request.year),
             "burned_area": section_burned_area(connection, territory, request.year, request.month),
+            "burn_case": section_burn_case(territory, request.year, request.month),
             "climate": section_climate(territory, request.year, request.month, connection),
             "quality": section_quality(selected, manifest),
             "imagery": section_imagery(connection, territory, request.year, request.month),
@@ -1138,6 +1195,19 @@ def get_report(identifier: str) -> dict[str, Any]:
     return stored(identifier)
 
 
+@router.get("/api/reports/territorial/{identifier}/case-figure/{name}")
+def report_case_figure(identifier: str, name: str) -> FileResponse:
+    """A figure of the 30 m burned-area case study shown in this report."""
+    report = stored(identifier)
+    case = report["sections"].get("burn_case") or {}
+    if case.get("status") != "available" or name not in CASE_FIGURES:
+        raise HTTPException(404, "No such figure for this report")
+    path = CONTEXT / "burn_case" / name
+    if not path.exists():
+        raise HTTPException(404, "Figure not built")
+    return FileResponse(path, media_type="image/png")
+
+
 @router.get("/api/reports/territorial/{identifier}/imagery/{which}")
 def report_imagery(identifier: str, which: Literal["before", "after"]) -> FileResponse:
     """GIBS image for the report (cached); 503 when NASA GIBS cannot be reached."""
@@ -1253,8 +1323,12 @@ def csv_bytes(rows: list[dict[str, Any]], columns: list[str]) -> bytes:
 
 
 def report_images(identifier: str, report: dict[str, Any]) -> dict[str, Path]:
-    """Local paths of the cached GIBS images of a report (fetched once); missing ones are skipped."""
+    """Local paths of the cached GIBS images of a report (fetched once) and of its case-study figure; missing ones
+    are skipped."""
     paths: dict[str, Path] = {}
+    case = report["sections"].get("burn_case") or {}
+    if case.get("status") == "available" and (CONTEXT / "burn_case" / case["figures"][0]).exists():
+        paths["case"] = CONTEXT / "burn_case" / case["figures"][0]
     if (report["sections"].get("imagery") or {}).get("status") == "available":
         for which in ("before", "after"):
             try:
@@ -1306,6 +1380,10 @@ def report_package(identifier: str):
 
     report = stored(identifier)
     images: dict[str, str] = {}
+    case = report["sections"].get("burn_case") or {}
+    if case.get("status") == "available" and (CONTEXT / "burn_case" / case["figures"][0]).exists():
+        images["case"] = "data:image/png;base64," + base64.b64encode(
+            (CONTEXT / "burn_case" / case["figures"][0]).read_bytes()).decode()
     if (report["sections"].get("imagery") or {}).get("status") == "available":
         for which in ("before", "after"):
             try:
