@@ -86,7 +86,7 @@
 
 | ID | Spec | Ruta | Estado | Commit |
 |---|---|---|---|---|
-| T1 | S1 (+ A1, A2) | inline | **"Terminado cuando" cumplido** (visitante no importa ni exporta · analista ve su historial · admin ve la auditoría); pendiente `MAX_EXPORT_ROWS` y los advisories de L13/L19 | `c6721fc`, `d879306`, `003a86a` |
+| T1 | S1 (+ A1, A2) | inline | **S1 completa**: `MAX_EXPORT_ROWS` implementado y los advisories de seguridad cerrados; solo quedan menores (`rows=0` en `manifest`/`report`, detalle del servidor sin traducir, clase muerta) | `c6721fc`, `d879306`, `003a86a`, `c78fb0f`, `5bf79b7`, `0245a72` |
 | T2 | S2 (+ A1, A2) | inline | pendiente | — |
 | T3 | S3 (+ A1, A2) | inline | pendiente | — |
 
@@ -195,3 +195,56 @@
 - **L27** · **Verificación tras el rebase**: `oxfmt --check` limpio · `tsc -b && vite build` → `✓ built in
   3.95s` · `pytest` → **`56 passed`**. Rama de seguridad `backup/anthony-tasks-pre-rebase` (`e6a0726`).
   **Pendiente**: el `push --force-with-lease` lo tiene que correr la persona, el sandbox del agente lo bloquea.
+- **L28** · **Tercer verificador** sobre `003a86a` → **`advisories`, 0 blockers**, 6/6 ítems cumplidos:
+  gates en verde, nada perdido en el rebase, i18n conforme a §13, lógica reaplicada balanceada, 31/31
+  probes de enforcement en el servidor con la base **byte-idéntica tras cada rechazo**, y cero solape de
+  líneas entre mis commits de backend y los de Abraham.
+- **L29** · **3 defectos míos del rebase corregidos** en `c78fb0f`: el `aria-label` del botón de cuenta
+  usaba un prefijo en inglés crudo (lectores de pantalla en español anunciaban inglés), el `placeholder`
+  del correo no estaba en `tr()`, y el perfil decía "descargas en la última hora" mostrando todo el
+  historial y solo cargándolo al entrar en "Mis descargas".
+- **L30** · **PR #1 mergeado** por Abraham (`761ea27`, 23:58Z) — pero **antes** de `c78fb0f`, así que ese
+  commit quedó huérfano. Rama resincronizada con `git rebase origin/mvp-abraham` (`4dcd59c → c78fb0f`),
+  ahora **1 adelante / 0 atrás**. Se necesitaba force-push: el sandbox del agente lo bloquea, lo corrió la
+  persona.
+- **L31** · **Tests de matriz de enforcement** en `tests/test_auth_matrix.py` (`5bf79b7`) — **8 tests
+  nuevos, suite `56 → 64 passed`**. Ambos verificadores los habían propuesto y nadie los había escrito;
+  cerraban de verdad el `Risk: item 6` del backend de T1. **El primer intento FALLÓ**: medía el hash de la
+  base *antes* de los registros, que sí escriben. Corregido midiendo **después** de montar la sesión y
+  añadiendo un **control** (una operación legítima debe cambiar el hash) para que el test no pueda pasar
+  en vacío. `Risk: none` — solo añade pruebas, no toca comportamiento.
+- **L32** · **Deriva de fuente detectada**: `a7a562c` (en la base desde el rebase) tradujo
+  `WORK_PLAN.md` al inglés — §10 hoy es *"Cross-cutting product tasks (leadership tasks)" / "T1 · Users
+  and download management"*. Los specs **S1–S3 de este documento siguen citando la versión en español
+  vigente en `90d2ed6`**, que es la que se usó para escribir el trabajo. **El contenido es el mismo**,
+  solo cambió el idioma: no se re-escriben los `S#` (no sería *verbatim* de ninguna de las dos fuentes),
+  pero quien compare contra el `WORK_PLAN.md` actual debe saber que está viendo una traducción.
+- **L33** · **`MAX_EXPORT_ROWS` + advisories de seguridad** en `0245a72`. **RED observado**: 6 tests
+  nuevos fallando (`200 == 413`, `created_by` a la vista, `attach()` sin `secure`, 200k < 600k,
+  `ValueError` con `'abc'`, `openapi` sin `401`); los 2 tests de regresión ya pasaban (el límite por
+  debajo del tope y los hashes escritos a 200k). **GREEN**: `72 passed` (64 + 8), build `✓ built in
+  4.12s`, `oxfmt --check` limpio. **165 líneas autorizadas** (147 + 18, sin `openapi.json`).
+  Cerrado: cuota de filas por exportación con `413` y mensaje con el tope · `GET /api/status` ya no
+  proyecta `created_by` (`SELECT * EXCLUDE`), el valor sigue en la base y **cero lectores** en
+  `web/src` · cookie `Secure` condicionada al esquema de la petición · PBKDF2 **200k → 600k** (OWASP
+  2023) con test de que los hashes viejos siguen verificando · `MAX_DOWNLOADS_PER_HOUR='abc'` cae al
+  valor por defecto en vez de un `500` · las 8 rutas protegidas declaran `401`/`403` en `openapi.json`.
+  **`Risk: item 2`** (cookie `Secure` y rondas de PBKDF2) **e `item 3`** (se retiró el campo
+  `batches[].created_by` de la respuesta de `/api/status`; era el leak y no tenía ningún lector).
+- **L34** · **Cuarto verificador** sobre `0245a72` → **`advisories`, 0 blockers**. 47 probes propios en
+  verde, **control positivo sobre la base** (`14 BASE-EXISTS / 0 absent`: en `db0a64b` el leak existía,
+  la cookie no tenía `Secure`, `MAX_EXPORT_ROWS` se ignoraba, eran 200k rondas, `'abc'` reventaba con
+  `500` y `openapi` solo declaraba `200`), regresión `64 ⊂ 72` sin ids perdidos, `openapi.json`
+  byte-idéntico al regenerar, y **cero lector** de `batches[].created_by` en `web/src`, `scripts/` ni
+  `docs/`.
+- **L35** · **1 advisory corregido** en `9d65cba`: `SELECT * EXCLUDE (created_by)` falla al hacer *bind*
+  si la columna no existe, y `scripts/check_release.py` es el único llamante de `status()` que **no**
+  pasa por `initialize()` — una base anterior a T1 habría reventado, contra la regla de `nina/AGENTS.md`
+  "nunca romper bases existentes". Ahora consulta `information_schema` antes y cae a `SELECT *`, con
+  test. **`73 passed`**, build y formato verdes. `Risk: none` — solo añade una red de seguridad en la
+  ruta de lectura.
+- **L36** · **Brecha conocida y fuera de este PR**: las descargas son enlaces `<a href>`, así que un
+  `413`/`429`/`401` se muestra como **JSON crudo** en el navegador. El mensaje del servidor es claro y
+  en español, pero la UI no lo enmarca. Lo dejó el verificador en `unverified` (habría que *clickear*);
+  corregirlo implica convertir los enlaces de exportación en `fetch` + aviso, y es una pieza de
+  interfaz aparte. **También pendiente**: `manifest`/`report` registran `rows=0`.

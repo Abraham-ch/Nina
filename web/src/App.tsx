@@ -550,7 +550,9 @@ export default function App() {
           <button
             onClick={() => setAccountOpen(true)}
             aria-label={
-              user ? `Account for ${user.email}` : tr('Sign in to NINA', 'Entrar en NINA')
+              user
+                ? tr(`Account for ${user.email}`, `Cuenta de ${user.email}`)
+                : tr('Sign in to NINA', 'Entrar en NINA')
             }
           >
             <UserRound size={17} />

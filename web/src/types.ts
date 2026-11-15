@@ -113,7 +113,6 @@ export type Batch = {
   coverage_end: string
   coverage_basis: string
   spatial_scope: string
-  created_by: string | null
 }
 export type Status = {
   observations: number

@@ -89,7 +89,13 @@ def status():
         total = rows(c, 'SELECT count(*) AS observations, min(acquired) AS first_date, max(acquired) AS last_date, count(*) FILTER(WHERE department IS NULL) AS unassigned_department FROM observations')[0]
         sources = rows(c, '''SELECT source, platform, count(*) AS count, min(acquired)::DATE AS first_date,
             max(acquired)::DATE AS last_date FROM observations GROUP BY source,platform ORDER BY source,platform''')
-        batches = rows(c, 'SELECT * FROM batches ORDER BY source,coverage_start')
+        # `created_by` no se expone: `/api/status` es anónimo. Se comprueba la columna
+        # antes, porque `scripts/check_release.py` llama a `status()` sin pasar por
+        # `initialize()` y una base anterior a T1 no la tendría (nina/AGENTS.md: nunca
+        # romper bases existentes).
+        tiene_autor=c.execute("SELECT count(*) FROM information_schema.columns WHERE table_name='batches' AND column_name='created_by'").fetchone()[0]
+        proyeccion='* EXCLUDE (created_by)' if tiene_autor else '*'
+        batches = rows(c, f'SELECT {proyeccion} FROM batches ORDER BY source,coverage_start')
     inventory_path = DATA / 'inventory.json'
     inventory = json.loads(inventory_path.read_text()) if inventory_path.exists() else None
     return {**total, 'sources':sources,'batches':batches,'inventory':inventory,

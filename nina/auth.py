@@ -24,7 +24,9 @@ from .store import database, now, rows
 COOKIE = 'nina_session'
 SESSION_DAYS = 30
 MIN_PASSWORD = 8
-_PBKDF2_ROUNDS = 200_000
+_PBKDF2_ROUNDS = 600_000
+DEFAULT_DOWNLOADS_PER_HOUR = 60
+DEFAULT_EXPORT_ROWS = 1_000_000
 
 
 class Register(BaseModel):
@@ -156,7 +158,8 @@ def require(*roles: str):
     return dependency
 
 
-def attach(response: Response, token: str) -> None:
+def attach(response: Response, token: str, secure: bool = False) -> None:
+    """`secure` sigue el esquema de la petición: en local por http sigue funcionando."""
     response.set_cookie(
         COOKIE,
         token,
@@ -164,6 +167,7 @@ def attach(response: Response, token: str) -> None:
         httponly=True,
         samesite='lax',
         path='/',
+        secure=secure,
     )
 
 
@@ -184,8 +188,20 @@ def optional():
     return dependency
 
 
+def _env_int(name: str, default: int) -> int:
+    """Un valor mal escrito en `.env` cae al predeterminado, nunca a un 500."""
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
 def max_downloads_per_hour() -> int:
-    return max(1, int(os.getenv('MAX_DOWNLOADS_PER_HOUR', '60')))
+    return _env_int('MAX_DOWNLOADS_PER_HOUR', DEFAULT_DOWNLOADS_PER_HOUR)
+
+
+def max_export_rows() -> int:
+    return _env_int('MAX_EXPORT_ROWS', DEFAULT_EXPORT_ROWS)
 
 
 def record_download(user_id, analysis_id, kind, count, filters, dataset_version) -> None:

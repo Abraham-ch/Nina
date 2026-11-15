@@ -19,7 +19,7 @@ from starlette.background import BackgroundTask
 from pydantic import BaseModel,Field
 from .config import ROOT, DATA, RAW, FIRMS, SOURCES
 from .auth import Login, Register, attach, audit_entries, clear_session, detach
-from .auth import downloads_for, downloads_last_hour, max_downloads_per_hour, optional
+from .auth import downloads_for, downloads_last_hour, max_downloads_per_hour, max_export_rows, optional
 from .auth import record_audit, record_download, require
 from .auth import login as login_user, register as register_user
 from .store import initialize,database,rows,boundaries,status,now,code_revision,atomic_read
@@ -40,6 +40,10 @@ async def lifespan(app):
     POOL.shutdown(wait=False,cancel_futures=True)
 
 app=FastAPI(title='NINA · Atlas del fuego',version='0.3.0',lifespan=lifespan)
+
+# Las rutas con `require()` rechazan por rol; se documentan aquí porque FastAPI
+# solo añade 401/403 automáticamente cuando el medio es un esquema Security.
+PROTEGIDO={401:{'description':'Authentication required'},403:{'description':'The current role does not allow this operation'}}
 
 @app.middleware('http')
 async def local_origin(request: Request,call_next):
@@ -79,13 +83,13 @@ def submit(kind,function,with_progress=False):
     return {'id':identifier,'status':'queued'}
 
 @app.post('/api/auth/register')
-def register(payload:Register,response:Response):
+def register(payload:Register,request:Request,response:Response):
     """T1: registro. El primer usuario queda siempre como `admin`."""
-    user,token=register_user(payload);attach(response,token);return user
+    user,token=register_user(payload);attach(response,token,secure=request.url.scheme=='https');return user
 
 @app.post('/api/auth/login')
-def login(payload:Login,response:Response):
-    user,token=login_user(payload);attach(response,token);return user
+def login(payload:Login,request:Request,response:Response):
+    user,token=login_user(payload);attach(response,token,secure=request.url.scheme=='https');return user
 
 @app.post('/api/auth/logout')
 def logout(request:Request,response:Response):
@@ -95,12 +99,12 @@ def logout(request:Request,response:Response):
 def me(user:dict=Depends(require())):
     return user
 
-@app.get('/api/downloads')
+@app.get('/api/downloads',responses=PROTEGIDO)
 def downloads(user:dict=Depends(require('analista','admin'))):
     """T1: historial propio de descargas ("Mis descargas"). Cada usuario solo ve las suyas."""
     return downloads_for(user['id'])
 
-@app.get('/api/audit')
+@app.get('/api/audit',responses=PROTEGIDO)
 def audit(user:dict=Depends(require('admin'))):
     """T1: quién importó, sincronizó o entrenó, y cuándo. Visible solo para `admin`."""
     return audit_entries()
@@ -177,18 +181,22 @@ def csv_output(data):
         writer.writerow([("'"+str(x)) if isinstance(x,str) and x.startswith(('=','+','-','@')) else '' if x is None else x for x in row])
     return '\ufeff'+out.getvalue()
 
-@app.get('/api/analyses/{identifier}/exports/{kind}')
+@app.get('/api/analyses/{identifier}/exports/{kind}',responses=PROTEGIDO)
 @atomic_read
 def export(identifier:str,kind:Literal['series','detections','manifest','report'],user:dict=Depends(require('analista','admin'))):
     result=existing(identifier);s=Selection(**result['selection'])
+    tope_filas=max_export_rows()
     if downloads_last_hour(user['id'])>=max_downloads_per_hour():
         tope=max_downloads_per_hour()
         raise HTTPException(429,f'Alcanzaste el máximo de {tope} descargas por hora. Vuelve más tarde o pide aumentar el límite.')
     def guardar(count):
         record_download(user['id'],identifier,kind,count,result['selection'],result.get('data_revision'))
+    def demas_filas():
+        return HTTPException(413,f'La exportación supera el máximo de {tope_filas} filas. Reduce el período o pide aumentar el límite.')
     filas=0
     if kind=='series':
         filas=len(result['months'])
+        if filas>tope_filas: raise demas_filas()
         columns=list(result['months'][0]);payload=csv_output([columns]+[[r[k] for k in columns] for r in result['months']]);mime='text/csv';suffix='csv'
     elif kind=='detections':
         a,b=month_dates(s.selected_year,s.selected_month)
@@ -200,6 +208,7 @@ def export(identifier:str,kind:Literal['series','detections','manifest','report'
             with path.open('w',encoding='utf-8-sig',newline='') as stream:
                 writer=csv.writer(stream);writer.writerow(columns)
                 for record in iter_selected_rows(s,a,b):
+                    if filas>=tope_filas: raise demas_filas()
                     writer.writerow([("'"+str(x)) if isinstance(x,str) and x.startswith(('=','+','-','@')) else '' if x is None else x for x in (record[k] for k in columns)])
                     filas+=1
         except Exception:
@@ -229,7 +238,7 @@ def models():
     path=DATA/'models'/'benchmark.json'
     return json.loads(path.read_text()) if path.exists() else {'models':{},'scientific_harmonization_status':'pending_L2_opportunities'}
 
-@app.post('/api/models/train')
+@app.post('/api/models/train',responses=PROTEGIDO)
 def train_model(user:dict=Depends(require('admin'))):
     record_audit(user,'train','modelos','queued')
     return submit('exploratory_model',train)
@@ -244,7 +253,7 @@ def job(identifier:str):
     if not found: raise HTTPException(404,'Trabajo no encontrado')
     return found[0]
 
-@app.post('/api/import')
+@app.post('/api/import',responses=PROTEGIDO)
 async def upload(file:UploadFile=File(...),source:Literal['modis','viirs-snpp','viirs-jpss1','viirs-jpss2']=Form(...),coverage_start:date|None=Form(None),coverage_end:date|None=Form(None),spatial_scope:Literal['PER','world','custom']=Form('PER'),spatial_geometry:str|None=Form(None),user:dict=Depends(require('admin'))):
     if coverage_start and coverage_end and coverage_start>coverage_end: raise HTTPException(422,'Rango de cobertura inválido')
     try:
@@ -269,7 +278,7 @@ class Sync(BaseModel):
     start:date
     days:int=Field(default=1,ge=1,le=5)
 
-@app.post('/api/sync')
+@app.post('/api/sync',responses=PROTEGIDO)
 def sync(body:Sync,user:dict=Depends(require('admin'))):
     key=os.getenv('FIRMS_MAP_KEY')
     if not key: raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor para activar datos recientes.')
@@ -283,7 +292,7 @@ class Acquisition(BaseModel):
     scope:Literal['world','PER','custom']='world'
     geometry:dict|None=None
 
-@app.post('/api/acquisitions')
+@app.post('/api/acquisitions',responses=PROTEGIDO)
 def acquisition(body:Acquisition,user:dict=Depends(require('admin'))):
     if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
     try: Selection(scope=body.scope,geometry=body.geometry)
@@ -303,7 +312,7 @@ class ArchiveMonth(BaseModel):
     scope:Literal['world','PER','custom']='custom'
     geometry:dict|None=None
 
-@app.post('/api/acquisitions/month')
+@app.post('/api/acquisitions/month',responses=PROTEGIDO)
 def archive_month(body:ArchiveMonth,user:dict=Depends(require('admin'))):
     if not os.getenv('FIRMS_MAP_KEY'): raise HTTPException(409,'Configura FIRMS_MAP_KEY en .env y reinicia el servidor')
     try: Selection(scope=body.scope,geometry=body.geometry)
