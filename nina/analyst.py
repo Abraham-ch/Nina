@@ -1186,6 +1186,7 @@ TEXT: dict[str, dict[str, Any]] = {
         "events_check_weak": "The comparison with {registry} is not informative at this scale: {rate} % of records "
         "coincide with a detected event, but {chance} % would by chance.",
         "events_none": "No fire events were detected in {name} in {year}.",
+        "forest_gfw": "{name}, {year}: {loss} ha of tree-cover loss (Hansen/UMD, Global Forest Watch statistics), of which {fire} ha in 1 km cells where wildfire was the dominant driver.",
         "forest": "{name}, {year}: {loss} ha of tree-cover loss (Hansen/UMD), of which {fire} ha in cells with satellite "
         "fire activity in the same or the previous year.",
         "forest_last": "The Hansen/UMD layer ends in {last}.",
@@ -1312,6 +1313,7 @@ TEXT: dict[str, dict[str, Any]] = {
         "events_check_weak": "La comparación con {registry} no es informativa a esta escala: el {rate} % de los registros "
         "coincide con un evento detectado, pero el {chance} % lo haría por azar.",
         "events_none": "No se detectaron eventos de incendio en {name} en {year}.",
+        "forest_gfw": "{name}, {year}: {loss} ha de pérdida de cobertura arbórea (Hansen/UMD, estadísticas de Global Forest Watch), de las cuales {fire} ha en celdas de 1 km donde el incendio fue la causa dominante.",
         "forest": "{name}, {year}: {loss} ha de pérdida de cobertura arbórea (Hansen/UMD), de las cuales {fire} ha en "
         "celdas con actividad de fuego satelital el mismo año o el anterior.",
         "forest_last": "La capa de Hansen/UMD termina en {last}.",
@@ -1567,7 +1569,8 @@ class Composer:
         if row is None:
             parts.append(self.t["forest_last"].format(last=forest["last_year_available"]))
             row = forest["by_year"][-1]
-        parts.append(self.t["forest"].format(name=name, year=row["year"], loss=self.n(row["loss_ha"]),
+        template = self.t["forest_gfw"] if forest.get("source_kind") == "gfw_drivers" else self.t["forest"]
+        parts.append(template.format(name=name, year=row["year"], loss=self.n(row["loss_ha"]),
                                              fire=self.n(row["loss_ha_with_fire"])))
         if forest["forest_2000_ha"]:
             parts.append(self.t["forest_2000"].format(ha=self.n(forest["forest_2000_ha"])))
