@@ -48,6 +48,7 @@ import DataPanel from './DataPanel'
 import Dialog from './Dialog'
 import Experiment from './Experiment'
 import ExperimentalTag from './ExperimentalTag'
+import AnalystPanel from './AnalystPanel'
 import { DAY_COLORS, DAY_RANGES } from './dayColors'
 import { tr, locale, getLang } from './i18n'
 import LangSwitch from './LangSwitch'
@@ -159,7 +160,10 @@ export default function App() {
     [extraFilters, setExtraFilters] = useState(false),
     [tour, setTour] = useState(false),
     // Atlas points: by sensor, or by day of the last detection in the month (FIRMS "time since detection").
-    [colorBy, setColorBy] = useState<'sensor' | 'day'>('day')
+    [colorBy, setColorBy] = useState<'sensor' | 'day'>('day'),
+    // The analyst is a side panel: the map stays visible and its buttons act on it; the conversation
+    // survives closing the panel because the panel stays mounted.
+    [analystOpen, setAnalystOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null),
     [accountOpen, setAccountOpen] = useState(false),
     [readiness, setReadiness] = useState<Readiness | null>(null),
@@ -531,7 +535,6 @@ export default function App() {
       })
     } else change(keep)
     setTab(action.kind === 'open_calendar' ? 'calendar' : action.kind === 'open_priorities' ? 'priority' : 'atlas')
-    setModal('')
   }
   function applyGeometry(geometry: Geometry) {
     setPlaceId('custom')
@@ -549,7 +552,8 @@ export default function App() {
   function openAnalyst() {
     if (!isHarmonized && readiness?.available && selection.scope !== 'world') selectSource(`${HARMONIZED}:all`)
     setIntro(false)
-    setModal('explain')
+    setModal('')
+    setAnalystOpen(true)
   }
   function selectSource(value: string) {
     const [source, platform] = value.split(':')
@@ -1241,16 +1245,23 @@ export default function App() {
                 </span>
                 {tab === 'atlas' && (
                   <span className="color-by">
+                    {tr('Colour points by', 'Colorear puntos por')}
                     <button aria-pressed={colorBy === 'day'} onClick={() => setColorBy('day')}>
-                      {tr('Colour by day', 'Color por día')}
+                      {tr('day of detection', 'día de detección')}
                     </button>
                     <button aria-pressed={colorBy === 'sensor'} onClick={() => setColorBy('sensor')}>
-                      {tr('by sensor', 'por sensor')}
+                      {tr('sensor', 'sensor')}
                     </button>
                   </span>
                 )}
                 {tab === 'atlas' && colorBy === 'day' && (
-                  <span className="day-legend" aria-label={tr('Day of detection in the month', 'Día de detección en el mes')}>
+                  <span className="day-legend">
+                    <b>
+                      {tr(
+                        `Last detection in ${monthName} (day of the month):`,
+                        `Última detección en ${monthName.toLowerCase()} (día del mes):`,
+                      )}
+                    </b>
                     {DAY_COLORS.map((rgb, index) => (
                       <span key={rgb}>
                         <i style={{ background: `rgb(${rgb})` }} />
@@ -1462,6 +1473,20 @@ export default function App() {
         </div>
       </footer>
       {tour && <Tour onClose={() => setTour(false)} />}
+      <aside
+        className={`analyst-drawer${analystOpen ? ' open' : ''}`}
+        aria-hidden={!analystOpen}
+        aria-label={tr('Ask NINA', 'Pregúntale a NINA')}
+      >
+        <header>
+          <Sparkles size={16} />
+          <strong>{tr('Ask NINA', 'Pregúntale a NINA')}</strong>
+          <button onClick={() => setAnalystOpen(false)} aria-label={tr('Close the panel', 'Cerrar el panel')}>
+            <X size={18} />
+          </button>
+        </header>
+        <AnalystPanel context={reportBody()} onError={setError} onAction={runAnalystAction} />
+      </aside>
       <Dialog
         harmonized={isHarmonized}
         modal={modal}
