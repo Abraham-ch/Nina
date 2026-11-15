@@ -239,13 +239,86 @@ def territory_ubigeos(connection, territory: dict[str, Any]) -> list[str] | None
     """Districts covering the selected cells (Peru only)."""
     if territory["ubigeos"] is not None:
         return territory["ubigeos"]
+    # Another country's border cells can touch Peruvian districts: only Peruvian territories use INDECI.
     path = CONTEXT / "districts/cell_district.parquet"
-    if not path.exists():
+    if territory["country"] != "Peru" or not path.exists():
         return None
     rows = connection.execute(
         f"SELECT DISTINCT d.ubigeo FROM read_parquet('{path.as_posix()}') d JOIN selected_cells USING(cell)"
     ).fetchall()
     return sorted(r[0] for r in rows) or None
+
+
+# Registered fire emergencies/incidents outside Peru: point records in source/context/registries/<file>.parquet
+# (record_id, day, year, latitude, longitude, size_ha) with a manifest giving the registry name.
+POINT_REGISTRIES = {
+    "United States of America": "usa_nifc", "Brazil": "brazil_ibama_roi", "Indonesia": "indonesia_bnpb",
+    "Australia": "australia",
+}
+EVENT_VALIDATIONS = {"Peru": "events_peru_indeci", "United States of America": "events_usa_nifc",
+                     "Brazil": "events_brazil_ibama_roi", "Indonesia": "events_indonesia_bnpb",
+                     "Australia": "events_australia"}
+REGISTRY_LABELS = {
+    "Peru": {"en": "INDECI emergencies", "es": "Emergencias INDECI"},
+    "usa_nifc": {"en": "Reported wildfires ≥ 40 ha (NIFC)", "es": "Incendios reportados ≥ 40 ha (NIFC)"},
+    "brazil_ibama_roi": {"en": "Federal brigade fire records (IBAMA)", "es": "Incendios atendidos por brigadas (IBAMA)"},
+    "indonesia_bnpb": {"en": "BNPB forest and land fire records", "es": "Registros BNPB de incendios forestales"},
+    "australia": {"en": "Mapped bushfires (Geoscience Australia)", "es": "Incendios cartografiados (Geoscience Australia)"},
+}
+
+
+def cross_check(name: str, territory: dict[str, Any]) -> dict[str, Any] | None:
+    """National headline of a cross-source comparison, plus the territory's department when present."""
+    validation = validation_file(name)
+    if not validation or territory["country"] != "Peru" or "headline" not in validation:
+        return None
+    result = dict(validation["headline"])
+    code = (territory.get("ubigeo") or "")[:2]
+    department = next((d for d in validation.get("by_department", []) if code and d.get("department_code") == code), None)
+    if department:
+        result["department"] = department
+    return result
+
+
+def validation_file(name: str) -> dict[str, Any] | None:
+    path = CONTEXT / "validation" / f"{name}.json"
+    return load_json(path) if path.exists() else None
+
+
+def events_validation(territory: dict[str, Any]) -> dict[str, Any] | None:
+    """Headline of the events-vs-registry validation for the territory's country (and its department)."""
+    validation = validation_file(EVENT_VALIDATIONS.get(territory["country"], ""))
+    if not validation or "headline" not in validation:
+        return None
+    result = dict(validation["headline"])
+    # A match means little where fire is detected almost every week anyway (large or fire-prone units).
+    result["informative"] = (result["rate"] - result["chance_rate"]) >= 0.10 and result["chance_rate"] < 0.80
+    code = (territory.get("ubigeo") or "")[:2]
+    department = next((d for d in validation.get("by_department", []) if code and d.get("department_code") == code), None)
+    if department and department.get("records", 0) >= 20:
+        result["department"] = {k: department[k] for k in ("department", "records", "rate", "chance_rate") if k in department}
+    return result
+
+
+def point_registry(country: str):
+    """(columns as NumPy arrays, manifest) of the country's point registry, or (None, None)."""
+    import duckdb
+
+    name = POINT_REGISTRIES.get(country)
+    if not name:
+        return None, None
+    path = CONTEXT / "registries" / f"{name}.parquet"
+    if not path.exists():
+        return None, None
+    manifest_path = CONTEXT / "registries" / f"{name}.json"
+    manifest = load_json(manifest_path) if manifest_path.exists() else {"name": name}
+    minimum = float(manifest.get("min_size_ha") or 0)
+    where = f"WHERE coalesce(size_ha, 0) >= {minimum}" if minimum > 0 else ""
+    with duckdb.connect() as connection:
+        columns = connection.execute(
+            f"SELECT year, latitude, longitude, day::DATE AS day FROM read_parquet('{path.as_posix()}') {where}"
+        ).fetchnumpy()
+    return columns, manifest
 
 
 def section_events(connection, territory: dict[str, Any], year: int, language: str) -> dict[str, Any]:
@@ -314,10 +387,28 @@ def section_events(connection, territory: dict[str, Any], year: int, language: s
             if sample:
                 label = display_name({2: sample["department"], 4: sample["province"], 6: sample["district"]}[level])
             top.append({"code": code, "name": label, "events": events, "emergencies": emergencies})
+    registry_name, registry_label = None, None
+    if ubigeos and emergencies_path.exists():
+        registry_name = "INDECI/SINPAD forest-fire emergencies (registered emergencies, not every fire)"
+        registry_label = REGISTRY_LABELS["Peru"][language]
+    elif not ubigeos:
+        records, manifest = point_registry(territory["country"])
+        if records is not None and len(records["year"]):
+            import numpy as np
+
+            keep = np.ones(len(records["year"]), dtype=bool)
+            if territory["polygon"] is not None:
+                keep = shapely.contains_xy(territory["polygon"], records["longitude"], records["latitude"])
+            first, last = manifest.get("coverage") or [str(records["day"].min())[:10], str(records["day"].max())[:10]]
+            coverage = (date.fromisoformat(first[:10]), date.fromisoformat(last[:10]))
+            years_found, counts = np.unique(records["year"][keep], return_counts=True)
+            reported = {int(y): int(n) for y, n in zip(years_found, counts, strict=True)}
+            registry_name = manifest.get("source_name") or manifest.get("name")
+            registry_label = REGISTRY_LABELS.get(POINT_REGISTRIES[territory["country"]], {}).get(language, registry_name)
     years = sorted(set(detected) | set(reported))
     def emergencies_in(year_: int) -> int | None:
-        """0 is a real zero only inside the INDECI coverage; outside it there is no record."""
-        if not ubigeos or coverage is None or not coverage[0].year <= year_ <= coverage[1].year:
+        """0 is a real zero only inside the registry coverage; outside it there is no record."""
+        if registry_name is None or coverage is None or not coverage[0].year <= year_ <= coverage[1].year:
             return None
         return reported.get(year_, 0)
 
@@ -331,9 +422,10 @@ def section_events(connection, territory: dict[str, Any], year: int, language: s
         "status": "available",
         "rule": "events: harmonized cell-days joined across neighbouring cells and gaps of at most 2 days; "
         f"significant = at least {EVENT_MIN_CELL_DAYS} active cell-days; VIIRS era only (from 2012)",
-        "emergencies_source": "INDECI/SINPAD forest-fire emergencies (registered emergencies, not every fire)"
-        if ubigeos else None,
-        "emergencies_coverage": [str(coverage[0])[:10], str(coverage[1])[:10]] if coverage and ubigeos else None,
+        "emergencies_source": registry_name,
+        "emergencies_label": registry_label,
+        "emergencies_coverage": [str(coverage[0])[:10], str(coverage[1])[:10]] if coverage and registry_name else None,
+        "validation": events_validation(territory),
         "selected_year": selected,
         "by_year": by_year,
         "top_subdivisions": top,
@@ -383,8 +475,10 @@ def section_forest(connection, territory: dict[str, Any], year: int) -> dict[str
     by_year = [{"year": int(y), "loss_ha": float(t or 0), "loss_ha_with_fire": float(f or 0)} for y, t, f in rows]
     selected = next((r for r in by_year if r["year"] == year), None)
     manifest = load_json(CONTEXT / "forest_loss/manifest.json") if (CONTEXT / "forest_loss/manifest.json").exists() else {}
+    if not by_year:
+        return {"status": "not_available", "reason": "the forest loss layer covers Peru only"}
     return {
-        "status": "available" if by_year else "not_available",
+        "status": "available",
         "definition": "tree-cover loss (Hansen/UMD, canopy >= 30 % in 2000); 'with fire' = cell with "
         "satellite fire activity in the same or the previous year",
         "caveats": [
@@ -394,6 +488,7 @@ def section_forest(connection, territory: dict[str, Any], year: int) -> dict[str
             "Hansen's method changed in 2011–2012 (Landsat 8): do not read a trend across that break.",
         ],
         "validation": "Peru totals 2001–2024 within 0.3–0.6 % of Global Forest Watch (GADM, >30 % canopy)",
+        "cross_check": cross_check("forest_peru_geobosques", territory),
         "source_version": (manifest.get("source") or {}).get("version"),
         "forest_2000_ha": forest_2000,
         "selected_year": selected,
@@ -414,45 +509,72 @@ def section_climate(territory: dict[str, Any], year: int, month: int, connection
         return {"status": "not_available", "reason": "climate is available for Peruvian departments only"}
     # The drought flag is meaningless where the month is climatologically dry (coastal desert,
     # Andean dry season): below DRY_MONTH_MM of normal rainfall it is reported as not applicable.
+    # Rainfall comes from CHIRPS (satellite and gauges, 0.05 degree) where available: NASA POWER rainfall
+    # anomalies agree with it only moderately in Peru (validation file climate_peru_chirps). Air dryness
+    # (vapour-pressure deficit) always comes from NASA POWER.
+    chirps_path = CONTEXT / "climate/chirps_department_month.parquet"
+    chirps = (f"SELECT department_key, year, month, chirps_mm, chirps_z, chirps_percentile "
+              f"FROM read_parquet('{chirps_path.as_posix()}')" if chirps_path.exists() else
+              "SELECT NULL::VARCHAR AS department_key, NULL::BIGINT AS year, NULL::BIGINT AS month, "
+              "NULL::DOUBLE AS chirps_mm, NULL::DOUBLE AS chirps_z, NULL::DOUBLE AS chirps_percentile WHERE false")
     rows = connection.execute(
         f"""WITH c AS (SELECT * FROM read_parquet('{path.as_posix()}')
                 WHERE department_key IN (SELECT unnest(?::VARCHAR[]))),
+            h AS ({chirps}),
             normal AS (SELECT department_key, month, avg(precip_mm) AS normal_mm FROM c
+                WHERE year BETWEEN 2002 AND 2024 GROUP BY ALL),
+            normal_h AS (SELECT department_key, month, avg(chirps_mm) AS normal_h FROM h
                 WHERE year BETWEEN 2002 AND 2024 GROUP BY ALL)
         SELECT c.department, c.month, c.precip_mm::DOUBLE, c.precip_z::DOUBLE, c.precip_percentile::DOUBLE,
-            c.vpd_kpa::DOUBLE, c.vpd_z::DOUBLE, c.drought, n.normal_mm::DOUBLE
-        FROM c JOIN normal n USING(department_key, month) WHERE c.year=? ORDER BY c.department, c.month""",
+            c.vpd_kpa::DOUBLE, c.vpd_z::DOUBLE, c.drought, n.normal_mm::DOUBLE,
+            h.chirps_mm::DOUBLE, h.chirps_z::DOUBLE, h.chirps_percentile::DOUBLE, nh.normal_h::DOUBLE
+        FROM c JOIN normal n USING(department_key, month)
+        LEFT JOIN h ON h.department_key = c.department_key AND h.year = c.year AND h.month = c.month
+        LEFT JOIN normal_h nh ON nh.department_key = c.department_key AND nh.month = c.month
+        WHERE c.year=? ORDER BY c.department, c.month""",
         [keys, year],
     ).fetchall()
 
-    def drought_state(flag: bool | None, normal_mm: float) -> bool | None:
-        return None if normal_mm < DRY_MONTH_MM or flag is None else bool(flag)
+    def state(row: tuple) -> dict[str, Any]:
+        d, m, p, pz, pp, v, vz, dr, nm, hp, hz, hpp, hn = row
+        if hz is not None:
+            flag = hz <= -1 and vz is not None and vz >= 1
+            precip = {"precip_mm": hp, "precip_z": hz, "precip_percentile": hpp, "normal_precip_mm": hn,
+                      "precip_source": "CHIRPS v2.0"}
+        else:
+            flag = dr
+            precip = {"precip_mm": p, "precip_z": pz, "precip_percentile": pp, "normal_precip_mm": nm,
+                      "precip_source": "NASA POWER"}
+        normal = precip["normal_precip_mm"]
+        drought = None if normal is None or normal < DRY_MONTH_MM or flag is None else bool(flag)
+        return {"department": d, "month": m, **precip, "power_precip_z": pz, "vpd_kpa": v, "vpd_z": vz,
+                "drought": drought}
 
-    selected = [
-        {"department": d, "precip_mm": p, "precip_z": pz, "precip_percentile": pp, "normal_precip_mm": nm,
-         "vpd_kpa": v, "vpd_z": vz, "drought": drought_state(dr, nm)}
-        for d, m, p, pz, pp, v, vz, dr, nm in rows if m == month
-    ]
+    states = [state(row) for row in rows]
+    selected = [{k: s[k] for k in s if k != "month"} for s in states if s["month"] == month]
     season = {}
-    for d, m, _, pz, _, _, vz, dr, nm in rows:
-        if m in SEASON_MONTHS:
-            season.setdefault(d, []).append((pz, vz, drought_state(dr, nm)))
+    for s in states:
+        if s["month"] in SEASON_MONTHS:
+            season.setdefault(s["department"], []).append((s["precip_z"], s["vpd_z"], s["drought"]))
     season_summary = [
         {"department": d, "precip_z_mean": statistics.fmean(x[0] for x in v),
          "vpd_z_mean": statistics.fmean(x[1] for x in v), "drought_months": sum(bool(x[2]) for x in v if x[2] is not None)}
         for d, v in season.items()
     ]
     if not selected:
-        last = connection.execute(f"SELECT max(year) FROM read_parquet('{path.as_posix()}')").fetchone()[0]
+        last = connection.execute(f"SELECT max(year) FROM read_parquet('{path.as_posix()}')").fetchall()[0][0]
         return {"status": "not_available", "reason": f"climate layer covers 2001–{last}"}
+    rainfall = "CHIRPS v2.0 (satellite and gauges, 0.05 degree)" if chirps_path.exists() else "NASA POWER v2.10"
     return {
         "status": "available",
-        "source": "NASA POWER v2.10 (MERRA-2, ~0.5 degree), monthly; anomalies vs 2002–2024 climatology",
-        "note": "Context only: no causal attribution of fire activity. Drought = precipitation z <= -1 and "
+        "source": f"Rainfall: {rainfall}; air dryness: NASA POWER v2.10 (MERRA-2, ~0.5 degree); monthly anomalies vs "
+        "2002–2024 climatology",
+        "note": "Context only: no causal attribution of fire activity. Drought = rainfall z <= -1 and "
         "vapour-pressure deficit z >= +1; not applicable in months with under "
-        f"{DRY_MONTH_MM:.0f} mm of normal rainfall. Reanalysis rainfall: anomalies are more reliable than totals.",
+        f"{DRY_MONTH_MM:.0f} mm of normal rainfall.",
         "selected_month": selected,
         "season_jul_oct": season_summary,
+        "cross_check": cross_check("climate_peru_chirps", territory),
     }
 
 
@@ -559,6 +681,7 @@ TEXT = {
                         "no_trend": "no significant trend", "insufficient": "too few years"},
         "events": "{year}: {events} significant fire events detected by satellite; {emergencies} forest-fire emergencies registered by INDECI.",
         "events_only": "{year}: {events} significant fire events detected by satellite.",
+        "events_registry": "{year}: {events} significant fire events detected by satellite; {label}: {emergencies}.",
         "indeci_partial": " (INDECI records available through {through}.)",
         "forest": "Tree-cover loss {year}: {loss} ha, of which {fire} ha in cells with fire activity.",
         "climate": "Climate {period}: {drought} of {total} department(s) under drought conditions (low precipitation and high vapour-pressure deficit).",
@@ -573,6 +696,7 @@ TEXT = {
                         "no_trend": "ninguna tendencia significativa", "insufficient": "años insuficientes"},
         "events": "{year}: {events} evento(s) de incendio significativo(s) detectado(s) por satélite; {emergencies} emergencia(s) por incendio forestal registrada(s) por INDECI.",
         "events_only": "{year}: {events} evento(s) de incendio significativo(s) detectado(s) por satélite.",
+        "events_registry": "{year}: {events} evento(s) de incendio significativo(s) detectado(s) por satélite; {label}: {emergencies}.",
         "indeci_partial": " (registros de INDECI disponibles hasta {through}).",
         "forest": "Pérdida de cobertura arbórea {year}: {loss} ha, de las cuales {fire} ha en celdas con actividad de fuego.",
         "climate": "Clima {period}: {drought} de {total} departamento(s) en condición de sequía (baja precipitación y alto déficit de presión de vapor).",
@@ -638,6 +762,11 @@ def headline(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def summary(report: dict[str, Any]) -> list[str]:
+    return [text for _, text in summary_items(report)]
+
+
+def summary_items(report: dict[str, Any]) -> list[tuple[str, str]]:
+    """(topic, sentence) pairs: current, mtd, season, trend, events, forest, climate."""
     language = report["language"]
     t = TEXT[language]
 
@@ -649,47 +778,52 @@ def summary(report: dict[str, Any]) -> list[str]:
     lines = []
     month = s["current"]["month"]
     if month["value"] is not None and month["anomaly_percent"] is not None:
-        lines.append(t["current"].format(period=period, value=n(month["value"]), anomaly=n(month["anomaly_percent"], sign=True),
-                                         n=month["historical_n"], rank=month["rank"], rank_of=month["rank_of"]))
+        lines.append(("current", t["current"].format(period=period, value=n(month["value"]), anomaly=n(month["anomaly_percent"], sign=True),
+                                         n=month["historical_n"], rank=month["rank"], rank_of=month["rank_of"])))
     else:
-        lines.append(t["current_none"].format(period=period, status=month["status"]))
+        lines.append(("current", t["current_none"].format(period=period, status=month["status"])))
     mtd = s["current"]["month_to_date"]
     if mtd and mtd["value"] is not None and mtd["historical_median"] is not None:
-        lines.append(t["mtd"].format(days=mtd["valid_days"], through=mtd["through_day"], value=n(mtd["value"]),
-                                     median=n(mtd["historical_median"])))
+        lines.append(("mtd", t["mtd"].format(days=mtd["valid_days"], through=mtd["through_day"], value=n(mtd["value"]),
+                                     median=n(mtd["historical_median"]))))
     season = s["history"].get("season_jul_oct") or {}
     if season.get("anomaly_percent") is not None:
-        lines.append(t["season"].format(year=report["period"]["year"], rank=season["rank"],
-                                        rank_of=season["rank_of"], anomaly=n(season["anomaly_percent"], sign=True)))
+        lines.append(("season", t["season"].format(year=report["period"]["year"], rank=season["rank"],
+                                        rank_of=season["rank_of"], anomaly=n(season["anomaly_percent"], sign=True))))
     h = s["history"]
     if h.get("trend_period"):
         words = t["trend_words"]
-        lines.append(t["trend"].format(
+        lines.append(("trend", t["trend"].format(
             start=h["trend_period"][0], end=h["trend_period"][1],
             harm=words[h["trend_harmonized"]["direction"]].format(slope=n(h["trend_harmonized"]["slope_pct_per_year"] or 0, 1, True)),
             raw=words[h["trend_raw_pixels"]["direction"]].format(slope=n(h["trend_raw_pixels"]["slope_pct_per_year"] or 0, 1, True)),
-        ))
+        )))
     ev = s["events"]
     if ev["status"] == "available" and ev.get("selected_year"):
         row = ev["selected_year"]
         if row["emergencies"] is not None:
-            line = t["events"].format(year=row["year"], events=n(row["significant_events"]), emergencies=n(row["emergencies"]))
+            label = ev.get("emergencies_label")
+            if label and "INDECI" not in label:
+                line = t["events_registry"].format(year=row["year"], events=n(row["significant_events"]),
+                                                   emergencies=n(row["emergencies"]), label=label)
+            else:
+                line = t["events"].format(year=row["year"], events=n(row["significant_events"]), emergencies=n(row["emergencies"]))
             through = (ev.get("emergencies_coverage") or [None, None])[1]
             if through and int(through[:4]) == row["year"] and through[5:] != "12-31":
                 line += t["indeci_partial"].format(through=through)
-            lines.append(line)
+            lines.append(("events", line))
         else:
-            lines.append(t["events_only"].format(year=row["year"], events=n(row["significant_events"])))
+            lines.append(("events", t["events_only"].format(year=row["year"], events=n(row["significant_events"]))))
     fo = s["forest"]
     if fo["status"] == "available" and fo.get("selected_year"):
-        lines.append(t["forest"].format(year=fo["selected_year"]["year"], loss=n(fo["selected_year"]["loss_ha"]),
-                                        fire=n(fo["selected_year"]["loss_ha_with_fire"])))
+        lines.append(("forest", t["forest"].format(year=fo["selected_year"]["year"], loss=n(fo["selected_year"]["loss_ha"]),
+                                        fire=n(fo["selected_year"]["loss_ha_with_fire"]))))
     cl = s["climate"]
     if cl["status"] == "available":
         applicable = [r for r in cl["selected_month"] if r["drought"] is not None]
         if applicable:
-            lines.append(t["climate"].format(period=period, drought=sum(r["drought"] for r in applicable),
-                                             total=len(applicable)))
+            lines.append(("climate", t["climate"].format(period=period, drought=sum(r["drought"] for r in applicable),
+                                             total=len(applicable))))
     return lines
 
 
@@ -737,7 +871,8 @@ def build_report(request: ReportRequest) -> dict[str, Any]:
         "request": request.model_dump(),
     }
     report["headline"] = headline(report)
-    report["summary"] = summary(report)
+    report["summary_items"] = [{"topic": k, "text": v} for k, v in summary_items(report)]
+    report["summary"] = [item["text"] for item in report["summary_items"]]
     report["summary_mode"] = "template"
     cache = DATA / "jobs/reports"
     cache.mkdir(parents=True, exist_ok=True)
@@ -874,6 +1009,134 @@ def report_imagery(identifier: str, which: Literal["before", "after"]) -> FileRe
         temporary.write_bytes(content)
         temporary.replace(path)
     return FileResponse(path, media_type="image/jpeg")
+
+
+README = {
+    "en": """NINA · Territorial fire evidence report
+=======================================
+
+Territory: {territory} ({type})
+Period: {period}
+Dataset: {dataset} (method {method}, {status})
+Generated: {generated}
+Request: {request}
+
+Files
+- report.html: the report, self-contained (open it in a browser; print it to PDF).
+- report.json: every figure of the report, with its section and status.
+- monthly_activity.csv: harmonized monthly activity, anomaly and status (null = no comparable value, never zero).
+- annual_series.csv: annual harmonized activity and raw pixel counts (raw counts mix sensors; compare only the harmonized series across 2012).
+- events_by_year.csv: detected fire events (VIIRS era) and registered emergencies or incidents.
+- forest_loss_by_year.csv: Hansen/UMD tree-cover loss, total and in cells with fire activity.
+- climate_month.csv: NASA POWER precipitation and air dryness for the month (context only).
+
+Unit: VIIRS S-NPP-equivalent active cell-days (H3 resolution 7, about 5 km2). It measures detected activity,
+not the number of fires, burned area or damage. The harmonized product is {status}.
+
+Citation and disclaimer (NASA FIRMS)
+{legal}
+
+References
+{references}
+""",
+    "es": """NINA · Informe técnico territorial de actividad de fuego
+=========================================================
+
+Territorio: {territory} ({type})
+Período: {period}
+Conjunto de datos: {dataset} (método {method}, {status})
+Generado: {generated}
+Solicitud: {request}
+
+Archivos
+- report.html: el informe, autocontenido (ábrelo en un navegador; imprímelo como PDF).
+- report.json: todas las cifras del informe, con su sección y estado.
+- monthly_activity.csv: actividad mensual armonizada, anomalía y estado (null = sin valor comparable, nunca cero).
+- annual_series.csv: actividad anual armonizada y conteo crudo de píxeles (el conteo crudo mezcla sensores; a través de 2012 compara solo la serie armonizada).
+- events_by_year.csv: incendios detectados (era VIIRS) y emergencias o incidentes registrados.
+- forest_loss_by_year.csv: pérdida de cobertura arbórea Hansen/UMD, total y en celdas con actividad de fuego.
+- climate_month.csv: precipitación y sequedad del aire de NASA POWER en el mes (solo contexto).
+
+Unidad: celdas-día activas equivalentes a VIIRS S-NPP (H3 resolución 7, unos 5 km2). Mide actividad detectada, no
+número de incendios, área quemada ni daños. El producto armonizado es {status}.
+
+Cita y aviso (NASA FIRMS)
+{legal}
+
+Referencias
+{references}
+""",
+}
+
+
+def csv_bytes(rows: list[dict[str, Any]], columns: list[str]) -> bytes:
+    """UTF-8 with BOM (opens correctly in Excel); empty cells for missing values."""
+    import csv
+    import io
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({k: ("" if row.get(k) is None else row.get(k)) for k in columns})
+    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+
+@router.get("/api/reports/territorial/{identifier}/package")
+def report_package(identifier: str):
+    """ZIP with the self-contained report, its figures as JSON and CSV, and a README with the FIRMS citation."""
+    import base64
+    import io
+    import zipfile
+
+    from fastapi.responses import Response
+
+    from .report_document import LABELS, render
+
+    report = stored(identifier)
+    images: dict[str, str] = {}
+    if (report["sections"].get("imagery") or {}).get("status") == "available":
+        for which in ("before", "after"):
+            try:
+                served = report_imagery(identifier, which)
+                images[which] = "data:image/jpeg;base64," + base64.b64encode(open(served.path, "rb").read()).decode()
+            except HTTPException:
+                continue
+    s = report["sections"]
+    language = report["language"] if report["language"] in README else "en"
+    month_name = LABELS[language]["months_long"][report["period"]["month"] - 1]
+    status = ("validated" if report["validation_status"] == "validated" else "experimental") if language == "en" else (
+        "validado" if report["validation_status"] == "validated" else "experimental")
+    readme = README[language].format(
+        territory=report["territory"]["name"], type=report["territory"]["type"],
+        period=f"{month_name} {report['period']['year']}", dataset=report["dataset_id"],
+        method=report["method_version"], status=status, generated=report["generated_at"],
+        request=json.dumps({k: v for k, v in report["request"].items() if k != "geometry"}, ensure_ascii=False),
+        legal=report["legal"], references="\n".join(report["references"]))
+    files = {
+        "README.txt": readme.encode("utf-8"),
+        "report.html": render(report, embedded_images=images).encode("utf-8"),
+        "report.json": json.dumps(report, ensure_ascii=False, indent=1, default=str).encode("utf-8"),
+        "monthly_activity.csv": csv_bytes(s["current"].get("calendar") or [],
+                                          ["year", "month", "value", "status", "anomaly_percent"]),
+        "annual_series.csv": csv_bytes(s["history"].get("annual") or [], ["year", "harmonized", "raw_pixels"]),
+    }
+    if s["events"]["status"] == "available":
+        files["events_by_year.csv"] = csv_bytes(s["events"]["by_year"], ["year", "events", "significant_events", "emergencies"])
+    if s["forest"]["status"] == "available":
+        files["forest_loss_by_year.csv"] = csv_bytes(s["forest"]["by_year"], ["year", "loss_ha", "loss_ha_with_fire"])
+    if s["climate"]["status"] == "available":
+        files["climate_month.csv"] = csv_bytes(s["climate"]["selected_month"],
+                                               ["department", "precip_mm", "normal_precip_mm", "precip_percentile",
+                                                "precip_z", "vpd_kpa", "vpd_z", "drought"])
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    slug = "".join(c if c.isalnum() else "-" for c in report["territory"]["name"]).strip("-")[:40] or "territory"
+    filename = f"NINA_report_{slug}_{report['period']['year']}-{report['period']['month']:02d}.zip"
+    return Response(buffer.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.get("/api/reports/territorial/{identifier}/document", response_class=HTMLResponse)

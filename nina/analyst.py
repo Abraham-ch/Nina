@@ -4,7 +4,8 @@ One tool registry serves two engines:
 
 * ``deterministic`` (always available): recognises the intent, territory and period of the question,
   calls the tools itself and answers from bilingual templates;
-* ``claude`` (when ``ANTHROPIC_API_KEY`` is set): Claude plans the tool calls and writes the answer.
+* ``claude`` (when ``ANTHROPIC_API_KEY`` or ``CLAUDE_API_KEY`` is set): Claude plans the tool calls and
+  writes the answer.
 
 Every figure in an answer must appear in a tool result of the same question. A model draft that fails
 this check gets one rewrite; if it still fails, the deterministic answer is returned with a notice.
@@ -35,7 +36,7 @@ from .reports import MONTH_NAMES, SIGNIFICANCE, PriorityRequest, ReportRequest, 
 
 router = APIRouter()
 
-DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"  # tool use and short technical answers
 MAX_MODEL_STEPS = 10
 FREE_NUMBERS = {0.0, 1.0}  # "one of", "zero" and list markers never need a source
 CALCULATE_CONSTANTS = {100.0, 1000.0}  # allowed in derived figures (percentages, thousands)
@@ -402,7 +403,8 @@ def compact_events(events: dict[str, Any]) -> dict[str, Any]:
         return {"status": events["status"], "reason": events.get("reason")}
     return {"status": "available", "rule": events["rule"], "emergencies_source": events["emergencies_source"],
             "emergencies_coverage": events["emergencies_coverage"], "selected_year": events["selected_year"],
-            "by_year": events["by_year"], "top_subdivisions": events["top_subdivisions"][:8]}
+            "by_year": events["by_year"], "top_subdivisions": events["top_subdivisions"][:8],
+            "validation_against_registry": events.get("validation")}
 
 
 def compact_forest(forest: dict[str, Any]) -> dict[str, Any]:
@@ -412,6 +414,7 @@ def compact_forest(forest: dict[str, Any]) -> dict[str, Any]:
     selected = forest["selected_year"]
     return {"status": "available", "definition": forest["definition"], "caveats": forest["caveats"],
             "validation": forest["validation"], "source_version": forest["source_version"],
+            "cross_check": forest.get("cross_check"),
             "forest_2000_ha": rounded(forest["forest_2000_ha"], 0),
             "selected_year": {k: rounded(v, 0) for k, v in selected.items()} if selected else None,
             "last_year_available": forest["last_year_available"], "by_year": rows}
@@ -423,6 +426,7 @@ def compact_climate(climate: dict[str, Any]) -> dict[str, Any]:
     selected = [{k: rounded(v, 2) for k, v in row.items()} for row in climate["selected_month"]]
     applicable = [row for row in selected if row["drought"] is not None]
     return {"status": "available", "source": climate["source"], "note": climate["note"],
+            "cross_check": climate.get("cross_check"),
             "selected_month": selected,
             "departments_with_drought": sum(bool(row["drought"]) for row in applicable),
             "departments_where_drought_applies": len(applicable),
@@ -573,6 +577,7 @@ def link_summary(block: dict[str, Any], label: str) -> dict[str, Any]:
     strata = block.get("strata") or []
     return {
         "link": label, "method": "leave-one-year-out cross-validation",
+        "scope": "pooled over the evaluable country-biome strata of all calibration countries, not one country",
         "years": [block["years"][0], block["years"][-1]] if block.get("years") else None,
         "strata_evaluable": sum(bool(s.get("evaluable")) for s in strata),
         "strata_passing": sum(bool(s.get("passed")) for s in strata),
@@ -605,6 +610,13 @@ def run_validation_summary(session: Session, country: str | None) -> dict[str, A
         "cloud_free_opportunities": manifest.get("local_cloud_opportunities"),
         "static_mask": NOTES["static_mask"]["en"],
         "country": country,
+        "context_layers": {
+            "events_vs_registries": {name: (reports.validation_file(f) or {}).get("headline")
+                                     for name, f in reports.EVENT_VALIDATIONS.items()
+                                     if reports.validation_file(f)},
+            "forest_vs_geobosques": (reports.validation_file("forest_peru_geobosques") or {}).get("headline"),
+            "climate_vs_chirps": (reports.validation_file("climate_peru_chirps") or {}).get("headline"),
+        },
     }
     if not validation:
         output["details"] = "this dataset manifest carries no per-stratum validation details"
@@ -625,6 +637,7 @@ def run_validation_summary(session: Session, country: str | None) -> dict[str, A
             "years_within_10_percent": pct(s.get("years_within_10pct"), 0),
         } for s in rows]
     output["country_strata"] = strata
+    output["country_strata_scope"] = f"strata of {country} only (one row per link and biome)"
     output["country_strata_counts"] = counts
     output["outside_calibration_countries_2026"] = {
         key: {"relative_bias_percent": pct(block["metrics"]["relative_bias"], 2),
@@ -723,14 +736,18 @@ NOTES: dict[str, dict[str, str]] = {
     },
     "climate": {
         "source": "docs/DATA_SOURCES.md",
-        "en": "Climate context comes from NASA POWER (MERRA-2 reanalysis, about 0.5 degree), monthly by department: "
-        "precipitation and vapour-pressure deficit, as anomalies against 2002-2024. Drought means precipitation z of -1 "
-        "or less with vapour-pressure deficit z of +1 or more; it does not apply in months with under 10 mm of normal "
-        "rainfall. It is context only and does not attribute fire activity to the weather.",
-        "es": "El contexto climático proviene de NASA POWER (reanálisis MERRA-2, unos 0.5 grados), mensual por departamento: "
-        "precipitación y déficit de presión de vapor, como anomalías respecto de 2002-2024. Sequía significa z de "
-        "precipitación de -1 o menos con z de déficit de presión de vapor de +1 o más; no aplica en meses con menos de "
-        "10 mm de lluvia normal. Es solo contexto y no atribuye la actividad de fuego al clima.",
+        "en": "Climate context is monthly by department, as anomalies against 2002-2024: rainfall from CHIRPS v2.0 "
+        "(satellite and gauges, 0.05 degree) and vapour-pressure deficit from NASA POWER (MERRA-2 reanalysis, about 0.5 "
+        "degree). NASA POWER rainfall was replaced because its anomalies agree only moderately with CHIRPS in Peru "
+        "(median r 0.45). Drought means rainfall z of -1 or less with vapour-pressure deficit z of +1 or more; it does "
+        "not apply in months with under 10 mm of normal rainfall. It is context only and does not attribute fire "
+        "activity to the weather.",
+        "es": "El contexto climático es mensual por departamento, como anomalías respecto de 2002-2024: lluvia de CHIRPS "
+        "v2.0 (satélite y estaciones, 0.05 grados) y déficit de presión de vapor de NASA POWER (reanálisis MERRA-2, unos "
+        "0.5 grados). La lluvia de NASA POWER se reemplazó porque sus anomalías concuerdan solo moderadamente con CHIRPS "
+        "en el Perú (r mediano 0.45). Sequía significa z de lluvia de -1 o menos con z de déficit de presión de vapor de "
+        "+1 o más; no aplica en meses con menos de 10 mm de lluvia normal. Es solo contexto y no atribuye la actividad "
+        "de fuego al clima.",
     },
     "static_mask": {
         "source": "docs/BACKEND_STATUS.md",
@@ -849,18 +866,18 @@ def matcher(*fragments: str) -> re.Pattern[str]:
 
 
 SCOPE = {
-    "forecast": matcher("FORECAST", "PREDICT", "TOMORROW", r"NEXT (?:WEEK|MONTH|YEAR|SEASON)", r"WILL THERE BE",
-                        "WILL BURN", r"SPREAD\b", "PRONOSTIC", "PREDEC", "PREDIC", r"MANANA\b",
-                        r"PROXIM[OA] (?:SEMANA|MES|ANO|TEMPORADA)", r"HABRA\b", "VA A HABER", "SE QUEMARA", "PROPAGA"),
-    "cause": matcher(r"CAUSE", r"WHO (?:STARTED|STARTS|SET)", "ARSON", "INTENTIONAL", "BLAME", r"CAUSA",
-                     "PROVOCAD", "INTENCIONAL", r"CULPA", r"QUIEN (?:INICIO|PROVOCO|CAUSO)"),
     "operational": matcher("EVACUAT", "DISPATCH", r"DEPLOY", "BRIGADE", r"SEND (?:TEAMS|FIREFIGHTERS|RESOURCES|HELP)",
                            "FIREFIGHTER", "EVACU", "BRIGADA", "DESPLEG", "BOMBERO",
                            r"ENVIAR (?:EQUIPOS|RECURSOS|BRIGADAS|AYUDA)"),
+    "cause": matcher(r"CAUSE", r"WHO (?:STARTED|STARTS|SET)", "ARSON", "INTENTIONAL", "BLAME", r"CAUSA",
+                     "PROVOCAD", "INTENCIONAL", r"CULPA", r"QUIEN (?:INICIO|PROVOCO|CAUSO)"),
     "burned_area": matcher("BURNED AREA", "BURNT AREA", "AREA QUEMADA", "SUPERFICIE QUEMADA", "HECTAREAS QUEMADAS",
                            r"HA QUEMADAS"),
     "damage": matcher("CASUALT", r"DEATHS?\b", r"DEAD\b", "INJURED", "PEOPLE AFFECTED", r"ECONOMIC (?:LOSS|DAMAGE)",
                       "AFECTADOS", "DAMNIFICAD", "FALLECID", "MUERTOS", "HERIDOS", r"DANOS\b"),
+    "forecast": matcher("FORECAST", "PREDICT", "TOMORROW", r"NEXT (?:WEEK|MONTH|YEAR|SEASON)", r"WILL THERE BE",
+                        "WILL BURN", r"SPREAD\b", "PRONOSTIC", "PREDEC", "PREDIC", r"MANANA\b",
+                        r"PROXIM[OA] (?:SEMANA|MES|ANO|TEMPORADA)", r"HABRA\b", "VA A HABER", "SE QUEMARA", "PROPAGA"),
 }
 INTENTS = [
     ("compare", matcher(r"WHICH (?:DEPARTMENTS?|REGIONS?)", r"WHAT (?:DEPARTMENTS?|REGIONS?)", r"DEPARTMENTS\b",
@@ -989,6 +1006,12 @@ TEXT: dict[str, dict[str, Any]] = {
         "events_meaning": "A significant event is a cluster of at least 5 active cell-days; an INDECI emergency is an "
         "official record with damage assessment. They measure different things and neither validates the other.",
         "events_pre_viirs": "Fire events are computed for the VIIRS era only (from 2012); {year} is earlier.",
+        "events_check": "Measured agreement ({registry}, {start}–{end}): {rate} % of registered records coincide with a "
+        "detected event in the same place within ±3 days, against {chance} % by chance; only {share} % of significant "
+        "detected events were registered.",
+        "events_check_department": "In {department}: {rate} % of {records} records, against {chance} % by chance.",
+        "events_check_weak": "The comparison with {registry} is not informative at this scale: {rate} % of records "
+        "coincide with a detected event, but {chance} % would by chance.",
         "events_none": "No fire events were detected in {name} in {year}.",
         "forest": "{name}, {year}: {loss} ha of tree-cover loss (Hansen/UMD), of which {fire} ha in cells with satellite "
         "fire activity in the same or the previous year.",
@@ -997,7 +1020,7 @@ TEXT: dict[str, dict[str, Any]] = {
         "forest_caveats": "Tree-cover loss is not deforestation (it includes fire-killed forest and plantation harvest), "
         "'with fire' means co-location rather than causation, and trends should not be read across the 2011–2012 "
         "method change.",
-        "climate_intro": "Climate context for {month} {year} (NASA POWER, anomalies against 2002–2024):",
+        "climate_intro": "Climate context for {month} {year} (CHIRPS rainfall, NASA POWER air dryness; anomalies against 2002–2024):",
         "climate_row": "{department}: {precip} mm of precipitation (percentile {percentile}, z = {z}); vapour-pressure "
         "deficit z = {vz}; drought: {drought}.",
         "drought": {True: "yes", False: "no", None: "not applicable (climatologically dry month)"},
@@ -1105,6 +1128,12 @@ TEXT: dict[str, dict[str, Any]] = {
         "events_meaning": "Un evento significativo es un conglomerado de al menos 5 celdas-día activas; una emergencia de "
         "INDECI es un registro oficial con evaluación de daños. Miden cosas distintas y ninguna valida a la otra.",
         "events_pre_viirs": "Los eventos de incendio se calculan solo para la era VIIRS (desde 2012); {year} es anterior.",
+        "events_check": "Concordancia medida ({registry}, {start}–{end}): el {rate} % de los registros coincide con un "
+        "evento detectado en el mismo lugar dentro de ±3 días, frente a {chance} % por azar; solo el {share} % de los "
+        "eventos significativos detectados fue registrado.",
+        "events_check_department": "En {department}: {rate} % de {records} registros, frente a {chance} % por azar.",
+        "events_check_weak": "La comparación con {registry} no es informativa a esta escala: el {rate} % de los registros "
+        "coincide con un evento detectado, pero el {chance} % lo haría por azar.",
         "events_none": "No se detectaron eventos de incendio en {name} en {year}.",
         "forest": "{name}, {year}: {loss} ha de pérdida de cobertura arbórea (Hansen/UMD), de las cuales {fire} ha en "
         "celdas con actividad de fuego satelital el mismo año o el anterior.",
@@ -1113,7 +1142,7 @@ TEXT: dict[str, dict[str, Any]] = {
         "forest_caveats": "La pérdida de cobertura arbórea no es deforestación (incluye bosque muerto por fuego y cosecha "
         "de plantaciones), 'con fuego' indica coincidencia y no causalidad, y no deben leerse tendencias a través del "
         "cambio de método de 2011–2012.",
-        "climate_intro": "Contexto climático de {month} de {year} (NASA POWER, anomalías respecto de 2002–2024):",
+        "climate_intro": "Contexto climático de {month} de {year} (lluvia CHIRPS, sequedad del aire NASA POWER; anomalías respecto de 2002–2024):",
         "climate_row": "{department}: {precip} mm de precipitación (percentil {percentile}, z = {z}); déficit de presión "
         "de vapor z = {vz}; sequía: {drought}.",
         "drought": {True: "sí", False: "no", None: "no aplica (mes climatológicamente seco)"},
@@ -1311,6 +1340,20 @@ class Composer:
             parts.append(self.t["events_top"].format(items="; ".join(
                 f"{x['name']} ({self.n(x['events'])} / {self.n(x['emergencies'])})" for x in top)))
         parts.append(self.t["events_meaning"])
+        check = events.get("validation_against_registry")
+        if check and check.get("informative") is False:
+            parts.append(self.t["events_check_weak"].format(
+                registry=check["registry"], rate=self.n(100 * check["rate"]), chance=self.n(100 * check["chance_rate"])))
+        elif check:
+            parts.append(self.t["events_check"].format(
+                registry=check["registry"], start=check["period"][0][:4], end=check["period"][1][:4],
+                rate=self.n(100 * check["rate"]), chance=self.n(100 * check["chance_rate"]),
+                share=self.n(100 * check["registered_share"], 1)))
+            department = check.get("department")
+            if department:
+                parts.append(self.t["events_check_department"].format(
+                    department=reports.display_name(department["department"]), records=self.n(department["records"]),
+                    rate=self.n(100 * department["rate"]), chance=self.n(100 * department["chance_rate"])))
         return " ".join(parts)
 
     def forest(self, place, year, month, _scope) -> str:
@@ -1460,9 +1503,10 @@ def deterministic(session: Session) -> tuple[str, str]:
 
 # ---------------------------------------------------------------- Claude engine
 
-SYSTEM_PROMPT = """You are NINA's analyst. NINA is a harmonized record of satellite fire detections (NASA FIRMS: MODIS from 2000, VIIRS from 2012) for Peru and the world, with context layers for Peru: INEI districts, INDECI forest-fire emergencies, Hansen/UMD tree-cover loss and NASA POWER climate. Your readers are specialists: NASA scientists, emergency-management and forestry staff, and a hackathon jury. They ask demanding questions and expect precise, sourced and honest answers.
+SYSTEM_PROMPT = """You are NINA's analyst. NINA is a harmonized record of satellite fire detections (NASA FIRMS: MODIS from 2000, VIIRS from 2012) for Peru and the world, with context layers for Peru: INEI districts, INDECI forest-fire emergencies, Hansen/UMD tree-cover loss and climate (CHIRPS rainfall, NASA POWER air dryness). Your readers are specialists: NASA scientists, emergency-management and forestry staff, and a hackathon jury. They ask demanding questions and expect precise, sourced and honest answers.
 
 How to work
+- For questions about the method, definitions, data sources or NINA's limits, call method_notes and rely on it, so the answer rests on the documented text.
 - Obtain every figure from the tools. Call several tools when a question needs it, for example territory_profile together with validation_summary to judge whether a trend can be trusted. Use find_territory when a place name is ambiguous.
 - For a derived figure (ratio, difference, share), use the calculate tool. Every number in your answer must appear in a tool result of this conversation; answers are checked automatically and rejected otherwise.
 - "current" or null in a place argument means the territory on the user's screen; null year or month means the period on screen.
@@ -1472,11 +1516,12 @@ What the data mean
 - Raw pixel counts mix MODIS and VIIRS and jump in 2012; only the harmonized series is comparable across the whole period. Never add raw MODIS and VIIRS counts.
 - A gap or unavailable value is not zero: say "no comparable value".
 - The harmonized record is an experimental candidate. Say so when a conclusion depends on values before 2012 or on a stratum that fails validation.
+- Attribute every figure to its real scope: validation link metrics are pooled over all calibration countries; per-country figures are only those in the country's strata; department figures belong to the department.
 - Satellite fire events and INDECI emergencies (official records with damage assessment) measure different things; neither validates the other.
 - Tree-cover loss is not deforestation and "with fire" is co-location, not causation. Climate is context only.
 
 Limits
-- Do not forecast fires or their spread, attribute causes, estimate damage or casualties, or give operational instructions (evacuations, brigades, resource allocation). State that NINA cannot answer that, explain why in one sentence and offer what it can answer instead.
+- Do not forecast fires or their spread, attribute causes, estimate damage or casualties, or give operational instructions (evacuations, brigades, resource allocation). For such a question, start with a sentence stating that NINA cannot answer it, explain why in one sentence, and list up to three related questions NINA can answer. Do not call data tools or quote figures in that reply: historical figures placed next to a forecast or cause question read as an answer to it.
 - FIRMS data are not suitable for tactical or local-scale decisions.
 - If the tools cannot answer, say what is missing. Do not guess.
 
@@ -1497,10 +1542,15 @@ class ModelUnavailable(Exception):
         self.reason, self.unverified = reason, unverified or []
 
 
+def api_key() -> str | None:
+    """The Anthropic key from the server environment (ANTHROPIC_API_KEY, or CLAUDE_API_KEY as an alias)."""
+    return (os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY") or "").strip() or None
+
+
 def engine_name() -> Literal["deterministic", "claude"]:
     if os.getenv("NINA_ANALYST_ENGINE", "").strip().lower() == "deterministic":
         return "deterministic"
-    return "claude" if os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN") else "deterministic"
+    return "claude" if api_key() or os.getenv("ANTHROPIC_AUTH_TOKEN") else "deterministic"
 
 
 def model_name() -> str:
@@ -1525,8 +1575,12 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
     """(answer, model, figures checked); raises ModelUnavailable when no verified answer is obtained."""
     import anthropic
 
-    client = anthropic.Anthropic(timeout=120.0, max_retries=2)
+    key = api_key()
+    client = anthropic.Anthropic(timeout=120.0, max_retries=2, **({"api_key": key} if key else {}))
     messages = conversation(session.request)
+    # An out-of-scope question (forecast, cause, operations, burned area, damage) gets no data tools: the model can
+    # explain the limit with the method notes but cannot place figures next to the question.
+    tools = [TOOLS["method_notes"].schema()] if classify(session.request.question)[0] == "scope" else TOOL_SCHEMAS
     rewrites = 0
     try:
         for _ in range(MAX_MODEL_STEPS):
@@ -1534,7 +1588,7 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
                 model=model_name(),
                 max_tokens=16000,
                 system=SYSTEM_PROMPT,
-                tools=TOOL_SCHEMAS,
+                tools=tools,
                 messages=messages,
                 output_config={"effort": os.getenv("NINA_ANALYST_EFFORT") or "medium"},
                 cache_control={"type": "ephemeral"},

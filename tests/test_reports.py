@@ -152,3 +152,75 @@ def test_unknown_ubigeo_is_rejected(client):
     test_client, _ = client
     assert test_client.post("/api/reports/territorial", json={"ubigeo": "99", "year": 2025, "month": 9}).status_code == 422
     assert test_client.post("/api/reports/territorial", json={"ubigeo": "2", "year": 2025, "month": 9}).status_code == 422
+
+
+def test_package_is_self_contained_and_cites_firms(client):
+    import io
+    import zipfile
+
+    test_client, _ = client
+    report = test_client.post("/api/reports/territorial", json={"ubigeo": "25", "year": 2025, "month": 9}).json()
+    document = test_client.get(f"/api/reports/territorial/{report['id']}/document").text
+    assert "Download PDF" in document and f"/api/reports/territorial/{report['id']}/package" in document
+    response = test_client.get(f"/api/reports/territorial/{report['id']}/package")
+    assert response.status_code == 200 and response.headers["content-type"] == "application/zip"
+    assert "NINA_report_Ucayali_2025-09.zip" in response.headers["content-disposition"]
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    names = set(archive.namelist())
+    assert {"README.txt", "report.html", "report.json", "monthly_activity.csv", "annual_series.csv",
+            "events_by_year.csv", "forest_loss_by_year.csv", "climate_month.csv"} <= names
+    readme = archive.read("README.txt").decode("utf-8")
+    assert "FIRMS citation" in readme and report["dataset_id"] in readme and "never zero" in readme
+    monthly = archive.read("monthly_activity.csv").decode("utf-8")
+    assert monthly.startswith("﻿year,month,value,status,anomaly_percent")
+    assert "/package" not in archive.read("report.html").decode("utf-8")  # no links back to the server
+
+
+def test_point_registry_and_validation_are_used_outside_peru_districts(client, monkeypatch):
+    test_client, context = client
+    # Without the district layer the territory has no UBIGEO: registered records come from a point registry.
+    for path in [context / "districts/peru_districts.geojson", context / "districts/cell_district.parquet"]:
+        path.unlink()
+    reports.districts.cache_clear()
+    (context / "registries").mkdir()
+    duckdb.execute("""COPY (SELECT 'r' || y AS record_id, make_date(y, 9, 11) AS day, y AS year, 1.0 AS latitude,
+        1.0 AS longitude, 120.0 AS size_ha FROM range(2014, 2026) t(y)
+        UNION ALL SELECT 'outside', DATE '2025-09-11', 2025, 40.0, 40.0, 5.0) TO ? (FORMAT PARQUET)""",
+                   [str(context / "registries/test_registry.parquet")])
+    (context / "registries/test_registry.json").write_text(
+        json.dumps({"name": "test_registry", "source_name": "Test incident registry", "coverage": ["2014-01-01", "2025-12-31"]}),
+        encoding="utf-8")
+    (context / "validation").mkdir()
+    (context / "validation/events_test.json").write_text(json.dumps({"headline": {
+        "registry": "Test registry", "period": ["2014-01-01", "2025-12-31"], "records": 12, "window_days": [-3, 3],
+        "rate": 0.75, "chance_rate": 0.25, "registered_share": 0.5, "chance_share": 0.1}}), encoding="utf-8")
+    monkeypatch.setitem(reports.POINT_REGISTRIES, "Peru", "test_registry")
+    monkeypatch.setitem(reports.EVENT_VALIDATIONS, "Peru", "events_test")
+    report = test_client.post("/api/reports/territorial", json={"geometry": POLYGON, "place_name": "Area", "year": 2025,
+                                                                "month": 9}).json()
+    events = report["sections"]["events"]
+    assert events["emergencies_source"] == "Test incident registry"
+    assert events["selected_year"]["emergencies"] == 1  # the record outside the polygon is not counted
+    assert events["validation"]["rate"] == 0.75
+    document = test_client.get(f"/api/reports/territorial/{report['id']}/document").text
+    assert "Validation against Test registry" in document and "75 %" in document
+
+
+def test_other_countries_never_use_indeci(client):
+    test_client, _ = client
+    territory = {"type": "country", "name": "Brazil", "ubigeo": None, "country": "Brazil", "polygon": None, "ubigeos": None}
+    assert reports.territory_ubigeos(None, territory) is None  # no query: border cells cannot pull Peruvian records
+
+
+def test_chirps_rainfall_overrides_power_in_the_drought_flag(client):
+    test_client, context = client
+    # POWER says September 2025 was dry (z = -1.5, VPD z = +1.4); CHIRPS says rainfall was normal.
+    duckdb.execute("""COPY (SELECT 'UCAYALI' department_key, '25' code, y AS year, m AS month, 100.0 AS chirps_mm,
+        CASE WHEN y = 2025 AND m = 9 THEN 0.2 ELSE 0.0 END AS chirps_z, 50.0 AS chirps_percentile
+        FROM range(2002, 2026) a(y), range(1, 13) b(m)) TO ? (FORMAT PARQUET)""",
+                   [str(context / "climate/chirps_department_month.parquet")])
+    report = test_client.post("/api/reports/territorial", json={"ubigeo": "25", "year": 2025, "month": 9}).json()
+    (row,) = report["sections"]["climate"]["selected_month"]
+    assert row["precip_source"] == "CHIRPS v2.0" and row["precip_z"] == 0.2 and row["power_precip_z"] == -1.5
+    assert row["drought"] is False
+    assert "CHIRPS" in report["sections"]["climate"]["source"]

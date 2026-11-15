@@ -48,6 +48,21 @@ LABELS = {
         "imagery_note": "True colour with satellite thermal anomalies (red). Clouds or smoke may hide the ground; the yellow line is the territory.",
         "quality": "Quality and limitations", "sources": "Sources and reproducibility",
         "print": "Print / save as PDF",
+        "download_pdf": "Download PDF", "download_zip": "Download data (ZIP)",
+        "sections": {"events": "Fire events", "forest": "Tree-cover loss", "climate": "Climate"},
+        "reasons": {},
+        "pdf_hint": "In the print window choose “Save as PDF”.",
+        "key_points": "Key points",
+        "scope": "Historical context of detected fire activity. It does not forecast fires, attribute causes or replace field verification.",
+        "part_evidence": "Evidence", "part_annex": "Annex · detail",
+        "col_subdivision": "Subdivision", "col_events": "Detected fires", "col_emergencies": "Registered emergencies",
+        "events_validation": "Validation against {registry} ({start} to {end}): {rate} % of {records} registered records coincide with a detected event in the same place within ±3 days (chance level {chance} %); {share} % of significant detected events match a registered record (chance level {share_chance} %). Detected and registered fires measure different things.",
+        "events_validation_department": "In {department}: {rate} % of {records} records (chance level {chance} %).",
+        "events_validation_weak": "Validation against {registry} ({start} to {end}) is not informative at this scale: {rate} % of {records} records coincide with a detected event, but {chance} % would by chance, because the records are located only by administrative unit and fire is detected there almost every week.",
+        "forest_cross": "Cross-check with MINAM Geobosques (humid Amazon forest only, {start}–{end}): the ranking of departments agrees almost perfectly (Spearman {spatial_rho}); Hansen/UMD totals are {ratio} times Geobosques because they include all tree cover and fire-killed forest. Year-to-year national agreement is high in 2001–2011 (Spearman {rho_2001_2011}) but absent in 2012–2024 ({rho_2012_2024}), after Hansen's method change: use this layer to compare places, not to read national trends after 2012.",
+        "forest_cross_department": "{department}: Spearman {rho}.",
+        "climate_cross": "Why CHIRPS for rainfall: over {start}–{end}, NASA POWER rainfall anomalies agree only moderately with CHIRPS (r = {r}, median of {departments} departments) and CHIRPS confirms {confirmed} % of the POWER drought months, so the drought flag uses CHIRPS rainfall (gauge-corrected, finer grid) and POWER only for air dryness.",
+        "climate_cross_department": "{department}: r = {r}.",
         "q_support": "{v} of {e} region-days with valid data; {f} filled from NOAA-20; unvalidated share {u}.",
         "q_unit": "Unit: active H3 cells (~5 km²) per day on a VIIRS S-NPP-equivalent scale; not a count of fires or burned area.",
         "forest_definition": "Tree-cover loss (Hansen/UMD, canopy ≥ 30 % in 2000). 'In cells with fire activity': cell with satellite fire activity in the same or the previous year.",
@@ -55,7 +70,7 @@ LABELS = {
         "forest_caveats": ["Tree-cover loss is not deforestation: it includes fire-killed forest and plantation harvest.",
                            "Loss in cells with fire shows co-location, not causation.",
                            "The Hansen method changed in 2011–2012: do not read a trend across that break."],
-        "climate_source": "NASA POWER (MERRA-2, ~50 km), monthly anomalies against 2002–2024.",
+        "climate_source": "Rainfall: CHIRPS v2.0 (satellite and gauges, ~5 km); air dryness: NASA POWER (MERRA-2, ~50 km). Monthly anomalies against 2002–2024.",
         "climate_note": "Context only, not a cause. Drought: rainfall z ≤ −1 and air dryness (VPD) z ≥ +1; not applicable where the month is normally dry. Rainfall percentile: 0 = driest of the 23 reference years.",
         "typical_error": "Year-to-year error of the MODIS-era values: about ±10 % (median 6 % in validated strata).",
         "months_short": ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"],
@@ -98,6 +113,25 @@ LABELS = {
         "imagery_note": "Color verdadero con anomalías térmicas satelitales (rojo). Nubes o humo pueden ocultar el suelo; la línea amarilla es el territorio.",
         "quality": "Calidad y limitaciones", "sources": "Fuentes y reproducibilidad",
         "print": "Imprimir / guardar como PDF",
+        "download_pdf": "Descargar PDF", "download_zip": "Descargar datos (ZIP)",
+        "sections": {"events": "Incendios detectados", "forest": "Pérdida de cobertura arbórea", "climate": "Clima"},
+        "reasons": {"climate is available for Peruvian departments only": "disponible solo para departamentos del Perú",
+                    "the forest loss layer covers Peru only": "la capa de pérdida forestal cubre solo el Perú",
+                    "fire event layer not built": "capa de incendios detectados no construida",
+                    "forest loss layer not built": "capa de pérdida forestal no construida",
+                    "climate layer not built": "capa climática no construida"},
+        "pdf_hint": "En la ventana de impresión elige «Guardar como PDF».",
+        "key_points": "Puntos clave",
+        "scope": "Contexto histórico de la actividad de fuego detectada. No pronostica incendios, no atribuye causas ni reemplaza la verificación en campo.",
+        "part_evidence": "Evidencia", "part_annex": "Anexo · detalle",
+        "col_subdivision": "Subdivisión", "col_events": "Incendios detectados", "col_emergencies": "Emergencias registradas",
+        "events_validation": "Validación con {registry} ({start} a {end}): el {rate} % de {records} registros coincide con un incendio detectado en el mismo lugar dentro de ±3 días (azar: {chance} %); el {share} % de los incendios significativos detectados coincide con un registro (azar: {share_chance} %). Los incendios detectados y los registrados miden cosas distintas.",
+        "events_validation_department": "En {department}: {rate} % de {records} registros (azar: {chance} %).",
+        "events_validation_weak": "La validación con {registry} ({start} a {end}) no es informativa a esta escala: el {rate} % de {records} registros coincide con un incendio detectado, pero el {chance} % lo haría por azar, porque los registros solo se ubican por unidad administrativa y allí se detecta fuego casi todas las semanas.",
+        "forest_cross": "Contraste con MINAM Geobosques (solo bosque húmedo amazónico, {start}–{end}): el orden de los departamentos coincide casi por completo (Spearman {spatial_rho}); los totales de Hansen/UMD son {ratio} veces los de Geobosques porque incluyen toda la cobertura arbórea y el bosque muerto por fuego. La concordancia interanual nacional es alta en 2001–2011 (Spearman {rho_2001_2011}) pero desaparece en 2012–2024 ({rho_2012_2024}), tras el cambio de método de Hansen: usa esta capa para comparar lugares, no para leer tendencias nacionales después de 2012.",
+        "forest_cross_department": "{department}: Spearman {rho}.",
+        "climate_cross": "Por qué CHIRPS para la lluvia: en {start}–{end}, las anomalías de lluvia de NASA POWER concuerdan solo moderadamente con CHIRPS (r = {r}, mediana de {departments} departamentos) y CHIRPS confirma el {confirmed} % de los meses de sequía de POWER; por eso la señal de sequía usa la lluvia de CHIRPS (corregida con estaciones, malla más fina) y POWER solo para la sequedad del aire.",
+        "climate_cross_department": "{department}: r = {r}.",
         "q_support": "{v} de {e} días-región con datos válidos; {f} completados con NOAA-20; proporción sin validar {u}.",
         "q_unit": "Unidad: celdas H3 activas (~5 km²) por día en escala equivalente a VIIRS S-NPP; no es número de incendios ni área quemada.",
         "forest_definition": "Pérdida de cobertura arbórea (Hansen/UMD, dosel ≥ 30 % en 2000). 'En celdas con actividad de fuego': celda con actividad de fuego satelital el mismo año o el anterior.",
@@ -105,7 +139,7 @@ LABELS = {
         "forest_caveats": ["La pérdida de cobertura arbórea no es deforestación: incluye bosque muerto por fuego y cosecha de plantaciones.",
                            "La pérdida en celdas con fuego indica coincidencia, no causa.",
                            "El método de Hansen cambió en 2011–2012: no leer una tendencia a través de ese quiebre."],
-        "climate_source": "NASA POWER (MERRA-2, ~50 km), anomalías mensuales respecto de 2002–2024.",
+        "climate_source": "Lluvia: CHIRPS v2.0 (satélite y estaciones, ~5 km); sequedad del aire: NASA POWER (MERRA-2, ~50 km). Anomalías mensuales respecto de 2002–2024.",
         "climate_note": "Solo contexto, no causa. Sequía: lluvia z ≤ −1 y sequedad del aire (DPV) z ≥ +1; no aplica en meses normalmente secos. Percentil de lluvia: 0 = el más seco de los 23 años de referencia.",
         "typical_error": "Error interanual de los valores de la era MODIS: alrededor de ±10 % (mediana de 6 % en estratos validados).",
         "months_short": ["E", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"],
@@ -132,10 +166,10 @@ h1 { font-size: 22pt; line-height: 1.1; margin: 1mm 0 1mm; }
             border-left: 5px solid #94a3b8; background: #f8fafc; }
 .headline.record, .headline.above { border-color: #b2182b; background: #fef2f2; }
 .headline.below { border-color: #2166ac; background: #eff6ff; }
-.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 0 0 4mm; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin: 0 0 4mm; }
 .card { border: 1px solid #e3e8ee; border-radius: 4px; padding: 2.5mm 3mm; break-inside: avoid; }
 .card h3 { font-size: 7.5pt; font-weight: 600; color: #5b6776; margin: 0 0 1mm; text-transform: uppercase; letter-spacing: .03em; }
-.card .big { font-size: 17pt; font-weight: 700; line-height: 1.15; }
+.card .big { font-size: 15pt; font-weight: 700; line-height: 1.15; }
 .card .small { font-size: 8.5pt; color: #5b6776; margin-top: .5mm; }
 .chip { display: inline-block; font-size: 9pt; font-weight: 700; padding: 0 1.5mm; border-radius: 3px; color: #fff; vertical-align: 3px; }
 .chip.up { background: #b2182b; } .chip.down { background: #2166ac; } .chip.flat { background: #64748b; }
@@ -160,9 +194,18 @@ th { color: #5b6776; font-weight: 600; font-size: 8pt; }
 .box { border: 1px solid #e3e8ee; border-radius: 4px; padding: 2mm 3mm; font-size: 8.5pt; color: #374151; }
 .box ul { margin: 1mm 0 0 4mm; padding: 0; }
 footer { margin-top: 4mm; font-size: 7.5pt; color: #5b6776; border-top: 1px solid #e3e8ee; padding-top: 2mm; }
-.toolbar { text-align: right; margin: 0 0 3mm; }
-.toolbar button { font: inherit; padding: 1.5mm 4mm; border: 1px solid #c2410c; background: #c2410c; color: #fff;
-                  border-radius: 3px; cursor: pointer; }
+.toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 3mm; margin: 0 0 3mm; flex-wrap: wrap; }
+.toolbar button, .toolbar a { font: inherit; font-size: 9.5pt; padding: 1.5mm 4mm; border: 1px solid #c2410c;
+                  background: #c2410c; color: #fff; border-radius: 3px; cursor: pointer; text-decoration: none; }
+.toolbar a { background: #fff; color: #c2410c; }
+.toolbar small { color: #5b6776; font-size: 8pt; }
+.points { border: 1px solid #e3e8ee; border-radius: 4px; padding: 2.5mm 4mm; margin: 2mm 0 3mm; break-inside: avoid; }
+.points h2 { margin: 0 0 1mm; font-size: 10.5pt; }
+.points ul { margin: 0 0 0 4mm; padding: 0; } .points li { margin: .8mm 0; }
+.scope { font-size: 8pt; color: #5b6776; margin: 0 0 2mm; }
+h2.part { font-size: 9pt; letter-spacing: .06em; text-transform: uppercase; color: #c2410c; border-bottom: 1px solid #fdba74;
+          padding-bottom: 1mm; margin: 0 0 3mm; }
+.check { font-size: 8pt; color: #1f4d2b; background: #f0fdf4; border-left: 3px solid #4d7c0f; padding: 1.2mm 2.5mm; margin: 1.5mm 0 0; }
 @media print { .toolbar { display: none; } body { padding: 0; } }
 """
 
@@ -300,29 +343,6 @@ def cards(doc: Doc) -> str:
         out.append(card(t["card_events"], f'{doc.n(events["significant_events"])} / {doc.n(emergencies)}', esc(small)))
     else:
         out.append(card(t["card_events"], esc(t["na"])))
-    forest = s["forest"] if s["forest"]["status"] == "available" else None
-    row = None
-    if forest and forest["by_year"]:
-        row = forest.get("selected_year") or forest["by_year"][-1]
-    if row:
-        share = 100 * row["loss_ha_with_fire"] / row["loss_ha"] if row["loss_ha"] else None
-        out.append(card(f'{t["card_forest"]} {row["year"]}', f'{doc.n(row["loss_ha"])} ha',
-                        esc(t["with_fire"].format(v=doc.n(share))) if share is not None else ""))
-    else:
-        out.append(card(t["card_forest"], esc(t["na"])))
-    climate = s["climate"]["selected_month"] if s["climate"]["status"] == "available" else None
-    if climate:
-        applicable = [c for c in climate if c["drought"] is not None]
-        if not applicable:
-            out.append(card(t["card_drought"], esc(t["drought_na"])))
-        else:
-            yes = sum(c["drought"] for c in applicable)
-            big = (t["drought_yes"] + (f" ({yes}/{len(applicable)})" if len(applicable) > 1 else "")) if yes else t["drought_no"]
-            pct = applicable[0].get("precip_percentile") if len(applicable) == 1 else None
-            out.append(card(t["card_drought"], esc(big),
-                            esc(t["precip_pct"].format(v=doc.n(pct))) if pct is not None else ""))
-    else:
-        out.append(card(t["card_drought"], esc(t["na"])))
     return '<div class="cards">' + "".join(out) + "</div>"
 
 
@@ -480,31 +500,86 @@ def events_chart(doc: Doc) -> str:
     out.append("</svg>")
     legend = f'<div class="legend"><span><i style="background:{FIRE}"></i>{esc(t["legend_events"])}</span>'
     if has_emergencies:
-        legend += f'<span><i style="background:{BLUE}"></i>{esc(t["legend_emergencies"])}</span>'
+        label = events.get("emergencies_label") or t["legend_emergencies"]
+        legend += f'<span><i style="background:{BLUE}"></i>{esc(label)}</span>'
     legend += "</div>"
-    return (f'<section><h2>{esc(t["chart_events"])}</h2><p class="note">{esc(t["chart_events_note"])}</p>'
-            f'{"".join(out)}{legend}</section>{subdivision_chart(doc)}')
+    note = t["chart_events_note"] if events.get("emergencies_label") in (None, t["legend_emergencies"]) else \
+        t["chart_events_note"].split(". ")[0] + "."
+    return (f'<section><h2>{esc(t["chart_events"])}</h2><p class="note">{esc(note)}</p>'
+            f'{"".join(out)}{legend}{events_check(doc)}</section>')
 
 
-def subdivision_chart(doc: Doc) -> str:
-    t, rows = doc.t, (doc.r["sections"]["events"].get("top_subdivisions") or [])[:8]
+def pct(value: float | None, digits: int = 0) -> str:
+    return "—" if value is None else f"{100 * value:.{digits}f}"
+
+
+def fill(template: str, **fields: Any) -> str:
+    try:
+        return template.format(**fields)
+    except (KeyError, IndexError, ValueError):
+        return ""
+
+
+def events_check(doc: Doc) -> str:
+    t, check = doc.t, doc.r["sections"]["events"].get("validation")
+    if not check:
+        return ""
+    start, end = check["period"]
+    template = t["events_validation"] if check.get("informative", True) else t["events_validation_weak"]
+    line = fill(template, registry=check["registry"], start=start, end=end, rate=pct(check["rate"]),
+                records=doc.n(check["records"]), chance=pct(check["chance_rate"]), share=pct(check["registered_share"]),
+                share_chance=pct(check["chance_share"]))
+    department = check.get("department")
+    if department:
+        line += " " + fill(t["events_validation_department"], department=department["department"].title(),
+                           rate=pct(department["rate"]), records=doc.n(department["records"]),
+                           chance=pct(department.get("chance_rate")))
+    return f'<p class="check">{esc(line)}</p>' if line.strip() else ""
+
+
+def cross_check(doc: Doc, section: str, key: str) -> str:
+    t, check = doc.t, doc.r["sections"][section].get("cross_check")
+    if not check:
+        return ""
+    fields = {k: (doc.n(v, 2) if isinstance(v, float) else v) for k, v in check.items() if k != "department"}
+    for share in ("agreement", "confirmed_share"):
+        if isinstance(check.get(share), float):
+            fields["confirmed" if share == "confirmed_share" else share] = pct(check[share])
+    if "period" in check:
+        fields["start"], fields["end"] = check["period"]
+    line = fill(t[key], **fields)
+    department = check.get("department")
+    if department and line:
+        values = {k: (doc.n(v, 2) if isinstance(v, float) else v) for k, v in department.items()}
+        values["department"] = str(department.get("department", "")).title()
+        if key != "climate_cross":  # the climate note explains a method choice; per-department r adds noise
+            line += " " + fill(t[key + "_department"], **values)
+    return f'<p class="check">{esc(line)}</p>' if line.strip() else ""
+
+
+def subdivision_table(doc: Doc) -> str:
+    t, events = doc.t, doc.r["sections"]["events"]
+    rows = (events.get("top_subdivisions") or [])[:8]
     if len(rows) < 2:
         return ""
-    top = nice_max(max(max(r["events"], r["emergencies"]) for r in rows))
-    row_h, x0, x1 = 28, 200, 630
-    height = row_h * len(rows) + 8
-    out = [f'<svg viewBox="0 0 680 {height}" role="img" aria-label="subdivisions">']
-    for i, r in enumerate(rows):
-        y = 4 + row_h * i
-        out.append(f'<text x="{x0 - 8}" y="{y + 16}" text-anchor="end" font-size="11" fill="{INK}">{esc(r["name"])}</text>')
-        w1 = (x1 - x0) * r["events"] / top
-        w2 = (x1 - x0) * r["emergencies"] / top
-        out.append(f'<rect x="{x0}" y="{y + 2}" width="{max(w1, 1):.1f}" height="10" fill="{FIRE}" rx="1"/>'
-                   f'<text x="{x0 + w1 + 5:.1f}" y="{y + 11}" font-size="9.5">{doc.n(r["events"])}</text>')
-        out.append(f'<rect x="{x0}" y="{y + 14}" width="{max(w2, 1):.1f}" height="10" fill="{BLUE}" rx="1"/>'
-                   f'<text x="{x0 + w2 + 5:.1f}" y="{y + 23}" font-size="9.5">{doc.n(r["emergencies"])}</text>')
-    out.append("</svg>")
-    return f'<section><h2>{esc(t["chart_subdivisions"].format(y=doc.r["period"]["year"]))}</h2>{"".join(out)}</section>'
+    label = events.get("emergencies_label") or t["col_emergencies"]
+    body = "".join(f'<tr><td>{esc(r["name"])}</td><td>{doc.n(r["events"])}</td><td>{doc.n(r["emergencies"])}</td></tr>'
+                   for r in rows)
+    return (f'<section><h2>{esc(t["chart_subdivisions"].format(y=doc.r["period"]["year"]))}</h2>'
+            f'<table><tr><th>{esc(t["col_subdivision"])}</th><th>{esc(t["col_events"])}</th><th>{esc(label)}</th></tr>'
+            f'{body}</table></section>')
+
+
+def key_points(doc: Doc) -> str:
+    items = doc.r.get("summary_items")
+    if items:
+        lines = [i["text"] for i in items if i["topic"] in {"mtd", "trend", "events", "forest", "climate"}]
+    else:
+        lines = doc.r.get("summary", [])[2:]
+    if not lines:
+        return ""
+    return (f'<div class="points"><h2>{esc(doc.t["key_points"])}</h2><ul>'
+            + "".join(f"<li>{esc(line)}</li>" for line in lines) + "</ul></div>")
 
 
 def forest_chart(doc: Doc) -> str:
@@ -539,7 +614,7 @@ def forest_chart(doc: Doc) -> str:
               f'<span><i style="background:#fdba74"></i>{esc(t["legend_other"])}</span></div>')
     caveats = "".join(f"<li>{esc(c)}</li>" for c in t["forest_caveats"])
     return (f'<section><h2>{esc(t["chart_forest"])} (ha)</h2><p class="note">{esc(t["forest_definition"])} '
-            f'{esc(t["forest_validation"])}</p>{"".join(out)}{legend}'
+            f'{esc(t["forest_validation"])}</p>{"".join(out)}{legend}{cross_check(doc, "forest", "forest_cross")}'
             f'<div class="note"><ul style="margin:1mm 0 0 4mm;padding:0">{caveats}</ul></div></section>')
 
 
@@ -566,10 +641,10 @@ def climate_table(doc: Doc) -> str:
     return (f'<section><h2>{esc(t["chart_climate"])} · {esc(month)} {doc.r["period"]["year"]}</h2>'
             f'<p class="note">{esc(t["climate_source"])} {esc(t["climate_note"])}</p>'
             f'<table><tr><th>{esc(t["col_department"])}</th><th>{esc(t["col_precip"])}</th><th>{esc(t["col_vpd"])}</th>'
-            f'<th>{esc(t["col_drought"])}</th></tr>{body}</table></section>')
+            f'<th>{esc(t["col_drought"])}</th></tr>{body}</table>{cross_check(doc, "climate", "climate_cross")}</section>')
 
 
-def imagery(doc: Doc) -> str:
+def imagery(doc: Doc, embedded: dict[str, str] | None = None) -> str:
     t, image = doc.t, doc.r["sections"].get("imagery") or {}
     if image.get("status") != "available":
         return ""
@@ -586,8 +661,14 @@ def imagery(doc: Doc) -> str:
     for which in ("before", "after"):
         shot = image[which]
         src = f'/api/reports/territorial/{esc(doc.r["id"])}/imagery/{which}'
+        if embedded is not None:
+            if which not in embedded:
+                continue
+            src = embedded[which]
         figures.append(f'<figure><div class="frame"><img src="{src}" alt="{esc(shot["date"])}">{overlay}</div>'
                        f'<figcaption>{esc(t[which].format(d=shot["date"]))}</figcaption></figure>')
+    if not figures:
+        return ""
     return (f'<section><h2>{esc(t["chart_imagery"])}</h2><div class="images">{"".join(figures)}</div>'
             f'<p class="note">{esc(t["imagery_note"])}</p></section>')
 
@@ -603,12 +684,17 @@ def quality(doc: Doc) -> str:
     for section in ("events", "forest", "climate"):
         reason = doc.r["sections"][section].get("reason")
         if doc.r["sections"][section]["status"] != "available" and reason:
-            items.append(f"{section}: {reason}.")
+            name = t["sections"].get(section, section)
+            items.append(f"{name}: {t['reasons'].get(reason, reason)}.")
     return (f'<section><h2>{esc(t["quality"])}</h2><div class="box"><ul>'
             + "".join(f"<li>{esc(i)}</li>" for i in items) + "</ul></div></section>")
 
 
-def render(report: dict[str, Any]) -> str:
+def render(report: dict[str, Any], embedded_images: dict[str, str] | None = None) -> str:
+    """Summary page (headline, four figures, main chart, key points), evidence pages and an annex.
+
+    ``embedded_images`` (data URIs) makes the page self-contained for the downloadable package.
+    """
     doc = Doc(report)
     t = doc.t
     territory = report["territory"]
@@ -617,27 +703,35 @@ def render(report: dict[str, Any]) -> str:
     head = report.get("headline") or {}
     headline_text = head.get("text") or (report["summary"][0] if report["summary"] else "")
     badge = f'<div class="badge">{esc(t["experimental"])}</div>' if report["validation_status"] != "validated" else ""
+    if embedded_images is None:
+        toolbar = (f'<div class="toolbar"><small>{esc(t["pdf_hint"])}</small>'
+                   f'<button onclick="window.print()">{esc(t["download_pdf"])}</button>'
+                   f'<a href="/api/reports/territorial/{esc(report["id"])}/package" download>{esc(t["download_zip"])}</a></div>')
+    else:
+        toolbar = f'<div class="toolbar"><button onclick="window.print()">{esc(t["download_pdf"])}</button></div>'
+    evidence = [trend_chart(doc), events_chart(doc)]
+    detail = [forest_chart(doc), imagery(doc, embedded_images)]
+    annex = [calendar_chart(doc), subdivision_table(doc), climate_table(doc), quality(doc)]
     parts = [
         f"<!doctype html><html lang='{doc.lang}'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>NINA · {esc(territory['name'])} · {esc(period)}</title><style>{CSS}</style></head><body>",
-        f'<div class="toolbar"><button onclick="window.print()">{esc(t["print"])}</button></div>',
+        toolbar,
         f'<header><div><p class="kicker">{esc(t["kicker"])}</p><h1>{esc(territory["name"])}</h1>'
         f'<p class="subtitle">{esc(period)} · {esc(t["type"].get(territory["type"], territory["type"]))}</p></div>{badge}</header>',
         f'<div class="headline {esc(head.get("kind", ""))}">{esc(headline_text)}</div>',
         cards(doc),
         profile_chart(doc),
-        calendar_chart(doc),
-        '<div class="page-break"></div>',
-        trend_chart(doc),
-        events_chart(doc),
-        forest_chart(doc),
-        climate_table(doc),
-        imagery(doc),
-        quality(doc),
-        f'<section><h2>{esc(t["sources"])}</h2><p class="note">NINA {esc(report["method_version"])} · dataset '
-        f'{esc(report["dataset_id"])} · report {esc(report["id"])} · {esc(report["generated_at"])}<br>'
-        + " · ".join(esc(r) for r in report["references"]) + "</p></section>",
-        f'<footer>{esc(report["legal"])}</footer></body></html>',
+        key_points(doc),
+        f'<p class="scope">{esc(t["scope"])}</p>',
     ]
+    if any(evidence):
+        parts += ['<div class="page-break"></div>', f'<h2 class="part">{esc(t["part_evidence"])}</h2>', *evidence]
+    if any(detail):
+        parts += ['<div class="page-break"></div>', *detail]
+    parts += ['<div class="page-break"></div>', f'<h2 class="part">{esc(t["part_annex"])}</h2>', *annex,
+              f'<section><h2>{esc(t["sources"])}</h2><p class="note">NINA {esc(report["method_version"])} · dataset '
+              f'{esc(report["dataset_id"])} · report {esc(report["id"])} · {esc(report["generated_at"])}<br>'
+              + " · ".join(esc(r) for r in report["references"]) + "</p></section>",
+              f'<footer>{esc(report["legal"])}</footer></body></html>']
     return "".join(parts)
