@@ -22,6 +22,10 @@ MIN_STRATUM_MONTHS = 24
 MIN_SPEARMAN = 0.8
 MIN_PASS_FRACTION = 0.8
 MIN_HISTORY_YEARS = 5
+# Sentinel of the aggregate (all-biome) coefficients. Biome 0 is an ordinary stratum: cells without a RESOLVE
+# ecoregion, mostly coastal (ADR 0006). Before 0.5.0 both shared the value 0.
+ALL_BIOMES = -1
+WORLD = "world"
 
 
 @dataclass(frozen=True)
@@ -82,8 +86,8 @@ def relative_metrics(predictions: list[float], reference: list[float]) -> dict[s
 def fit_coefficients(pairs: list[MonthlyPair], min_cells: int = 30) -> list[Coefficient]:
     """Poisson con offset de actividad: exp(intercepto)=suma(y)/suma(x).
 
-    Se ajustan bioma × país × mes × régimen y sus respaldos país/global.
-    El conteo de soporte son celdas-mes, no el número de píxeles detectados.
+    Fitted levels (ADR 0006): country x biome, world x biome, country (all biomes) and world (all biomes),
+    each by month and sampling regime. Support counts cell-months, not detected pixels.
     """
     groups: dict[tuple[str, int, int, str], list[MonthlyPair]] = defaultdict(list)
     for pair in pairs:
@@ -91,8 +95,9 @@ def fit_coefficients(pairs: list[MonthlyPair], min_cells: int = 30) -> list[Coef
             continue
         for key in {
             (pair.country, pair.biome, pair.month, pair.sampling),
-            (pair.country, 0, pair.month, pair.sampling),
-            ("world", 0, pair.month, pair.sampling),
+            (WORLD, pair.biome, pair.month, pair.sampling),
+            (pair.country, ALL_BIOMES, pair.month, pair.sampling),
+            (WORLD, ALL_BIOMES, pair.month, pair.sampling),
         }:
             groups[key].append(pair)
     result = []
@@ -112,10 +117,17 @@ def fit_coefficients(pairs: list[MonthlyPair], min_cells: int = 30) -> list[Coef
                 y / x,
                 n,
                 years,
-                "biome" if biome else "country" if country != "world" else "global",
+                fallback_name(country, biome),
             )
         )
     return result
+
+
+def fallback_name(country: str, biome: int) -> str:
+    """Level of a fitted coefficient, from the most to the least specific."""
+    if biome != ALL_BIOMES:
+        return "biome" if country != WORLD else "world_biome"
+    return "country" if country != WORLD else "global"
 
 
 def select_coefficient(
@@ -129,8 +141,9 @@ def select_coefficient(
     lookup = {(c.country, c.biome, c.month, c.sampling): c for c in coefficients}
     for key in [
         (country, biome, month, sampling),
-        (country, 0, month, sampling),
-        ("world", 0, month, sampling),
+        (WORLD, biome, month, sampling),
+        (country, ALL_BIOMES, month, sampling),
+        (WORLD, ALL_BIOMES, month, sampling),
     ]:
         if key in lookup:
             return lookup[key]
@@ -251,6 +264,120 @@ def validate_years(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str
             and s["relative_bias"] is not None
             and s["raw_spearman"] >= MIN_SPEARMAN
         ),
+    }
+
+
+def apply_noise_ceiling(validation: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
+    """Noise ceiling of ADR 0006: a MODIS stratum is evaluable only where the same-instrument bridge works.
+
+    `reference` is the NOAA-20 vs S-NPP validation. Where NOAA-20 reaches Spearman >= MIN_SPEARMAN in a
+    country x biome stratum, monthly ordering is measurable there; where it does not, no calibration of
+    MODIS could meet the threshold and the stratum is reported as below the ceiling (never as passed).
+    Strata without an evaluable NOAA-20 value stay evaluable. The 0.4.0 result is kept as `strict_*`.
+    """
+    ceiling = {
+        (s["country"], s["biome"]): s["spearman"]
+        for s in reference.get("strata", [])
+        if s.get("evaluable") and s.get("spearman") is not None
+    }
+    strata = []
+    for stratum in validation["strata"]:
+        value = ceiling.get((stratum["country"], stratum["biome"]))
+        below = bool(stratum["evaluable"] and value is not None and value < MIN_SPEARMAN)
+        strata.append(
+            {
+                **stratum,
+                "noise_ceiling_spearman": value,
+                "below_noise_ceiling": below,
+                "strict_evaluable": stratum["evaluable"],
+                "strict_passed": stratum["passed"],
+                "evaluable": bool(stratum["evaluable"] and not below),
+                "passed": bool(stratum["passed"] and not below),
+            }
+        )
+    strict = [s for s in strata if s["strict_evaluable"]]
+    evaluable = [s for s in strata if s["evaluable"]]
+    fraction = sum(s["passed"] for s in evaluable) / len(evaluable) if evaluable else 0.0
+    strict_fraction = sum(s["strict_passed"] for s in strict) / len(strict) if strict else 0.0
+    return {
+        **validation,
+        "strata": strata,
+        "passed_fraction": fraction,
+        "strict_passed_fraction": strict_fraction,
+        "below_noise_ceiling": sum(s["below_noise_ceiling"] for s in strata),
+        "evaluable_strata": len(evaluable),
+        "passed": len(validation["years"]) >= MIN_VALIDATION_YEARS
+        and bool(evaluable)
+        and fraction >= MIN_PASS_FRACTION,
+        "strict_passed": bool(validation["passed"]),
+        "gate_rule": "noise_ceiling_0.5.0",
+    }
+
+
+def validate_countries(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str, Any]:
+    """Leave-country-out transfer test (reported, not gated): predict each country without its own data.
+
+    Coefficients are fitted on every other calibration country, so a country's months are predicted
+    through the world x biome level (world, all biomes, when that biome is absent elsewhere).
+    """
+    eligible = [p for p in pairs if p.eligible and p.year >= REFERENCE_FIRST_YEAR]
+    countries = sorted({p.country for p in eligible})
+    results = []
+    for country in countries:
+        coefficients = fit_coefficients([p for p in eligible if p.country != country])
+        lookup = {(c.country, c.biome, c.month, c.sampling): c for c in coefficients}
+        monthly: dict[tuple[int, int], list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+        levels: dict[str, int] = defaultdict(int)
+        for pair in (p for p in eligible if p.country == country):
+            coefficient = next(
+                (
+                    lookup[key]
+                    for key in [
+                        (WORLD, pair.biome, pair.month, pair.sampling),
+                        (WORLD, ALL_BIOMES, pair.month, pair.sampling),
+                    ]
+                    if key in lookup
+                ),
+                None,
+            )
+            if coefficient is None:
+                continue
+            levels[coefficient.fallback_level] += 1
+            totals = monthly[(pair.year, pair.month)]
+            totals[0] += pair.source_count * coefficient.coefficient
+            totals[1] += pair.reference_count
+            totals[2] += pair.source_count
+        values = [v for _, v in sorted(monthly.items()) if v[1] > 0 or v[0] > 0]
+        metrics = relative_metrics([v[0] for v in values], [v[1] for v in values])
+        raw = relative_metrics([v[2] for v in values], [v[1] for v in values])
+        bias, correlation = metrics["relative_bias"], metrics["spearman"]
+        results.append(
+            {
+                "country": country,
+                **metrics,
+                "raw_relative_bias": raw["relative_bias"],
+                "raw_spearman": raw["spearman"],
+                "months": len(values),
+                "fallback_levels": dict(levels),
+                "passed": bool(
+                    bias is not None
+                    and correlation is not None
+                    and abs(bias) <= max_bias
+                    and correlation >= MIN_SPEARMAN
+                ),
+            }
+        )
+    scored = [r for r in results if r["relative_bias"] is not None]
+    return {
+        "method": "leave_one_country_out",
+        "kind": "reported_not_gated",
+        "countries": results,
+        "passed_fraction": sum(r["passed"] for r in scored) / len(scored) if scored else None,
+        "median_absolute_bias": statistics.median(abs(r["relative_bias"]) for r in scored)
+        if scored
+        else None,
+        "max_absolute_bias": max_bias,
+        "minimum_spearman": MIN_SPEARMAN,
     }
 
 
