@@ -28,6 +28,16 @@ export type PeruEvidence = {
   inpe_agreement: { annual_pearson_2012_2025: number }
 }
 
+// Global summary built by scripts/evidence/world_evidence.py from the 0.5.0 run.
+export type WorldEvidence = {
+  countries: number
+  archive_share: number
+  modis_gate: { passed: number; evaluable: number; fraction: number; strict_fraction: number; typical_year_error: number }
+  outside_calibration_bias: { now: number; with_five_countries: number | null }
+  break_2012: { countries: number; median_raw_pixels_ratio: number; median_harmonized_ratio: number }
+  registries: Record<string, { rate: number; chance_rate: number; records: number }>
+}
+
 const number = (n: number, digits = 0) =>
   n.toLocaleString(locale(), { maximumFractionDigits: digits, minimumFractionDigits: digits })
 export const share = (n: number) => `${Math.round(n * 100)} %`
@@ -44,7 +54,7 @@ export const day = (iso: string) =>
   })
 
 /** The problem in figures (docs/PROBLEM.md), read from the reproducible Peru evidence. */
-export default function Evidence({ e }: { e: PeruEvidence | null }) {
+export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEvidence | null }) {
   if (!e) return null
   const jump = e.september_mean_ratio_2012_2023_vs_2003_2011,
     sept = e.september_2024,
@@ -123,6 +133,62 @@ export default function Evidence({ e }: { e: PeruEvidence | null }) {
           </li>
         ))}
       </ul>
+      {w && (
+        <>
+          <h3 className="landing-evidence-subtitle">
+            {tr(
+              `Beyond Peru: the same record in ${w.countries} countries`,
+              `Más allá del Perú: el mismo registro en ${w.countries} países`,
+            )}
+          </h3>
+          <ul className="landing-evidence-cards">
+            <li>
+              <span className="landing-evidence-figure">{w.countries}</span>
+              <strong>{tr('countries, calibrated one by one', 'países, calibrados uno por uno')}</strong>
+              <p>
+                {tr(
+                  `About ${share(w.archive_share)} of NASA's archived fire detections, from the Amazon to Siberia, each country and ecosystem with its own conversion.`,
+                  `Cerca del ${share(w.archive_share)} de las detecciones de fuego archivadas por la NASA, de la Amazonía a Siberia, cada país y ecosistema con su propia conversión.`,
+                )}
+              </p>
+            </li>
+            <li>
+              <span className="landing-evidence-figure">
+                ×{number(w.break_2012.median_raw_pixels_ratio, 1)} → ×{number(w.break_2012.median_harmonized_ratio, 1)}
+              </span>
+              <strong>{tr('the 2012 jump, removed', 'el salto de 2012, eliminado')}</strong>
+              <p>
+                {tr(
+                  `Median change after VIIRS arrives in ${w.break_2012.countries} countries: raw counts versus NINA.`,
+                  `Cambio mediano tras la llegada de VIIRS en ${w.break_2012.countries} países: conteo crudo frente a NINA.`,
+                )}
+              </p>
+            </li>
+            <li>
+              <span className="landing-evidence-figure">{share(w.modis_gate.fraction)}</span>
+              <strong>{tr('of country–ecosystem pairs pass', 'de los pares país–ecosistema aprueban')}</strong>
+              <p>
+                {tr(
+                  `${w.modis_gate.passed} of ${w.modis_gate.evaluable} pass a bar set in advance (80 %), checking each year with a conversion that never used it; typical difference ${share(w.modis_gate.typical_year_error)}.`,
+                  `${w.modis_gate.passed} de ${w.modis_gate.evaluable} superan una meta fijada de antemano (80 %), comprobando cada año con una conversión que no lo usó; diferencia típica ${share(w.modis_gate.typical_year_error)}.`,
+                )}
+              </p>
+            </li>
+            {w.registries.Canada && (
+              <li>
+                <span className="landing-evidence-figure">{share(w.registries.Canada.rate)}</span>
+                <strong>{tr('of recorded wildfires found', 'de los incendios registrados, encontrados')}</strong>
+                <p>
+                  {tr(
+                    `Canada's official database: large wildfires that NINA also detects (${number(100 * w.registries.Canada.chance_rate, 1)} % by chance).`,
+                    `Base oficial de Canadá: incendios grandes que NINA también detecta (${number(100 * w.registries.Canada.chance_rate, 1)} % por azar).`,
+                  )}
+                </p>
+              </li>
+            )}
+          </ul>
+        </>
+      )}
       <p className="landing-caveat">
         {tr(
           `Unit: VIIRS-equivalent active cell-days (one ~5 km² H3 cell with at least one valid detection in a day), not fires or burned area. Method ${e.method_version}, dataset ${e.dataset_id}. The harmonization is experimental: it has not passed every scientific validation gate. A retrospective reading, not a tested alert.`,
