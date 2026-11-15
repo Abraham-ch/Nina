@@ -231,3 +231,20 @@
   valor por defecto en vez de un `500` · las 8 rutas protegidas declaran `401`/`403` en `openapi.json`.
   **`Risk: item 2`** (cookie `Secure` y rondas de PBKDF2) **e `item 3`** (se retiró el campo
   `batches[].created_by` de la respuesta de `/api/status`; era el leak y no tenía ningún lector).
+- **L34** · **Cuarto verificador** sobre `0245a72` → **`advisories`, 0 blockers**. 47 probes propios en
+  verde, **control positivo sobre la base** (`14 BASE-EXISTS / 0 absent`: en `db0a64b` el leak existía,
+  la cookie no tenía `Secure`, `MAX_EXPORT_ROWS` se ignoraba, eran 200k rondas, `'abc'` reventaba con
+  `500` y `openapi` solo declaraba `200`), regresión `64 ⊂ 72` sin ids perdidos, `openapi.json`
+  byte-idéntico al regenerar, y **cero lector** de `batches[].created_by` en `web/src`, `scripts/` ni
+  `docs/`.
+- **L35** · **1 advisory corregido** en `9d65cba`: `SELECT * EXCLUDE (created_by)` falla al hacer *bind*
+  si la columna no existe, y `scripts/check_release.py` es el único llamante de `status()` que **no**
+  pasa por `initialize()` — una base anterior a T1 habría reventado, contra la regla de `nina/AGENTS.md`
+  "nunca romper bases existentes". Ahora consulta `information_schema` antes y cae a `SELECT *`, con
+  test. **`73 passed`**, build y formato verdes. `Risk: none` — solo añade una red de seguridad en la
+  ruta de lectura.
+- **L36** · **Brecha conocida y fuera de este PR**: las descargas son enlaces `<a href>`, así que un
+  `413`/`429`/`401` se muestra como **JSON crudo** en el navegador. El mensaje del servidor es claro y
+  en español, pero la UI no lo enmarca. Lo dejó el verificador en `unverified` (habría que *clickear*);
+  corregirlo implica convertir los enlaces de exportación en `fetch` + aviso, y es una pieza de
+  interfaz aparte. **También pendiente**: `manifest`/`report` registran `rows=0`.
