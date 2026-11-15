@@ -27,7 +27,7 @@ LABELS = {
         "loss": "Loss (ha)", "loss_fire": "Loss in cells with fire (ha)", "department": "Department",
         "precip": "Precipitation z", "vpd": "VPD z", "drought": "Drought",
         "unit_note": "Unit: active H3 cells (~5 km²) per day, VIIRS S-NPP-equivalent scale.",
-        "yes": "yes", "no": "no",
+        "yes": "yes", "no": "no", "na_short": "n/a (dry month)", "percentile": "Rain percentile",
     },
     "es": {
         "title": "Informe técnico territorial de actividad de fuego",
@@ -47,7 +47,7 @@ LABELS = {
         "loss": "Pérdida (ha)", "loss_fire": "Pérdida en celdas con fuego (ha)", "department": "Departamento",
         "precip": "Precipitación z", "vpd": "DPV z", "drought": "Sequía",
         "unit_note": "Unidad: celdas H3 activas (~5 km²) por día, en escala equivalente a VIIRS S-NPP.",
-        "yes": "sí", "no": "no",
+        "yes": "sí", "no": "no", "na_short": "no aplica (mes seco)", "percentile": "Percentil de lluvia",
     },
 }
 
@@ -205,7 +205,8 @@ def render(report: dict[str, Any]) -> str:
     forest = s["forest"]
     out.append(f"<h2>{t['forest']}</h2>")
     if forest["status"] == "available":
-        out.append(f"<p class='meta'>{esc(forest['definition'])}</p>")
+        out.append(f"<p class='meta'>{esc(forest['definition'])}. {esc(forest.get('validation') or '')}</p>")
+        out.append("<ul class='meta'>" + "".join(f"<li>{esc(c)}</li>" for c in forest.get("caveats", [])) + "</ul>")
         out.append(f"<table><tr><th>{t['year']}</th><th>{t['loss']}</th><th>{t['loss_fire']}</th></tr>")
         for row in forest["by_year"][-8:]:
             out.append(f"<tr><td>{row['year']}</td><td>{num(row['loss_ha'])}</td><td>{num(row['loss_ha_with_fire'])}</td></tr>")
@@ -217,10 +218,12 @@ def render(report: dict[str, Any]) -> str:
     out.append(f"<h2>{t['climate']}</h2>")
     if climate["status"] == "available":
         out.append(f"<p class='meta'>{esc(climate['source'])}. {esc(climate['note'])}</p>")
-        out.append(f"<table><tr><th>{t['department']}</th><th>{t['precip']}</th><th>{t['vpd']}</th><th>{t['drought']}</th></tr>")
+        out.append(f"<table><tr><th>{t['department']}</th><th>{t['precip']}</th><th>{t['percentile']}</th>"
+                   f"<th>{t['vpd']}</th><th>{t['drought']}</th></tr>")
         for row in climate["selected_month"]:
+            state = t["na_short"] if row["drought"] is None else (t["yes"] if row["drought"] else t["no"])
             out.append(f"<tr><td>{esc(row['department'])}</td><td>{num(row['precip_z'], 2)}</td>"
-                       f"<td>{num(row['vpd_z'], 2)}</td><td>{t['yes'] if row['drought'] else t['no']}</td></tr>")
+                       f"<td>{num(row.get('precip_percentile'))}</td><td>{num(row['vpd_z'], 2)}</td><td>{state}</td></tr>")
         out.append("</table>")
     else:
         out.append(f"<p class='na'>{t['not_available']}</p>")

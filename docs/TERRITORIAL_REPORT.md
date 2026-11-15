@@ -1,6 +1,6 @@
 # NINA · Territorial fire evidence report (specification)
 
-Status: proposed, 2026-11-14. Owner: data/harmonization (backend) and UX/UI (web).
+Status: implemented on branch `feat/territorial-report` (2026-11-14); web view pending. Owner: data/harmonization (backend) and UX/UI (web).
 
 ## 1. Purpose
 
@@ -38,12 +38,12 @@ It is an annex of satellite context, not an official document and not a tactical
 |---|---|---|---|---|
 | 4.1 | Header | Territory, period, cut-off date, dataset id, method version, validation status | Product manifest | Available |
 | 4.2 | Current situation | Month to date and last complete month: VIIRS-equivalent active cell-days, anomaly vs median of other eligible years, rank, p10–p90 band; 12-month calendar strip | `/api/harmonized/analyses` (`selected`, `month_to_date`) | Available |
-| 4.3 | Historical context | 2002–present series; rank of the season (Jul–Oct) and of the year; Theil–Sen trend with Mann–Kendall p-value, harmonized **and** raw, to show the sensor artefact | Harmonized product; raw pixel counts | Computation exists (`scripts/evidence`); endpoint to build |
-| 4.4 | Detected fire events vs recorded emergencies | Fire events from spatio-temporal clustering of harmonized cell-days (neighbouring cells, gap ≤ 2 days); count, duration, extent; INDECI forest-fire emergencies for the same territory and period; ratio | Harmonized product; INDECI/SINPAD open data (ubigeo) | To build (clustering + district boundaries with ubigeo) |
-| 4.5 | Forest cover loss associated with fire | Tree-cover loss (ha) in cells with fire activity in the same or previous year; share of total loss; comparison with previous years | Hansen/UMD Global Forest Change (loss year, 30 m); MINAM Geobosques as national reference | To build (tile download, aggregation to H3) |
-| 4.6 | Climatic conditions | Precipitation and soil-moisture anomaly (z-score) for the period; drought flag. Context only: no causal attribution | NASA GPM IMERG or POWER, SMAP; SENAMHI PISCO as national option | To build |
-| 4.7 | Priority table (country/department level) | Sub-territories ranked by transparent indicators (anomaly, trend, events/emergencies ratio, forest loss), each shown separately; no opaque composite score | Sections 4.2–4.5 | To build |
-| 4.8 | Visual evidence | Before/after true-colour imagery for the period; map of harmonized cells | NASA GIBS (already used by the web) | Partly available |
+| 4.3 | Historical context | 2002–present series; rank of the season (Jul–Oct) and of the year; Theil–Sen trend with Mann–Kendall p-value, harmonized **and** raw, to show the sensor artefact | Harmonized product; raw pixel counts | **Available** |
+| 4.4 | Detected fire events vs recorded emergencies | Fire events from spatio-temporal clustering of harmonized cell-days (neighbouring cells, gap ≤ 2 days); count, duration, extent; INDECI forest-fire emergencies for the same territory and period; ratio | Harmonized product; INDECI/SINPAD open data (ubigeo) | **Available** (Peru) |
+| 4.5 | Forest cover loss associated with fire | Tree-cover loss (ha) in cells with fire activity in the same or previous year; share of total loss; comparison with previous years | Hansen/UMD Global Forest Change (loss year, 30 m); MINAM Geobosques as national reference | **Available** (Peru) |
+| 4.6 | Climatic conditions | Precipitation and soil-moisture anomaly (z-score) for the period; drought flag. Context only: no causal attribution | NASA POWER v2.10 (MERRA-2); SENAMHI PISCO as a future national option | **Available** (Peru, 2001–2025) |
+| 4.7 | Priority table (country/department level) | Sub-territories ranked by transparent indicators (anomaly, trend, events/emergencies ratio, forest loss), each shown separately; no opaque composite score | Sections 4.2–4.5 | Partial: subdivision table of events vs emergencies |
+| 4.8 | Visual evidence | Before/after true-colour imagery for the period; map of harmonized cells | NASA GIBS (already used by the web) | Pending (web) |
 | 4.9 | Quality and limits | Valid region-days, NOAA-20-filled days, unvalidated share, typical yearly error (±10 % MODIS era), FIRMS disclaimer | Analysis fields, validation report | Available |
 | 4.10 | Reproducibility | Dataset id and hashes, request parameters, generation time, links to the method (ADR 0002–0005) | Manifest | Available |
 
@@ -79,3 +79,16 @@ validated: any number in the text must match a fact.
 ## 7. Out of scope
 
 Fire forecasting, spread modelling, causal attribution of individual fires, tactical use, and generated imagery.
+
+## 8. Implementation and validation (2026-11-14)
+
+| Layer | Build | Output | Validation |
+|---|---|---|---|
+| Districts | `nina.io.territory` | `source/context/districts/` (1,826 districts with UBIGEO, 218,676 H3 cells) | Source: INEI/MINAM limits via github.com/juaneladio/peru-geojson (MPL-2.0); 8 small districts have no geometry |
+| INDECI emergencies | `nina.io.territory` | `source/context/indeci/forest_fire_emergencies.parquet` (4,798 records, 2003 – 2026-06-30) | Every record kept; dates checked against the stated year and month (mixed day-first/month-first formats); 159 codes of districts newer than the boundary layer are matched by prefix |
+| Fire events | `nina.io.territory` | `source/context/events/` (Peru: 481,871 events from 817,698 cell-days; 18,010 with ≥ 5 cell-days) | Rule from FET / ST-DBSCAN practice (≈ 2 km neighbourhood, ≤ 2-day gap); compare years within the VIIRS era only |
+| Forest loss | `nina.io.forest_loss` | `source/context/forest_loss/` (Hansen GFC-2024-v1.12, 0.005° blocks → H3) | Peru totals 2001–2024 within 0.3–0.6 % of Global Forest Watch; MINAM Geobosques differs by design (humid Amazon forest only) |
+| Climate | `nina.io.climate` | `source/context/climate/climate_department_month.parquet` (26 units × 2001–2025) | Reproduces the Amazon droughts of 2005, 2023 and 2024 in Aug–Sep; 2016 not visible in Aug–Sep (drought centred in Brazil, Oct–Mar) |
+
+API: `POST /api/reports/territorial` with `{"ubigeo": "25", "year": 2024, "month": 9, "language": "es"}` (or `country`,
+or `geometry`); `GET /api/reports/territorial/{id}/document` returns the printable page. A report takes 0.5–2 s.

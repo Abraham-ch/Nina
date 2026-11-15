@@ -35,6 +35,14 @@ uv run python -m nina.io.product --workspace ../.. --review
 
 `nina.io.model` and `nina.io.acceptance` exit with a non-zero code when a gate fails. That is deliberate.
 
+Context layers for the territorial report (outputs in `source/context/`, see `docs/TERRITORIAL_REPORT.md`):
+
+```powershell
+uv run python -m nina.io.territory --workspace ../..          # districts, INDECI, fire events (~20 s)
+uv run python -m nina.io.forest_loss --workspace ../.. --download   # Hansen tiles 1.4 GB, ~2 min
+uv run python -m nina.io.climate --workspace ../.. --download       # NASA POWER, ~16 min first time
+```
+
 ## Layout
 
 | Path | Role |
@@ -46,5 +54,8 @@ uv run python -m nina.io.product --workspace ../.. --review
 | `src/nina/io/static_sources.py`, `geography.py` | Static-source mask, countries and biomes |
 | `src/nina/io/model.py` | Training, leave-one-year-out validation, gates |
 | `src/nina/io/product.py`, `acceptance.py` | Served product and acceptance report |
+| `src/nina/io/territory.py` | Context layers for the territorial report: Peruvian districts (UBIGEO → H3 cells), INDECI forest-fire emergencies, fire events |
+| `src/nina/io/forest_loss.py` | Tree-cover loss per H3 cell and year from Hansen/UMD GFC (Peru) |
+| `src/nina/io/climate.py` | Monthly climate anomalies per Peruvian department from NASA POWER |
 
 Inputs and outputs live in the repository's `source/` folder, which is not committed.

@@ -20,6 +20,7 @@ dependencies = [
   "statsmodels>=0.14",
   "python-dotenv>=1,<2",
   "truststore>=0.10,<1",
+  "rasterio>=1.5.2",
 ]
 
 [build-system]
