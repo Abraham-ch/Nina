@@ -374,12 +374,7 @@ export default function Dialog({
         </div>
       ) : modal === 'explain' && harmonized ? (
         <div className="dialog-body explanation">
-          <AnalystPanel
-            context={context}
-            onAction={onAnalystAction}
-            onError={onError}
-            onEvidence={analysis ? () => onModal('evidence') : undefined}
-          />
+          <AnalystPanel context={context} onAction={onAnalystAction} onError={onError} />
         </div>
       ) : modal === 'explain' ? (
         <div className="dialog-body explanation">
