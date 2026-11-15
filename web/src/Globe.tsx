@@ -18,12 +18,33 @@ import {
   EllipsoidalOccluder,
   Ellipsoid,
 } from 'cesium'
-import { Globe2, Map as MapIcon, LocateFixed, PenLine, Check, X, Plus, Minus } from 'lucide-react'
+import {
+  Globe2,
+  Map as MapIcon,
+  LocateFixed,
+  PenLine,
+  Check,
+  X,
+  Plus,
+  Minus,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { tr } from './i18n'
 import type { Geometry, Layer, Place, Point, Selection } from './types'
+
+// Click radius (px) around the first vertex that closes the polygon.
+const CLOSE_PX = 24
+const SAND = Color.fromCssColorString('#f3c27b')
+// Removes the draft line and vertex markers.
+function clearDraft(v: Viewer, count: number) {
+  for (let i = -1; i < count; i++) {
+    const entity = v.entities.getById(i < 0 ? 'drawing' : `drawing-v${i}`)
+    if (entity) v.entities.remove(entity)
+  }
+}
 
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 function coordinates(geometry: Geometry) {
@@ -100,6 +121,8 @@ type Props = {
   drawing: boolean
   onDrawing: (value: boolean) => void
   onGeometry: (geometry: Geometry) => void
+  // Present when a drawn area is active: removes it and returns to the default view.
+  onClear?: () => void
   onInspect: (point: Point | null) => void
   flat: boolean
   onFlat: (value: boolean) => void
@@ -114,6 +137,7 @@ export default function Globe({
   drawing,
   onDrawing,
   onGeometry,
+  onClear,
   onInspect,
   flat,
   onFlat,
@@ -283,20 +307,44 @@ export default function Globe({
           const ray = v.camera.getPickRay(event.position)
           const cartesian = ray && v.scene.globe.pick(ray, v.scene)
           if (!cartesian) return
+          const list = vertices.current
+          // A click near the first vertex closes the polygon.
+          if (list.length >= 3) {
+            const first = v.scene.cartesianToCanvasCoordinates(
+              Cartesian3.fromDegrees(list[0][0], list[0][1]),
+            )
+            if (first && Cartesian2.distance(first, event.position) <= CLOSE_PX) {
+              finish()
+              return
+            }
+          }
           const pos = Cartographic.fromCartesian(cartesian)
-          vertices.current.push([CMath.toDegrees(pos.longitude), CMath.toDegrees(pos.latitude)])
-          setN(vertices.current.length)
-          const line = v.entities.getById('drawing')
-          if (line) v.entities.remove(line)
-          if (vertices.current.length >= 2)
+          list.push([CMath.toDegrees(pos.longitude), CMath.toDegrees(pos.latitude)])
+          setN(list.length)
+          clearDraft(v, list.length - 1)
+          if (list.length >= 2)
             v.entities.add({
               id: 'drawing',
               polyline: {
-                positions: Cartesian3.fromDegreesArray(vertices.current.flat()),
+                positions: Cartesian3.fromDegreesArray(list.flat()),
                 width: 2,
-                material: Color.fromCssColorString('#f3c27b'),
+                material: SAND,
               },
             })
+          list.forEach(([lon, lat], i) =>
+            v.entities.add({
+              id: `drawing-v${i}`,
+              position: Cartesian3.fromDegrees(lon, lat),
+              point: {
+                // The first vertex is the close target: larger, outlined once it can close.
+                pixelSize: i === 0 ? 14 : 8,
+                color: SAND,
+                outlineColor: Color.fromCssColorString('#071820'),
+                outlineWidth: i === 0 && list.length >= 3 ? 3 : 1,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              },
+            }),
+          )
           v.scene.requestRender()
           return
         }
@@ -417,12 +465,13 @@ export default function Globe({
   }, [areaKey, ready, place?.properties.id])
   useEffect(() => {
     if (!drawing) {
+      const v = viewer.current
+      if (v) {
+        clearDraft(v, vertices.current.length)
+        v.scene.requestRender()
+      }
       vertices.current = []
       setN(0)
-      const v = viewer.current
-      const entity = v?.entities.getById('drawing')
-      if (entity) v?.entities.remove(entity)
-      v?.scene.requestRender()
     }
   }, [drawing])
   function finish() {
@@ -536,13 +585,27 @@ export default function Globe({
         >
           <PenLine size={17} />
         </button>
+        {onClear && (
+          <button
+            aria-label={tr('Delete the drawn area', 'Eliminar el área dibujada')}
+            title={tr('Delete the drawn area', 'Eliminar el área dibujada')}
+            onClick={onClear}
+            disabled={!ready}
+          >
+            <Trash2 size={17} />
+          </button>
+        )}
       </div>
       {drawing && (
         <div className="draw-help" role="status">
           <span>
             {tr(
-              `Add vertices on the map · ${n} points`,
-              `Añade vértices sobre el mapa · ${n} puntos`,
+              n >= 3
+                ? `${n} points · click the first point or Apply to close`
+                : `Add vertices on the map · ${n} points`,
+              n >= 3
+                ? `${n} puntos · haz clic en el primer punto o Aplicar para cerrar`
+                : `Añade vértices sobre el mapa · ${n} puntos`,
             )}
           </span>
           <button onClick={finish} disabled={n < 3}>

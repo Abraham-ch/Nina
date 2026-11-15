@@ -15,7 +15,11 @@ def client(tmp_path,monkeypatch):
     country={'type':'FeatureCollection','features':[{'type':'Feature','properties':{'shapeID':'test-region','shapeName':'Región de prueba'},'geometry':{'type':'Polygon','coordinates':[[[-78,-12],[-72,-12],[-72,-7],[-78,-7],[-78,-12]]]}}]}
     (tmp_path/'boundaries'/'departments.geojson').write_text(json.dumps(country))
     store.boundaries.cache_clear()
-    with TestClient(main.app) as c: yield c,tmp_path
+    with TestClient(main.app) as c:
+        # T1 (WORK_PLAN §10): importar, sincronizar, entrenar y exportar exigen sesión.
+        # Los datos se prueban como administrador para que la lógica no dependa del auth.
+        c.post('/api/auth/register', json={'email': 'operador@nina.local', 'password': 'secreta-1234'})
+        yield c,tmp_path
     store.boundaries.cache_clear()
 
 def fixture_csv(path,year,n=2,source='modis',version='61.03'):

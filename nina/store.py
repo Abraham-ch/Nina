@@ -53,6 +53,21 @@ def initialize():
         c.execute("UPDATE batches SET spatial_scope='PER' WHERE spatial_scope IS NULL")
         c.execute('CREATE TABLE IF NOT EXISTS analyses(id VARCHAR PRIMARY KEY, selection VARCHAR, result VARCHAR, created_at VARCHAR)')
         c.execute('CREATE TABLE IF NOT EXISTS jobs(id VARCHAR PRIMARY KEY, kind VARCHAR, status VARCHAR, progress DOUBLE, message VARCHAR, result VARCHAR, updated_at VARCHAR)')
+        # T1 · cuentas y gestión de descargas (WORK_PLAN.md §10). Solo se añaden tablas y
+        # columnas: una base creada con el esquema anterior se amplía sin perder filas.
+        c.execute('''CREATE TABLE IF NOT EXISTS users(
+            id VARCHAR PRIMARY KEY, email VARCHAR UNIQUE NOT NULL, password_hash VARCHAR NOT NULL,
+            role VARCHAR NOT NULL, display_name VARCHAR, created_at VARCHAR)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS sessions(
+            token VARCHAR PRIMARY KEY, user_id VARCHAR NOT NULL, created_at VARCHAR, expires_at VARCHAR)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS downloads(
+            id VARCHAR PRIMARY KEY, user_id VARCHAR, analysis_id VARCHAR, kind VARCHAR,
+            rows BIGINT, filters VARCHAR, dataset_version VARCHAR, created_at VARCHAR)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS audit_log(
+            id VARCHAR PRIMARY KEY, user_id VARCHAR, action VARCHAR, target VARCHAR,
+            detail VARCHAR, created_at VARCHAR)''')
+        c.execute('ALTER TABLE batches ADD COLUMN IF NOT EXISTS created_by VARCHAR')
+        c.execute('ALTER TABLE analyses ADD COLUMN IF NOT EXISTS created_by VARCHAR')
         # Columnar scans and bounded ingestion avoid row indexes proportional to world volume.
 
 def rows(c, sql, args=None):

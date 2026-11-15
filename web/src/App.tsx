@@ -16,9 +16,11 @@ import {
   SlidersHorizontal,
   Compass,
   CircleHelp,
+  UserRound,
 } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
+import Account from './Account'
 import {
   api,
   post,
@@ -51,6 +53,7 @@ import type {
   Regions,
   Selection,
   Status,
+  User,
 } from './types'
 const Globe = lazy(() => import('./Globe'))
 export type Tab = 'atlas' | 'calendar' | 'lab' | 'data'
@@ -152,6 +155,8 @@ export default function App() {
     [viirs, setViirs] = useState('viirs-snpp'),
     [extraFilters, setExtraFilters] = useState(false),
     [tour, setTour] = useState(false)
+  const [user, setUser] = useState<User | null>(null),
+    [accountOpen, setAccountOpen] = useState(false)
   function change(patch: Partial<Selection>) {
     setSelection((previous) => ({ ...previous, ...patch }))
     setInspected(null)
@@ -180,6 +185,9 @@ export default function App() {
     api<Regions>('/regions')
       .then(setRegions)
       .catch((e) => setError(e.message))
+    api<User>('/auth/me')
+      .then(setUser)
+      .catch(() => setUser(null))
     refresh()
   }, [])
   useEffect(() => {
@@ -540,6 +548,17 @@ export default function App() {
             <span>{tr('Sources', 'Fuentes')}</span>
           </button>
           <button
+            onClick={() => setAccountOpen(true)}
+            aria-label={
+              user ? `Account for ${user.email}` : tr('Sign in to NINA', 'Entrar en NINA')
+            }
+          >
+            <UserRound size={17} />
+            <span>
+              {user ? user.display_name || user.email.split('@')[0] : tr('Sign in', 'Entrar')}
+            </span>
+          </button>
+          <button
             onClick={share}
             aria-label={tr('Share this investigation', 'Compartir esta investigación')}
           >
@@ -718,6 +737,7 @@ export default function App() {
                   drawing={drawing}
                   onDrawing={setDrawing}
                   onGeometry={applyGeometry}
+                  onClear={placeId === 'custom' ? () => choosePlace('world') : undefined}
                   onInspect={setInspected}
                   flat={flat}
                   onFlat={setFlat}
@@ -1116,6 +1136,7 @@ export default function App() {
             jobs={jobs}
             selection={selection}
             analysis={analysis}
+            user={user}
             onRefresh={refresh}
             onNotice={setNotice}
             onError={setError}
@@ -1170,6 +1191,8 @@ export default function App() {
         analysis={analysis}
         selection={selection}
         health={health}
+        user={user}
+        onAccount={() => setAccountOpen(true)}
         onGeometry={applyGeometry}
         onDraw={() => {
           setModal('')
@@ -1178,6 +1201,14 @@ export default function App() {
           setDrawing(true)
         }}
         onShare={share}
+        onError={setError}
+      />
+      <Account
+        open={accountOpen}
+        onOpen={setAccountOpen}
+        user={user}
+        onUser={setUser}
+        onNotice={setNotice}
         onError={setError}
       />
     </div>

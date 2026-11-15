@@ -10,6 +10,8 @@
   --line: #dce2da;
   --ocean: #071820;
   --sand: #e9bc78;
+  /* Text on sand surfaces (primary buttons, pressed toggles, selection). */
+  --on-sand: #142f35;
   --modis: #f3b968;
   --viirs: #80d2df;
 }
@@ -81,8 +83,8 @@ optgroup {
   color: #203a3c;
 }
 ::selection {
-  background: #e9bc78;
-  color: #142f35;
+  background: var(--sand);
+  color: var(--on-sand);
 }
 .sr-only {
   position: absolute;
@@ -121,7 +123,7 @@ optgroup {
 }
 .button.sand {
   background: var(--sand);
-  color: #18343b;
+  color: var(--on-sand);
 }
 .button.dark {
   background: #183d42;
@@ -666,9 +668,22 @@ optgroup {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px;
-  background: #d7d6ba;
+  padding: 7px 10px;
+  border-radius: 2px;
+  background: var(--sand);
+  color: var(--on-sand);
+  font-weight: 500;
   white-space: nowrap;
+}
+.draw-help button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* Cancel: secondary, no fill. */
+.draw-help button:last-child {
+  background: transparent;
+  color: inherit;
+  padding: 7px;
 }
 .point-inspector {
   position: absolute;
@@ -3625,11 +3640,113 @@ optgroup {
 }
 .lang-switch > button[aria-pressed='true'] {
   background: var(--sand);
-  color: #142f35;
+  color: var(--on-sand);
 }
 .lang-switch.on-dark {
   border-color: rgba(232, 238, 240, 0.3);
 }
 .lang-switch.on-dark > button {
   color: rgba(232, 238, 240, 0.75);
+}
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+.account-form > p {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #708567;
+}
+.account-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 12px;
+  color: #728765;
+}
+.account-form input {
+  padding: 11px;
+  border: 1px solid #b4c8a8;
+  border-radius: 2px;
+  background: #edf3e7;
+  color: #365d36;
+  font-size: 14px;
+  width: 100%;
+}
+.account-form .button {
+  width: 100%;
+}
+.account-form .text-link {
+  align-self: flex-start;
+}
+.account-card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  background: #edf3e7;
+  border: 1px solid #cdddc4;
+  color: #365d36;
+}
+.account-card strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+}
+.account-card small {
+  display: block;
+  font-size: 12px;
+  color: #718567;
+  margin-top: 5px;
+}
+.role-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #54794a;
+}
+.account-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  font-size: 12px;
+}
+.account-meta dt {
+  color: #829473;
+}
+.account-meta dd {
+  margin: 6px 0 0;
+  color: #466d38;
+}
+.account-form .button + .button {
+  margin-top: -6px;
+}
+.permission-state {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px;
+  background: #f6e9d9;
+  border-left: 3px solid #cc8542;
+  color: #743f2c;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.permission-state svg {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.permission-state strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.permission-state p {
+  color: #88553c;
+}
+.permission-state .button {
+  margin-top: 14px;
 }

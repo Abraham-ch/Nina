@@ -138,7 +138,7 @@ def spatial_coverage(batch,s):
     return bool(chosen and geometry.covers(shapely.union_all(chosen)))
 
 @atomic_read
-def analyze(s):
+def analyze(s,created_by=None):
     start=date(max(2000,s.year_start-10),1,1);end=date(s.year_end+1,1,1)
     grouped={}
     if not s.geometry:
@@ -210,7 +210,7 @@ def analyze(s):
             *(['Modelo experimental ajustado a conteos mensuales, sin corrección de exposición. No es una armonización científica validada.'] if s.metric=='experimental' else [])],
         'references':['https://firms.modaps.eosdis.nasa.gov/country/' if s.scope=='PER' else 'https://firms.modaps.eosdis.nasa.gov/api/area/','https://www.earthdata.nasa.gov/data/tools/firms/faq']}
     with database() as c:
-        c.execute('INSERT OR IGNORE INTO analyses VALUES (?,?,?,?)',[analysis_id,json.dumps(s.model_dump()),json.dumps(result),now()])
+        c.execute('INSERT OR IGNORE INTO analyses(id,selection,result,created_at,created_by) VALUES (?,?,?,?,?)',[analysis_id,json.dumps(s.model_dump()),json.dumps(result),now(),created_by])
     return result
 
 def get_analysis(identifier):

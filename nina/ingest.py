@@ -51,7 +51,7 @@ def classify(values):
     for pi,gi in zip(*pairs): values[int(pi)][12]=features[int(gi)]['properties']['id']
     return values
 
-def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=None, coverage_basis='unknown', progress=None, spatial_scope='PER', spatial_geometry=None,processing_hint=None):
+def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=None, coverage_basis='unknown', progress=None, spatial_scope='PER', spatial_geometry=None,processing_hint=None,created_by=None):
     initialize()
     if spatial_scope not in ['PER','world','custom']: raise ValueError('Ámbito geográfico desconocido')
     if spatial_scope=='custom' and not spatial_geometry: raise ValueError('El archivo por área requiere su geometría')
@@ -116,7 +116,9 @@ def ingest_file(path: Path, source, url='', coverage_start=None, coverage_end=No
             if processing=='SP':
                 c.execute("UPDATE observations SET version=i.version,processing=i.processing,batch_id=i.batch_id,frp=i.frp,confidence=i.confidence,fire_type=i.fire_type,daynight=i.daynight,scan=i.scan,track=i.track,department=i.department FROM incoming i WHERE observations.id=i.id AND observations.processing<>'SP'")
             loaded=c.execute('SELECT count(*) FROM observations').fetchone()[0]-before
-            c.execute('INSERT INTO batches VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[identifier,path.name,source,digest,path.stat().st_size,loaded,rejected,len(values)-loaded,url,now(),coverage_start,coverage_end,coverage_basis,processing,spatial_scope,json.dumps(spatial_geometry) if spatial_geometry else None])
+            c.execute('''INSERT INTO batches(id,filename,source,sha256,bytes,rows_loaded,rejected,duplicates,url,imported_at,
+                coverage_start,coverage_end,coverage_basis,processing,spatial_scope,spatial_geometry,created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',[identifier,path.name,source,digest,path.stat().st_size,loaded,rejected,len(values)-loaded,url,now(),coverage_start,coverage_end,coverage_basis,processing,spatial_scope,json.dumps(spatial_geometry) if spatial_geometry else None,created_by])
             c.execute('COMMIT')
         except Exception:
             c.execute('ROLLBACK');raise
