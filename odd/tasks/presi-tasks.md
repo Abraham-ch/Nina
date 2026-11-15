@@ -90,7 +90,7 @@
 | ID | Spec | Ruta | Estado | Commit |
 |---|---|---|---|---|
 | T1 | S1 (+ A1, A2) | inline | **S1 completa**: `MAX_EXPORT_ROWS` implementado y los advisories de seguridad cerrados; solo quedan menores (`rows=0` en `manifest`/`report`, detalle del servidor sin traducir, clase muerta) | `c6721fc`, `d879306`, `003a86a`, `c78fb0f`, `5bf79b7`, `0245a72` |
-| T2 | S2 (+ A1, A2) | inline | pendiente | — |
+| T2 | S2 (+ A1, A2) | inline | **celda A hecha** (cobertura real desde la base, `date_future`/`date_range` en import, `FIRMS_MAX_DAY_RANGE` configurable); **falta la celda C** (UI) y el CSV con columnas FIRMS/UTF-8 | `2127ee7`, `ae69bc8` |
 | T3 | S3 (+ A1, A2) | inline | pendiente | — |
 
 ---
@@ -276,3 +276,25 @@
   ajeno y `format:check` no es una puerta del CI. **Queda como deriva preexistente de `mvp`.**
   Verificación del merge: **`98 passed`**, build `✓ built in 4.09s`. `Risk: none` — el merge solo
   resuelve conflictos y añade el soporte de idioma que pide el spec, todo cubierto por tests.
+- **L41** · **Celda A de T2** en `ae69bc8`. **RED observado**: `tests/test_coverage.py` → **8 fallaban**
+  (faltaban `store.cobertura`, los códigos de cobertura, el futuro en la importación y `dias_maximos`);
+  **GREEN**: **`11 passed`**, suite completa **`109 passed`** (98 → 109), build verde, `openapi.json`
+  **sin cambios** al regenerar (ninguna firma de ruta cambió). `Risk: none`.
+  Implementado: `store.cobertura(source)` = `min/max(acquired)` por origen, con fechas nulas si no hay
+  filas (no se acota lo que no existe) · `_cobertura_inicio` rechaza pedir antes del primer día observado
+  del sensor, y `_cobertura_mes` solo rechaza si el **mes entero** precede, así un primer mes parcial sigue
+  siendo válido · aplicado a `/api/sync`, `/api/acquisitions` y `/api/acquisitions/month` vía la tabla
+  `ORIGEN_PRODUCTO` — "NOAA-21 solo desde 2024" sale de los datos, no de una regla escrita dos veces ·
+  `/api/import` ya no acepta `coverage_start` futuro (gap detectado por el verificador) y un rango invertido
+  da `date_range`, el bullet "`start ≤ end`" de §10 en la única superficie que tiene las dos fechas hoy ·
+  `FIRMS_MAX_DAY_RANGE` (estaba en `.env.example` **sin que nada lo leyera**) acota ahora `days`.
+- **L42** · **Descubrimientos técnicos**: (1) `PydanticCustomError(code, plantilla, contexto)` **no** acepta
+  keywords — el contexto va como **tercer argumento `dict`** y llega a `err['ctx']`; probado a mano antes de
+  corregir las 4 llamadas. (2) `fixture_csv` no produce un CSV que `ingest_file` acepte como VIIRS, así que
+  el test de cobertura de NOAA-21 inserta la fila directo: en la celda A lo que importa es la cobertura de
+  la base, y la ingesta tiene sus propios tests.
+- **L43** · **Alcance acotado de T2**: "nada posterior al último día disponible" **no** se aplica a las
+  descargas — pedir datos nuevos es justamente el propósito de `/api/sync`, y el último día *disponible*
+  sale de `data_availability` (§9 / ING-09, que aún no existe). Pertenece a las consultas de rango libre de
+  **T3**. **Queda de T2**: la celda C (validación en formularios, selector de fechas acotado por la
+  cobertura, mensaje junto al campo) y el bullet de CSV con columnas FIRMS obligatorias y UTF-8.
