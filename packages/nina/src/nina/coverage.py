@@ -8,6 +8,9 @@ from typing import Any
 
 ROLLING_RADIUS = 15
 OUTAGE_FRACTION = 0.10
+# Un hueco documentado (Readme de FIRMS) solo se confirma si el conteo cae por debajo de esta
+# fracción de la mediana móvil; con datos normales queda como aviso (ADR 0005).
+KNOWN_GAP_CONFIRMATION_FRACTION = 0.50
 SUSPICIOUS_MADS = 5
 MAX_BAD_DAY_FRACTION = 0.20
 MIN_AGGREGATION_DAYS = 8
@@ -20,13 +23,19 @@ def daily_quality(
     *,
     mission_end: date | None = None,
     known_missing: set[date] | None = None,
+    known_candidates: set[date] | None = None,
 ) -> list[dict[str, Any]]:
     """Diagnóstico de interrupciones con una zona amplia de referencia.
+
+    `known_missing` fuerza el hueco (falla de hardware oficial). `known_candidates` son huecos
+    documentados que se confirman con el conteo diario: si el satélite registró actividad
+    normal ese día, el día sigue válido y se anota `known_gap_unconfirmed`.
 
     El conteo global bajo es una advertencia de soporte, nunca un porcentaje de
     nubosidad ni una certificación de observabilidad de cada región.
     """
-    known = known_missing or set()
+    known = set(known_missing or set())
+    candidates = known_candidates or set()
     result = []
     day = first
     while day <= last:
@@ -51,7 +60,11 @@ def daily_quality(
         median = statistics.median(window) if window else 0
         mad = statistics.median(abs(value - median) for value in window) if window else 0
         n = counts.get(day, 0)
-        missing = day in known or n == 0 or (median > 0 and n < OUTAGE_FRACTION * median)
+        confirmed = day in known or (
+            day in candidates
+            and (n == 0 or (median > 0 and n < KNOWN_GAP_CONFIRMATION_FRACTION * median))
+        )
+        missing = confirmed or n == 0 or (median > 0 and n < OUTAGE_FRACTION * median)
         suspicious = mad > 0 and abs(n - median) > SUSPICIOUS_MADS * mad
         result.append(
             {
@@ -59,9 +72,11 @@ def daily_quality(
                 "n": n,
                 "data_gap": missing,
                 "reason": "known_or_official_gap"
-                if day in known
+                if confirmed
                 else "detected_outage"
                 if missing
+                else "known_gap_unconfirmed"
+                if day in candidates
                 else "archive_activity_present",
                 "suspicious_day": suspicious,
             }

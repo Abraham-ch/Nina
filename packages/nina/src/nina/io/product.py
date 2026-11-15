@@ -16,6 +16,13 @@ from nina.calibration import Coefficient, select_coefficient
 from nina.io.harmonization import connect, file_digest, log, read_json, sql_literal, write_json
 
 COUNTRY_NAMES = {"United_States": "United States of America"}
+# Relleno de la referencia (AGENTS.md §10.4, ADR 0005): un día de la era S-NPP usa NOAA-20 con
+# su puente cuando S-NPP no es válido o registra menos del 40 % de las celdas que NOAA-20 vio
+# ese mismo día en el mismo país (apagón parcial), siempre que NOAA-20 tenga ≥ 50 celdas.
+PARTIAL_OUTAGE_RATIO = 0.40
+PARTIAL_OUTAGE_MIN_CELLS = 50
+# Terra sola (nov-2000 → jul-2002) tiene errores anuales de ±40 % fuera de muestra: no se sirve.
+SERVED_SAMPLINGS = {"terra_aqua", "noaa20"}
 SOURCE_PLATFORMS = {
     "modis": ["Terra", "Aqua"],
     "viirs-snpp": ["S-NPP"],
@@ -113,19 +120,44 @@ def build_support(connection: Any, workspace: Path, prepared: dict[str, Any]) ->
     connection.unregister("window_frame")
     snpp = prepared["sensor_lifecycle"]["snpp"]
     aqua = prepared["sensor_lifecycle"]["aqua"]
+    noaa20 = prepared["sensor_lifecycle"]["noaa20"]
+    snpp_first, snpp_last = sql_literal(snpp["first_date"]), sql_literal(snpp["last_date"])
     connection.execute("""CREATE OR REPLACE TABLE archive_days AS
         SELECT country,platform,day::DATE AS day,
             CASE WHEN bool_or(processing='SP') THEN 'SP' ELSE 'NRT' END AS processing,
             bool_or(basis='annual_archive') AS declared_archive
         FROM archive_windows,LATERAL generate_series(first_date::DATE,last_date::DATE,
             INTERVAL 1 DAY) d(day) GROUP BY ALL""")
+    official_ok = """NOT EXISTS(SELECT 1 FROM official_missing_dates o
+                WHERE {a}.country IN ('United States of America','Canada') AND o.day::DATE={a}.day
+                AND o.quality={a}.processing AND (o.satellite LIKE {p}||' (%'
+                    OR ({p}='S-NPP' AND o.satellite='Suomi NPP (VIIRS)')))"""
+    fill = f"""coalesce(v.n20_ok,false) AND (NOT coalesce(v.snpp_ok,false) OR (
+            coalesce(c.n20_cells,0)>={PARTIAL_OUTAGE_MIN_CELLS}
+            AND coalesce(c.snpp_cells,0)<{PARTIAL_OUTAGE_RATIO}*c.n20_cells))"""
     connection.execute(f"""CREATE OR REPLACE TABLE support AS WITH dates AS (
         SELECT DISTINCT country,day FROM archive_days
-    ),chosen AS (SELECT *,CASE WHEN day<{sql_literal(snpp["first_date"])}::DATE
-        THEN CASE WHEN day<{sql_literal(aqua["first_date"])}::DATE
+    ),viirs AS (SELECT a.country,a.day,
+        coalesce(bool_or(coalesce(q.valid,false) AND {official_ok.format(a="a", p="a.platform")})
+            FILTER(WHERE a.platform='S-NPP'),false) AS snpp_ok,
+        coalesce(bool_or(coalesce(q.valid,false) AND {official_ok.format(a="a", p="a.platform")})
+            FILTER(WHERE a.platform='NOAA-20'),false) AS n20_ok
+        FROM archive_days a LEFT JOIN quality q ON q.platform=a.platform AND q.day=a.day
+        WHERE a.platform IN ('S-NPP','NOAA-20')
+        AND a.day BETWEEN {snpp_first}::DATE AND {snpp_last}::DATE GROUP BY ALL
+    ),viirs_cells AS (SELECT country,day,
+        count(*) FILTER(WHERE platform='S-NPP') AS snpp_cells,
+        count(*) FILTER(WHERE platform='NOAA-20') AS n20_cells
+        FROM activity WHERE platform IN ('S-NPP','NOAA-20')
+        AND day BETWEEN {sql_literal(noaa20["first_date"])}::DATE AND {snpp_last}::DATE
+        GROUP BY ALL
+    ),chosen AS (SELECT d.country,d.day,CASE WHEN d.day<{snpp_first}::DATE
+        THEN CASE WHEN d.day<{sql_literal(aqua["first_date"])}::DATE
             THEN 'terra_only' ELSE 'terra_aqua' END
-        WHEN day<={sql_literal(snpp["last_date"])}::DATE THEN 'reference'
-        ELSE 'noaa20' END AS sampling FROM dates
+        WHEN d.day<={snpp_last}::DATE THEN CASE WHEN {fill} THEN 'noaa20' ELSE 'reference' END
+        ELSE 'noaa20' END AS sampling,
+        d.day BETWEEN {snpp_first}::DATE AND {snpp_last}::DATE AND {fill} AS snpp_filled
+        FROM dates d LEFT JOIN viirs v USING(country,day) LEFT JOIN viirs_cells c USING(country,day)
     ),required AS (SELECT c.*,p.platform FROM chosen c CROSS JOIN (VALUES
         ('Terra'),('Aqua'),('S-NPP'),('NOAA-20')) p(platform)
         WHERE (sampling='terra_only' AND p.platform='Terra')
@@ -142,7 +174,8 @@ def build_support(connection: Any, workspace: Path, prepared: dict[str, Any]) ->
             AS valid_platforms,
         coalesce(bool_and(a.declared_archive),false) AS declared_archive,
         coalesce(bool_or(a.processing<>'SP'),false) AS is_provisional,
-        r.day={sql_literal(snpp["last_date"])}::DATE AS transition_day
+        r.day={snpp_last}::DATE AS transition_day,
+        coalesce(r.snpp_filled,false) AS snpp_filled
         FROM required r LEFT JOIN archive_days a USING(country,day,platform)
         LEFT JOIN quality q ON q.platform=r.platform AND q.day=r.day GROUP BY ALL""")
 
@@ -173,7 +206,8 @@ def coefficient_choices(connection: Any, model: dict[str, Any]) -> None:
                             "sampling": sampling,
                             "coefficient": coefficient.coefficient,
                             "fallback_level": coefficient.fallback_level,
-                            "validated": validated.get((country, biome, sampling), False),
+                            "validated": sampling in SERVED_SAMPLINGS
+                            and validated.get((country, biome, sampling), False),
                         }
                     )
     connection.register("choice_frame", pd.DataFrame.from_records(choices))
@@ -306,7 +340,7 @@ def build_artifact(
             raise ValueError("Cambió el filtro después del entrenamiento; vuelve a entrenar")
         build_support(connection, workspace, prepared)
         hashes = assemble(connection, destination, model)
-        firms_legal = read_json(workspace / "docs/reference/firms_legal.json")["es"]
+        firms_legal = read_json(workspace / "docs/reference/firms_legal.json")["en"]
         manifest = {
             "id": model["id"],
             "status": status,
@@ -342,7 +376,7 @@ def build_artifact(
             "legal": firms_legal["citation"]
             + " "
             + firms_legal["warning"]
-            + " NASA no avala NINA.",
+            + " NASA does not endorse NINA.",
             "h3_resolution": model["configuration"]["h3_resolution"],
             "auxiliaries": [
                 {k: v for k, v in item.items() if k != "path"} for item in prepared["auxiliaries"]

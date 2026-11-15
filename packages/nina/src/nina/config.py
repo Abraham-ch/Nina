@@ -8,7 +8,7 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
-HARMONIZATION_VERSION = _env("HARMONIZATION_VERSION", "0.3.0")
+HARMONIZATION_VERSION = _env("HARMONIZATION_VERSION", "0.4.0")
 MIN_CONFIDENCE_CLASS = _env("MIN_CONFIDENCE_CLASS", "nominal")
 KEEP_TYPES = [int(t) for t in _env("KEEP_TYPES", "0").split(",")]
 H3_RES = int(_env("H3_RES", "7"))

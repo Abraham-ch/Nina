@@ -144,6 +144,10 @@ def validate_years(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str
     predictions: list[dict[str, Any]] = []
     by_stratum: dict[tuple[str, int, str], list[tuple[float, float]]] = defaultdict(list)
     by_year: dict[int, list[tuple[float, float]]] = defaultdict(list)
+    raw: dict[tuple[str, int, str], list[tuple[float, float]]] = defaultdict(list)
+    stratum_years: dict[tuple[str, int, str], dict[int, list[float]]] = defaultdict(
+        lambda: defaultdict(lambda: [0.0, 0.0])
+    )
     for year in years:
         coefficients = fit_coefficients([p for p in eligible if p.year != year])
         for pair in [p for p in eligible if p.year == year]:
@@ -158,8 +162,12 @@ def validate_years(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str
                 continue
             prediction = pair.source_count * coefficient.coefficient
             value = (prediction, pair.reference_count)
-            by_stratum[(pair.country, pair.biome, pair.sampling)].append(value)
+            key = (pair.country, pair.biome, pair.sampling)
+            by_stratum[key].append(value)
             by_year[year].append(value)
+            raw[key].append((pair.source_count, pair.reference_count))
+            stratum_years[key][year][0] += prediction
+            stratum_years[key][year][1] += pair.reference_count
             predictions.append(
                 {
                     **asdict(pair),
@@ -177,6 +185,17 @@ def validate_years(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str
             active_months >= MIN_STRATUM_MONTHS and bias is not None and correlation is not None
         )
         passed = evaluable and abs(bias) <= max_bias and correlation >= MIN_SPEARMAN
+        yearly_bias = {
+            year: total_prediction / total_reference - 1
+            for year, (total_prediction, total_reference) in sorted(
+                stratum_years[(country, biome, sampling)].items()
+            )
+            if total_reference > 0
+        }
+        raw_metrics = relative_metrics(
+            [v[0] for v in raw[(country, biome, sampling)]],
+            [v[1] for v in raw[(country, biome, sampling)]],
+        )
         strata.append(
             {
                 "country": country,
@@ -186,6 +205,9 @@ def validate_years(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str
                 "active_months": active_months,
                 "evaluable": evaluable,
                 "passed": bool(passed),
+                "raw_spearman": raw_metrics["spearman"],
+                "yearly_relative_bias": {str(y): b for y, b in yearly_bias.items()},
+                **yearly_error_summary(list(yearly_bias.values())),
             }
         )
     evaluable_strata = [s for s in strata if s["evaluable"]]
@@ -194,6 +216,9 @@ def validate_years(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str
         if evaluable_strata
         else 0.0
     )
+    passed_yearly = [
+        b for s in strata if s["passed"] for b in s["yearly_relative_bias"].values()
+    ]
     yearly = {
         str(y): relative_metrics([v[0] for v in values], [v[1] for v in values])
         for y, values in sorted(by_year.items())
@@ -216,6 +241,29 @@ def validate_years(pairs: list[MonthlyPair], max_bias: float = 0.10) -> dict[str
         and fraction >= MIN_PASS_FRACTION,
         "predictions": predictions,
         "zero_source_months": sum(p.source_count == 0 for p in eligible),
+        # El sesgo del gate se agrega sobre todos los años; esto muestra el error de cada año
+        # en los estratos aprobados (lo que un usuario ve al mirar un año concreto).
+        "per_year_error_in_passed_strata": yearly_error_summary(passed_yearly),
+        "raw_baseline_passing_spearman": sum(
+            1
+            for s in evaluable_strata
+            if s["raw_spearman"] is not None
+            and s["relative_bias"] is not None
+            and s["raw_spearman"] >= MIN_SPEARMAN
+        ),
+    }
+
+
+def yearly_error_summary(biases: list[float]) -> dict[str, Any]:
+    """Error relativo por año: mediana y percentil 90 del valor absoluto, y fracción ≤10 %."""
+    if not biases:
+        return {"yearly_abs_bias_median": None, "yearly_abs_bias_p90": None, "years_within_10pct": None}
+    absolute = sorted(abs(b) for b in biases)
+    p90 = absolute[min(len(absolute) - 1, math.ceil(0.9 * len(absolute)) - 1)]
+    return {
+        "yearly_abs_bias_median": statistics.median(absolute),
+        "yearly_abs_bias_p90": p90,
+        "years_within_10pct": sum(b <= 0.10 for b in absolute) / len(absolute),
     }
 
 

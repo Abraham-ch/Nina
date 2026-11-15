@@ -63,7 +63,8 @@ def quality_table(connection: Any, prepared: dict[str, Any], catalog: dict[str, 
             continue
         life = prepared["sensor_lifecycle"][key]
         mission_end = date.fromisoformat(life["last_date"]) if life.get("last_date") else None
-        known: set[date] = set()
+        forced: set[date] = set()
+        candidates: set[date] = set()
         for item in prepared["known_gaps"]:
             # Los intervalos imprecisos de todo un año no se convierten en un
             # apagón continuo. Los detecta el diagnóstico diario cuando procede.
@@ -71,13 +72,21 @@ def quality_table(connection: Any, prepared: dict[str, Any], catalog: dict[str, 
                 item.get("partial") and "FMU" not in item["reason"]
             ):
                 continue
+            # Solo la falla de hardware documentada (FMU de Aqua) se fuerza; el resto de avisos
+            # del Readme se confirma con el conteo diario (ADR 0005).
+            target = forced if "FMU" in item["reason"] else candidates
             day = date.fromisoformat(item["start"])
             end = date.fromisoformat(item["end"])
             while day <= end:
-                known.add(day)
+                target.add(day)
                 day += timedelta(days=1)
         for row in daily_quality(
-            values, min(values), last, mission_end=mission_end, known_missing=known
+            values,
+            min(values),
+            last,
+            mission_end=mission_end,
+            known_missing=forced,
+            known_candidates=candidates,
         ):
             records.append(
                 {

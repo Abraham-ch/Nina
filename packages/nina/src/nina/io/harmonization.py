@@ -380,6 +380,32 @@ def classify_rows(
     return catalog
 
 
+def build_activity(connection: duckdb.DuckDBPyConnection) -> None:
+    """Celda × día × plataforma, agregada año por año.
+
+    `count(DISTINCT)` no se desborda a disco en DuckDB: sobre todo el archivo agotaba la memoria.
+    Ningún grupo cruza el límite de un año, así que el resultado es idéntico al de una sola consulta.
+    """
+    query = """SELECT cell,day,platform,processing,g.country,g.biome,
+            count(DISTINCT cell8) AS active_subcells,
+            sum(n) AS pixel_rows,sum(frp_sum) AS frp_sum,sum(area_sum) AS area_sum,
+            sum(wide_pixels) AS wide_pixels
+        FROM classified JOIN grid_cells g USING(cell) WHERE qa_reason IS NULL {window}
+        GROUP BY cell,day,platform,processing,g.country,g.biome"""
+    connection.execute(f"CREATE OR REPLACE TABLE activity AS {query.format(window='')} LIMIT 0")
+    first, last = connection.execute("SELECT min(day),max(day) FROM normalized").fetchone() or (
+        None,
+        None,
+    )
+    if first is None:
+        return
+    for year in range(first.year, last.year + 1):
+        window = f"AND day>=DATE '{year}-01-01' AND day<DATE '{year + 1}-01-01'"
+        connection.execute(f"INSERT INTO activity {query.format(window=window)}")
+        connection.execute("CHECKPOINT")
+        log("activity_year", year=year)
+
+
 def prepare(workspace: Path, *, refresh_derived: bool = False) -> dict[str, Any]:
     """Construye insumos comparables; no publica un dataset armonizado."""
     source = workspace / "source"
@@ -418,13 +444,7 @@ def prepare(workspace: Path, *, refresh_derived: bool = False) -> dict[str, Any]
             SELECT platform,day,processing,sum(n) AS n FROM normalized GROUP BY ALL""")
         connection.execute("""CREATE OR REPLACE TABLE grid_cells AS
             SELECT cell,min(country) AS country,min(biome) AS biome FROM cells GROUP BY cell""")
-        connection.execute("""CREATE OR REPLACE TABLE activity AS
-            SELECT cell,day,platform,processing,g.country,g.biome,
-                count(DISTINCT cell8) AS active_subcells,
-                sum(n) AS pixel_rows,sum(frp_sum) AS frp_sum,sum(area_sum) AS area_sum,
-                sum(wide_pixels) AS wide_pixels
-            FROM classified JOIN grid_cells g USING(cell) WHERE qa_reason IS NULL
-            GROUP BY cell,day,platform,processing,g.country,g.biome""")
+        build_activity(connection)
         source_windows(connection, workspace)
         superseded = reconcile_activity(connection)
         rejection_counts["superseded_by_standard"] = superseded["pixel_rows"]

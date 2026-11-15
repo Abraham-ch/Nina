@@ -246,6 +246,7 @@ def test_archive_support_respects_regimes_official_scope_and_mission_end(tmp_pat
         q(platform,day,valid)""")
     connection.execute("""CREATE TABLE official_missing_dates AS SELECT '2026-11-03' AS day,
         'NOAA-20 (VIIRS)' satellite,'NRT' quality,'US_Canada_service' scope""")
+    connection.execute("CREATE TABLE activity(cell VARCHAR,day DATE,platform VARCHAR,country VARCHAR)")
     build_support(connection, tmp_path, {"sensor_lifecycle": lifecycle})
     assert connection.execute("""SELECT sampling,valid_platforms,declared_archive
         FROM support WHERE country='Peru' AND day='2001-03-01'""").fetchone() == (
@@ -263,3 +264,107 @@ def test_archive_support_respects_regimes_official_scope_and_mission_end(tmp_pat
         ("United States of America", "noaa20", 0),
     ]
     connection.close()
+
+
+LIFECYCLE = {
+    "terra": {"first_date": "2000-11-01", "last_date": None},
+    "aqua": {"first_date": "2002-07-04", "last_date": None},
+    "snpp": {"first_date": "2012-01-20", "last_date": "2026-11-02"},
+    "noaa20": {"first_date": "2018-04-01", "last_date": None},
+    "noaa21": {"first_date": "2024-01-17", "last_date": None},
+}
+
+
+def test_noaa20_fills_snpp_outages_and_partial_days(tmp_path):
+    write_json(
+        tmp_path / "source/history-inputs.json",
+        {
+            "files": [
+                {"country": "Peru", "source": source, "year": 2025}
+                for source in ["viirs-snpp", "viirs-jpss1"]
+            ]
+        },
+    )
+    write_json(tmp_path / "data/global-import.json", {"files": []})
+    write_json(
+        tmp_path / "web/public/assets/countries.geojson", {"features": [{"properties": {"name": "Peru"}}]}
+    )
+    connection = duckdb.connect()
+    # 1 feb: S-NPP sin datos. 2 feb: S-NPP válido pero con 10 celdas frente a 100 de NOAA-20.
+    # 3 feb: normal. 4 feb: ni S-NPP ni NOAA-20 válidos.
+    connection.execute("""CREATE TABLE quality AS SELECT * FROM (VALUES
+        ('S-NPP',DATE '2025-02-01',false),('NOAA-20',DATE '2025-02-01',true),
+        ('S-NPP',DATE '2025-02-02',true),('NOAA-20',DATE '2025-02-02',true),
+        ('S-NPP',DATE '2025-02-03',true),('NOAA-20',DATE '2025-02-03',true),
+        ('S-NPP',DATE '2025-02-04',false),('NOAA-20',DATE '2025-02-04',false))
+        q(platform,day,valid)""")
+    connection.execute("CREATE TABLE official_missing_dates(day VARCHAR,satellite VARCHAR,quality VARCHAR)")
+    connection.execute("""CREATE TABLE activity AS
+        SELECT 'c'||i AS cell,DATE '2025-02-02' AS day,'NOAA-20' AS platform,'Peru' AS country
+            FROM range(100) t(i)
+        UNION ALL SELECT 'c'||i,DATE '2025-02-02','S-NPP','Peru' FROM range(10) t(i)
+        UNION ALL SELECT 'c'||i,DATE '2025-02-03','NOAA-20','Peru' FROM range(100) t(i)
+        UNION ALL SELECT 'c'||i,DATE '2025-02-03','S-NPP','Peru' FROM range(90) t(i)""")
+    build_support(connection, tmp_path, {"sensor_lifecycle": LIFECYCLE})
+    rows = connection.execute("""SELECT day::VARCHAR,sampling,snpp_filled,valid_platforms=required_platforms
+        FROM support WHERE country='Peru' AND day BETWEEN '2025-02-01' AND '2025-02-04'
+        ORDER BY day""").fetchall()
+    assert rows == [
+        ("2025-02-01", "noaa20", True, True),
+        ("2025-02-02", "noaa20", True, True),
+        ("2025-02-03", "reference", False, True),
+        ("2025-02-04", "reference", False, False),
+    ]
+    connection.close()
+
+
+def test_antimeridian_polygons_do_not_become_global_bands():
+    from nina.io.geography import assign_countries, country_layer
+
+    chukotka = {  # Un anillo que salta de 170° a −170°, como el de Rusia en Natural Earth 1:110m.
+        "type": "Feature",
+        "properties": {"name": "Russia"},
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[170, 64], [180, 64], [-170, 64], [-170, 70], [180, 70], [170, 70], [170, 64]]],
+        },
+    }
+    alaska = {
+        "type": "Feature",
+        "properties": {"name": "United States of America"},
+        "geometry": {"type": "Polygon", "coordinates": [[[-160, 55], [-140, 55], [-140, 70], [-160, 70], [-160, 55]]]},
+    }
+    names, tree = country_layer([chukotka, alaska])
+    points = shapely.points([-150, 175, -175, -100, -139.9], [66, 66, 66, 66, 60])
+    assert list(assign_countries(points, names, tree)) == [
+        "United States of America",  # Alaska ya no cae en Rusia
+        "Russia",
+        "Russia",  # Chukotka al este de 180° sigue siendo Rusia
+        "unassigned",  # Canadá ficticio: lejos de todo contorno
+        "United States of America",  # a 0,1° de la costa: se ajusta al país más cercano
+    ]
+
+
+def test_documented_gaps_are_confirmed_by_daily_counts():
+    from datetime import timedelta
+
+    from nina.coverage import daily_quality
+
+    first = date(2007, 8, 1)
+    counts = {first + timedelta(days=i): 3000 for i in range(31)}
+    counts[date(2007, 8, 20)] = 200  # caída real
+    result = {
+        r["day"]: r
+        for r in daily_quality(
+            counts,
+            first,
+            date(2007, 8, 31),
+            known_candidates={date(2007, 8, 15) + timedelta(days=i) for i in range(17)},
+            known_missing={date(2007, 8, 30)},
+        )
+    }
+    assert not result[date(2007, 8, 16)]["data_gap"]
+    assert result[date(2007, 8, 16)]["reason"] == "known_gap_unconfirmed"
+    assert result[date(2007, 8, 20)]["data_gap"]
+    assert result[date(2007, 8, 20)]["reason"] == "known_or_official_gap"
+    assert result[date(2007, 8, 30)]["data_gap"]  # falla de hardware forzada

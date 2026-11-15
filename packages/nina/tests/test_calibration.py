@@ -99,3 +99,21 @@ def test_invalid_confidence_is_rejected():
         confidence_class("Aqua", "101")
     with pytest.raises(ValueError):
         confidence_class("S-NPP", "unknown")
+
+
+def test_validation_reports_per_year_error_and_raw_baseline():
+    from nina.calibration import MonthlyPair, validate_years, yearly_error_summary
+
+    pairs = [
+        MonthlyPair("Peru", 1, year, month, "terra_aqua", 100.0 + 10 * month, (300.0 + 30 * month) * (1.08 if year % 2 else 0.93), 50)
+        for year in range(2012, 2024)
+        for month in range(1, 13)
+    ]
+    result = validate_years(pairs)
+    stratum = result["strata"][0]
+    assert len(stratum["yearly_relative_bias"]) == 12
+    assert stratum["yearly_abs_bias_median"] > 0.05  # el sesgo agregado oculta ±7 % por año
+    assert abs(stratum["relative_bias"]) < 0.05
+    assert stratum["raw_spearman"] is not None
+    assert result["per_year_error_in_passed_strata"]["years_within_10pct"] is not None
+    assert yearly_error_summary([0.05, -0.2, 0.08])["years_within_10pct"] == 2 / 3
