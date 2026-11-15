@@ -4071,3 +4071,50 @@ h1 > .experimental-tag {
   display: block;
   color: var(--muted);
 }
+/* The one entry to the analyst, always visible in the header */
+.header-actions .ask-nina {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--sand);
+  border-radius: 999px;
+  color: var(--sand);
+  font-weight: 600;
+}
+.header-actions .ask-nina:hover {
+  background: var(--sand);
+  color: var(--on-sand);
+}
+/* Atlas legend: colour by day of detection (FIRMS-style) or by sensor */
+.color-by {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 10px;
+}
+.color-by button {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.72rem;
+}
+.color-by button[aria-pressed='true'] {
+  border-color: var(--sand);
+  color: var(--sand);
+}
+.day-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.72rem;
+}
+.day-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}

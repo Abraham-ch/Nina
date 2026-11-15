@@ -30,6 +30,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { DAY_COLORS, dayClass } from './dayColors'
 
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { HARMONIZED } from './api'
@@ -88,7 +89,7 @@ const MAX_ZOOM_OUT = 24_000_000,
   HOME = Cartesian3.fromDegrees(-65, 5, 18_000_000)
 type Dot = {
   pos: Cartesian3
-  kind: number // 0 VIIRS · 1 MODIS · 2 harmonized
+  kind: number // 0 VIIRS · 1 MODIS · 2 harmonized · 3-7 day of detection (early → late)
   side: number
   point: Point
   x: number
@@ -114,6 +115,7 @@ const gauss = () =>
   Math.sqrt(-2 * Math.log(1 - Math.random() * 0.999)) * Math.cos(2 * Math.PI * Math.random())
 
 type Props = {
+  colorBy?: 'sensor' | 'day'
   selection: Selection
   layers: Layer[]
   compare: boolean
@@ -130,6 +132,7 @@ type Props = {
   busy: boolean
 }
 export default function Globe({
+  colorBy = 'sensor',
   selection,
   layers,
   compare,
@@ -239,7 +242,7 @@ export default function Globe({
       const red = glow('255,64,32'),
         amber = glow('255,170,50'),
         cyan = glow('40,210,255', '215,250,255'),
-        sprites = [red, amber, cyan],
+        sprites = [red, amber, cyan, ...DAY_COLORS.map((rgb) => glow(rgb, '255,245,225'))],
         scratch = new Cartesian2()
       const paint = () => {
         const c = heat.current
@@ -292,7 +295,8 @@ export default function Globe({
         // Motes: two particles per detection around the core, for the cloud texture.
         ctx.globalAlpha = 0.85
         const spread = r * 0.38
-        for (const [kind, mote] of ['#ff9a6a', '#ffd08a', '#9eeeff'].entries()) {
+        const motes = ['#ff9a6a', '#ffd08a', '#9eeeff', ...DAY_COLORS.map((rgb) => `rgb(${rgb})`)]
+        for (const [kind, mote] of motes.entries()) {
           ctx.fillStyle = mote
           ctx.beginPath()
           for (const d of list)
@@ -397,7 +401,14 @@ export default function Globe({
         const [lon, lat] = point.geometry.coordinates
         list.push({
           pos: Cartesian3.fromDegrees(lon, lat, 0),
-          kind: layer.source === 'modis' ? 1 : layer.source === HARMONIZED ? 2 : 0,
+          kind:
+            colorBy === 'day' && !compare
+              ? 3 + dayClass(point.properties.date)
+              : layer.source === 'modis'
+                ? 1
+                : layer.source === HARMONIZED
+                  ? 2
+                  : 0,
           side: index,
           point,
           x: 0,
@@ -408,7 +419,7 @@ export default function Globe({
       }
     dots.current = list
     v.scene.requestRender()
-  }, [ready, layers, compare])
+  }, [ready, layers, compare, colorBy])
   useEffect(() => {
     const v = viewer.current
     if (!v || !ready) return

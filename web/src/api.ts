@@ -138,7 +138,7 @@ export function pointsFromHarmonized(p: HarmonizedPoints, date: string): Points 
         id: f.properties.cell,
         source: HARMONIZED,
         platform: tr('H3 cell centre', 'Centro de celda H3'),
-        date,
+        date: f.properties.last_day || date,
         frp: f.properties.activity,
         confidence: f.properties.calibration_validated
           ? tr('Validated coefficient', 'Coeficiente validado')
