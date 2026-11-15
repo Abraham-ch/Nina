@@ -192,6 +192,23 @@ class AssistantResponse(BaseModel):
     external_llm_used: Literal[False]
 
 
+def store_json(path: Path, data) -> None:
+    """Write a cached result atomically; if another request already wrote (or is reading) it, keep that copy.
+
+    On Windows a replace fails while the target is open, so the temporary file is removed instead of left behind:
+    both writers computed the same result for the same identifier.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, name = tempfile.mkstemp(suffix=".tmp", prefix=path.stem, dir=path.parent)
+    os.close(handle)
+    temporary = Path(name)
+    try:
+        temporary.write_text(json.dumps(data, ensure_ascii=False, default=float), encoding="utf-8")
+        temporary.replace(path)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+
+
 def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -627,6 +644,34 @@ def month_to_date(connection, selection, number_countries, *, as_of_year=None):
     return result
 
 
+def prewarm() -> list[str]:
+    """Store the planet view for the periods the interface opens on, so the first visitor does not wait.
+
+    A world analysis and its map points take about 4 s each to aggregate; both are stored by identifier, so later
+    requests for the same selection return in milliseconds. Runs in a background thread at server start and only
+    when the harmonized product is available; any failure is skipped (the request path computes it as before).
+    """
+    if not readiness().get("available"):
+        return []
+    manifest, _folder = published()
+    as_of = date.fromisoformat(manifest["as_of_date"]) if manifest.get("as_of_date") else date.today()
+    year = as_of.year
+    default_month = min(7, as_of.month)
+    periods = [(2002, default_month), (year - 1, default_month)]
+    periods += [(2002, month) for month in range(as_of.month, 0, -1) if month != default_month]
+    done = []
+    for year_start, month in periods:
+        try:
+            selection = HarmonizedSelection(country="world", year_start=year_start, year_end=year,
+                                            selected_year=year, selected_month=month)
+            analysis = create_analysis(selection)
+            points(analysis["id"], limit=5000)
+            done.append(analysis["id"])
+        except Exception:  # noqa: BLE001 - a cache warm-up must never stop the server
+            continue
+    return done
+
+
 @router.post("/api/harmonized/analyses", response_model=HarmonizedAnalysis)
 def create_analysis(selection: HarmonizedSelection):
     manifest, folder = published()
@@ -637,6 +682,14 @@ def create_analysis(selection: HarmonizedSelection):
         "validation_status": "validated" if manifest["status"] == "published" else "experimental",
     }
     identifier = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
+    # The identifier already depends on the selection, the dataset and the analysis version: a stored result for it
+    # is the same result, so it is returned instead of recomputing (the planet takes seconds to aggregate).
+    stored_path = DATA / "jobs/harmonized" / f"{identifier}.json"
+    if stored_path.exists():
+        try:
+            return load_json(stored_path)
+        except (OSError, ValueError):
+            pass
     as_of_year = int(manifest["as_of_date"][:4]) if manifest.get("as_of_date") else None
     with selection_database(selection, folder) as (connection, number_countries, excluded):
         months = monthly_calendar(connection, selection, number_countries, as_of_year=as_of_year)
@@ -669,15 +722,14 @@ def create_analysis(selection: HarmonizedSelection):
         "method_version": manifest["method_version"],
         "references": manifest["references"],
         "legal": manifest["legal"],
+        # A summary: the full validation (strata, predictions) is ~0.8 MB and lives in the product manifest and in
+        # source/reports/validation_<version>.json; every analysis used to carry it.
         "provenance": {
             "input_revision": manifest.get("input_revision"),
-            "auxiliaries": manifest.get("auxiliaries", []),
             "gates": manifest["gates"],
             "dataset_hashes": manifest["hashes"],
-            "inputs": manifest.get("inputs", []),
-            "validation": manifest.get("validation", {}),
-            "geographic_diagnostic": manifest.get("geographic_diagnostic", {}),
             "input_mask_method_version": manifest.get("input_mask_method_version"),
+            "validation_report": f"source/reports/validation_{manifest['method_version']}.json",
         },
         "limitations": [
             "VIIRS-equivalent detected activity; not a number of fires and not burned area.",
@@ -687,13 +739,7 @@ def create_analysis(selection: HarmonizedSelection):
             "Year-to-year error of the MODIS-era values is about ±10 % (validated strata).",
         ],
     }
-    cache = DATA / "jobs/harmonized"
-    cache.mkdir(parents=True, exist_ok=True)
-    handle, name = tempfile.mkstemp(suffix=".tmp", prefix=identifier, dir=cache)
-    os.close(handle)
-    temporary = Path(name)
-    temporary.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(cache / f"{identifier}.json")
+    store_json(DATA / "jobs/harmonized" / f"{identifier}.json", result)
     return result
 
 
@@ -744,6 +790,12 @@ def points(identifier: str, limit: int = 5000):
     if not 1 <= limit <= MAX_MAP_POINTS:
         raise HTTPException(422, "The limit must be between 1 and 10000")
     result, folder = existing(identifier)
+    cached = DATA / "jobs/harmonized" / f"{identifier}_points_{limit}.json"
+    if cached.exists():
+        try:
+            return load_json(cached)
+        except (OSError, ValueError):
+            pass
     selection = HarmonizedSelection(**result["selection"])
     with selection_database(selection, folder) as (connection, _, _excluded):
         connection.execute(
@@ -758,7 +810,7 @@ def points(identifier: str, limit: int = 5000):
         rows = connection.execute(
             "SELECT * FROM monthly_points ORDER BY hash(cell),cell LIMIT ?", [limit]
         ).fetchall()
-    return {
+    response = {
         "analysis_id": identifier,
         "dataset_id": result["dataset_id"],
         "validation_status": result["validation_status"],
@@ -786,6 +838,9 @@ def points(identifier: str, limit: int = 5000):
             for cell, lat, lon, activity, validated, observed, first, last in rows
         ],
     }
+    store_json(cached, response)
+    # The same values as plain numbers (DuckDB returns decimals), as a cached call returns them.
+    return json.loads(json.dumps(response, default=float))
 
 
 def safe_csv(values):

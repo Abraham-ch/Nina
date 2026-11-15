@@ -37,10 +37,18 @@ async def lifespan(app):
     if POOL._shutdown: POOL=ThreadPoolExecutor(max_workers=2,thread_name_prefix='nina-job')
     initialize()
     with database() as c: c.execute("UPDATE jobs SET status='interrupted',message='Proceso reiniciado; vuelve a ejecutar el trabajo.' WHERE status IN ('queued','running')")
+    # Warm the planet view in the background (first world load otherwise takes ~8 s). NINA_PREWARM=false disables it.
+    if os.getenv('NINA_PREWARM','true').lower()=='true':
+        import threading
+        from .harmonized import prewarm
+        threading.Thread(target=prewarm,name='nina-prewarm',daemon=True).start()
     yield
     POOL.shutdown(wait=False,cancel_futures=True)
 
 app=FastAPI(title='NINA · Fire atlas',version='0.3.0',lifespan=lifespan)
+# Compress JSON (analyses and map points shrink 5-10x); Starlette leaves text/event-stream and images alone.
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware,minimum_size=1024)
 
 # Las rutas con `require()` rechazan por rol; se documentan aquí porque FastAPI
 # solo añade 401/403 automáticamente cuando el medio es un esquema Security.

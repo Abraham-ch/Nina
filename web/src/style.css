@@ -4363,6 +4363,23 @@ ol.analyst-progress {
   font-weight: 500;
   margin-right: 4px;
 }
+.day-legend {
+  align-items: center;
+}
+.day-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.day-legend .day-scale i {
+  width: 120px;
+  height: 9px;
+  margin: 0;
+  border-radius: 999px;
+}
+.day-note {
+  opacity: 0.75;
+}
 .color-by {
   align-items: center;
   font-size: 0.72rem;

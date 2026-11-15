@@ -299,3 +299,29 @@ def test_month_in_progress_is_compared_with_the_same_valid_days(published_artifa
     assert current["through_day"] == 10 and current["valid_days"] == 9  # day 4 skipped, not zero
     assert current["value"] == 14 and current["historical_median"] == 7
     assert current["anomaly_percent"] == 100 and not current["sampling_bias_warning"]
+
+
+def test_stored_analysis_and_points_are_reused_and_a_failed_write_leaves_no_temporary(
+    published_artifact, monkeypatch
+):
+    client, _ = published_artifact
+    first = client.post("/api/harmonized/analyses", json=request()).json()
+    points = client.get(f"/api/harmonized/analyses/{first['id']}/points").json()
+    cache = harmonized.DATA / "jobs/harmonized"
+    assert (cache / f"{first['id']}.json").exists()
+    assert (cache / f"{first['id']}_points_5000.json").exists()
+    # The second request reads the stored copy: the same answer without touching the product.
+    monkeypatch.setattr(harmonized, "selection_database", None)
+    assert client.post("/api/harmonized/analyses", json=request()).json() == first
+    assert client.get(f"/api/harmonized/analyses/{first['id']}/points").json() == points
+    # A replace that fails (Windows: the target is open in another request) keeps the old copy, no orphan file.
+    target = cache / "busy.json"
+    target.write_text("{}", encoding="utf-8")
+
+    def busy(self, other):
+        raise PermissionError("in use")
+
+    monkeypatch.setattr(harmonized.Path, "replace", busy)
+    harmonized.store_json(target, {"value": 1})
+    assert target.read_text(encoding="utf-8") == "{}"
+    assert not list(cache.glob("*.tmp"))

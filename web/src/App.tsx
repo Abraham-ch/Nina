@@ -1311,32 +1311,42 @@ export default function App() {
                 </span>
                 {tab === 'atlas' && (
                   <span className="color-by">
-                    {tr('Colour points by', 'Colorear puntos por')}
+                    {tr('Dot colour shows', 'El color del punto indica')}
                     <button aria-pressed={colorBy === 'day'} onClick={() => setColorBy('day')}>
-                      {tr('day of detection', 'día de detección')}
+                      {tr('when it burned', 'cuándo ardió')}
                     </button>
-                    <button
-                      aria-pressed={colorBy === 'sensor'}
-                      onClick={() => setColorBy('sensor')}
-                    >
-                      {tr('sensor', 'sensor')}
+                    <button aria-pressed={colorBy === 'sensor'} onClick={() => setColorBy('sensor')}>
+                      {tr('which satellite', 'qué satélite')}
                     </button>
                   </span>
                 )}
                 {tab === 'atlas' && colorBy === 'day' && (
-                  <span className="day-legend">
+                  <span
+                    className="day-legend"
+                    title={DAY_RANGES.map((range) => tr(`days ${range}`, `días ${range}`)).join(' · ')}
+                  >
                     <b>
                       {tr(
-                        `Last detection in ${monthName} (day of the month):`,
-                        `Última detección en ${monthName.toLowerCase()} (día del mes):`,
+                        `Each dot is a place with fire. Last day it burned in ${monthName}:`,
+                        `Cada punto es un lugar con fuego. Último día que ardió en ${monthName.toLowerCase()}:`,
                       )}
                     </b>
-                    {DAY_COLORS.map((rgb, index) => (
-                      <span key={rgb}>
-                        <i style={{ background: `rgb(${rgb})` }} />
-                        {DAY_RANGES[index]}
-                      </span>
-                    ))}
+                    <span className="day-scale">
+                      {tr('day 1', 'día 1')}
+                      <i
+                        aria-hidden="true"
+                        style={{
+                          background: `linear-gradient(90deg, ${DAY_COLORS.map(
+                            (rgb, index) =>
+                              `rgb(${rgb}) ${(index * 100) / DAY_COLORS.length}% ${((index + 1) * 100) / DAY_COLORS.length}%`,
+                          ).join(', ')})`,
+                        }}
+                      />
+                      {tr('day 31', 'día 31')}
+                    </span>
+                    <span className="day-note">
+                      {tr('pale = early in the month, dark red = most recent', 'claro = inicio del mes, rojo oscuro = lo más reciente')}
+                    </span>
                   </span>
                 )}
                 <span>
