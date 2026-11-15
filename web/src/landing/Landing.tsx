@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { locale, tr } from '../i18n'
 import LangSwitch from '../LangSwitch'
-import Evidence, { day, share, title, type PeruEvidence } from './Evidence'
+import Evidence, { day, share, title, type PeruEvidence, type WorldEvidence } from './Evidence'
 import Team from './Team'
 import { createScene, weekLabel, type Countries, type LandingData, type Week } from './scene'
 
@@ -73,6 +73,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
   const focusRef = useRef(-1)
   const [data, setData] = useState<LandingData | null>(null)
   const [evidence, setEvidence] = useState<PeruEvidence | null>(null)
+  const [world, setWorld] = useState<WorldEvidence | null>(null)
   const [week, setWeek] = useState<Week | null>(null)
 
   useEffect(() => {
@@ -86,10 +87,14 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
       fetch('/assets/peru-evidence.json')
         .then((r) => (r.ok ? (r.json() as Promise<PeruEvidence>) : null))
         .catch(() => null),
-    ]).then(([countries, peruData, peruEvidence]) => {
+      fetch('/assets/world-evidence.json')
+        .then((r) => (r.ok ? (r.json() as Promise<WorldEvidence>) : null))
+        .catch(() => null),
+    ]).then(([countries, peruData, peruEvidence, worldEvidence]) => {
       if (!alive || !canvas.current) return
       setData(peruData)
       setEvidence(peruEvidence)
+      setWorld(worldEvidence)
       scene = createScene(canvas.current, countries, peruData, {
         // World → Peru while the Peru section scrolls up; hotspots appear on arrival; the closing section dims the scene.
         progress() {
@@ -430,7 +435,7 @@ export default function Landing({ onEnter }: { onEnter: () => void }) {
           )
         })()}
 
-      <Evidence e={evidence} />
+      <Evidence e={evidence} w={world} />
 
       <Team />
 

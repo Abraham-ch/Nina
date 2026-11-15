@@ -1,0 +1,40 @@
+{
+ "dataset_id": "7a274cb30ec2558be1eccb24",
+ "method_version": "0.5.0",
+ "countries": 31,
+ "archive_share": 0.61,
+ "modis_gate": {
+  "passed": 149,
+  "evaluable": 169,
+  "fraction": 0.8816568047337278,
+  "strict_fraction": 0.7525252525252525,
+  "required": 0.8,
+  "typical_year_error": 0.06577471612793462
+ },
+ "noaa20_r2": 0.9989621899008441,
+ "outside_calibration_bias": {
+  "now": -0.11306764062176394,
+  "with_five_countries": -0.3385424863046145
+ },
+ "break_2012": {
+  "countries": 28,
+  "median_raw_pixels_ratio": 3.51,
+  "median_harmonized_ratio": 0.89,
+  "countries_where_harmonized_is_closer_to_1": 28
+ },
+ "registries": {
+  "Canada": {
+   "rate": 0.91,
+   "chance_rate": 0.0148,
+   "records": 4836,
+   "note": "records of at least 400 ha (about 1,000 acres); smaller fires are often below satellite detection"
+  },
+  "United States": {
+   "rate": 0.8569,
+   "chance_rate": 0.0508,
+   "records": 6499,
+   "note": "records of at least 400 ha (about 1,000 acres); smaller fires are often below satellite detection"
+  }
+ },
+ "transfer_median_abs_bias": 0.1453001146644568
+}
