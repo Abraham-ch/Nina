@@ -17,6 +17,7 @@ import type { Modal } from './App'
 import { seasonSVG } from './export'
 import { getLang, tr } from './i18n'
 import type {
+  AnalystAction,
   Analysis,
   Geometry,
   HarmonizedReply,
@@ -41,6 +42,7 @@ type Props = {
   onShare: () => void
   onError: (s: string) => void
   context: ReportRequest | null
+  onAnalystAction?: (action: AnalystAction) => void
 }
 // Preset questions: the label follows the interface language; the text sent is the one the assistant engine recognizes.
 const PRESETS: [string, string][] = [
@@ -64,6 +66,7 @@ export default function Dialog({
   onShare,
   onError,
   context,
+  onAnalystAction,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null),
     [role, setRole] = useState('gestion'),
@@ -373,6 +376,7 @@ export default function Dialog({
         <div className="dialog-body explanation">
           <AnalystPanel
             context={context}
+            onAction={onAnalystAction}
             onError={onError}
             onEvidence={analysis ? () => onModal('evidence') : undefined}
           />

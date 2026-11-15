@@ -1560,6 +1560,92 @@
         "type": "object",
         "title": "Acquisition"
       },
+      "AnalystAction": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "show_on_map",
+              "open_calendar",
+              "open_priorities",
+              "open_report",
+              "download_data"
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department",
+            "description": "Peruvian department name, when the target is one"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "month": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Month"
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "title": "AnalystAction"
+      },
       "AnalystAnswer": {
         "properties": {
           "answer": {
@@ -1645,6 +1731,30 @@
               }
             ],
             "title": "Notice"
+          },
+          "visuals": {
+            "items": {
+              "$ref": "#/components/schemas/AnalystVisual"
+            },
+            "type": "array",
+            "title": "Visuals",
+            "description": "Charts and tables built from NINA's results, never typed by the model"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AnalystAction"
+            },
+            "type": "array",
+            "title": "Actions",
+            "description": "Interface actions offered as buttons"
+          },
+          "follow_ups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Follow Ups",
+            "description": "Questions NINA can answer next"
           }
         },
         "type": "object",
@@ -1889,6 +1999,154 @@
           "passed"
         ],
         "title": "AnalystVerification"
+      },
+      "AnalystVisual": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "chart",
+              "table"
+            ],
+            "title": "Type"
+          },
+          "chart": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "bar"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/VisualSeries"
+            },
+            "type": "array",
+            "title": "Series"
+          },
+          "reference_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Value"
+          },
+          "reference_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Label"
+          },
+          "highlight": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Highlight"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "type",
+          "title",
+          "source"
+        ],
+        "title": "AnalystVisual"
       },
       "ArchiveMonth": {
         "properties": {
@@ -3087,6 +3345,34 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VisualSeries": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "values"
+        ],
+        "title": "VisualSeries"
       }
     }
   },
