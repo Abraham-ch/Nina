@@ -55,11 +55,14 @@ The response carries `answer`, `engine`, `model`, `intent` (question type recogn
 | Question understanding | Keyword classifier (11 intents) and parser of place and period | The model plans the tool calls |
 | Answer | Bilingual templates filled from tool results | Written by the model from tool results |
 | Figures | From the tools | From the tools; checked before the answer is shown |
-| Median latency (real data) | 0.49 s | 7.0 s (`claude-sonnet-5-5`) |
+| Median latency (real data) | 1.1 s | 9.3 s (`claude-haiku-5-5`), 8.2 s (`claude-sonnet-5-5`) |
+| Cost per question (median) | none | USD 0.0024 (Haiku 5.5); about 20 times more with Sonnet 5.5 |
 
-Claude settings: model `claude-sonnet-5-5` (`NINA_ANALYST_MODEL`), effort `medium` (`NINA_ANALYST_EFFORT`), strict tool
-schemas, at most ten model steps per question, prompt caching on the stable prefix, and server-side refusal fallback
-(`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). The deterministic answer is returned, with a notice,
+Claude settings: model `claude-haiku-5-5` by default (`NINA_ANALYST_MODEL`; `claude-sonnet-5-5` also tested), effort
+`medium` (`NINA_ANALYST_EFFORT`), strict tool schemas, at most ten model steps per question, prompt caching on the stable
+prefix, and, for Sonnet, server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`;
+Haiku 5.5 does not offer it). Text the model writes in the same turn as a chart or button request is kept as part of the
+answer. The deterministic answer is returned, with a notice,
 when the model refuses, runs out of tokens, cannot be reached, rejects the key, or produces figures that cannot be
 traced even after one rewrite. `NINA_ANALYST_ENGINE=deterministic` keeps the assistant offline even with a key.
 
@@ -124,7 +127,14 @@ verifier against invented figures, `calculate`, and the model loop with a script
 | Deterministic | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 0.49 s |
 | Claude (`claude-sonnet-5-5`) | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31* | 31 / 31* | 7.0 s |
 | Deterministic, with charts and actions | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 1.1 s |
-| Claude, with charts, actions and web search | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 8.2 s |
+| Claude Sonnet 5.5, with charts, actions and web search | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31 | 31 / 31 | 31 / 31 | 8.2 s |
+| Claude Haiku 5.5 (default), same tools | 2026-11-15 | `e9f9a7a7a47bd640f9d27999` | 31 / 31† | 31 / 31 | 31 / 31 | 9.3 s |
+
+† One answer fell back to the deterministic engine: the model's draft kept an untraced figure after the rewrite, so the
+verified deterministic answer was shown. Haiku run: USD 0.076 for the 31 questions (median USD 0.0024 per question,
+list prices). The Sonnet run showed 2 of 31 answers reduced to one sentence about the chart (the answer had been written
+before the chart request and was dropped); that is fixed, and the evaluation now also requires a substantive answer
+(at least 250 characters) for answerable questions.
 
 Live checks with charts, actions and web corroboration (2026-11-15, Claude engine, all figures traced):
 
@@ -145,7 +155,7 @@ had added historical figures after declining a forecast question). Reports: `dat
 
 ```
 ANTHROPIC_API_KEY=          # enables the Claude engine; keep it in .env locally or as a Fly.io secret
-NINA_ANALYST_MODEL=claude-sonnet-5-5
+NINA_ANALYST_MODEL=claude-haiku-5-5   # or claude-sonnet-5-5
 NINA_ANALYST_EFFORT=medium
 NINA_ANALYST_ENGINE=        # "deterministic" forces the offline engine
 NINA_ANALYST_WEB=true       # "false" removes the web search tool

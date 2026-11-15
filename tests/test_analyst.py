@@ -104,7 +104,7 @@ def test_status_reports_the_engine(client, monkeypatch):
     test_client, _ = client
     assert test_client.get("/api/analyst").json() == {"engine": "deterministic", "model": None}
     monkeypatch.setenv("CLAUDE_API_KEY", "test-key")  # alias accepted
-    assert test_client.get("/api/analyst").json() == {"engine": "claude", "model": "claude-sonnet-5-5"}
+    assert test_client.get("/api/analyst").json() == {"engine": "claude", "model": "claude-haiku-5-5"}
 
 
 def scripted_client(monkeypatch, responses):
@@ -143,7 +143,7 @@ def test_model_answer_is_rewritten_until_its_figures_are_traced(client, monkeypa
     rewrite = [m["content"] for m in calls[2]["messages"] if m["role"] == "user" and isinstance(m["content"], str)]
     assert len(calls) == 3 and "151" in rewrite[-1] and "Automatic check" in rewrite[-1]
     first = calls[0]
-    assert first["model"] == "claude-sonnet-5-5" and first["fallbacks"] == "default"
+    assert first["model"] == "claude-haiku-5-5" and "fallbacks" not in first  # Haiku has no server-side fallback
     client_tools = [tool for tool in first["tools"] if "input_schema" in tool]
     assert all(tool["strict"] for tool in client_tools) and "tool_choice" not in first
     [web] = [tool for tool in first["tools"] if tool.get("name") == "web_search"]
@@ -252,3 +252,28 @@ def test_web_citations_become_sources_and_back_their_figures(client, monkeypatch
 def test_web_search_can_be_switched_off(monkeypatch):
     monkeypatch.setenv("NINA_ANALYST_WEB", "false")
     assert analyst.web_tool() == []
+
+
+def test_answer_written_before_a_chart_request_is_kept(client, monkeypatch):
+    test_client, _ = client
+    first = SimpleNamespace(stop_reason="tool_use", model="claude-sonnet-5-5", content=[
+        SimpleNamespace(type="text", text="September 2025 had 150 VIIRS-equivalent active cell-days, the highest of 14."),
+        SimpleNamespace(type="tool_use", id="toolu_v", name="show_visual",
+                        input={"kind": "same_month_by_year", "place": "current", "year": 0, "month": 0}),
+    ])
+    scripted_client(monkeypatch, [
+        tool_use("territory_profile", {"place": None, "year": None, "month": None}),
+        first,
+        text("The chart below compares every September."),
+    ])
+    result = ask(test_client, "Is this September unusual?")
+    assert result["engine"] == "claude" and result["verification"]["passed"]
+    assert result["answer"].startswith("September 2025 had 150") and result["answer"].endswith("every September.")
+    assert [v["kind"] for v in result["visuals"]] == ["same_month_by_year"]
+
+
+def test_haiku_requests_carry_no_server_side_fallback():
+    assert analyst.fallback_options("claude-haiku-5-5") == {}
+    assert analyst.fallback_options("claude-sonnet-5-5")["fallbacks"] == "default"
+    cost = analyst.question_cost({"input_tokens": 1_000_000, "output_tokens": 0}, "claude-haiku-5-5")
+    assert abs(cost - 0.10) < 1e-9

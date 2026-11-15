@@ -37,7 +37,7 @@ from .reports import MONTH_NAMES, SIGNIFICANCE, PriorityRequest, ReportRequest, 
 
 router = APIRouter()
 
-DEFAULT_MODEL = "claude-sonnet-5-5"  # tool use and short technical answers
+DEFAULT_MODEL = "claude-haiku-5-5"  # 31/31 on the evaluation at about 1/20 of the Sonnet 5.5 cost per question
 MAX_MODEL_STEPS = 10
 FREE_NUMBERS = {0.0, 1.0}  # "one of", "zero" and list markers never need a source
 CALCULATE_CONSTANTS = {100.0, 1000.0}  # allowed in derived figures (percentages, thousands)
@@ -339,6 +339,7 @@ class Session:
         self.visuals: list[dict[str, Any]] = []
         self.actions: list[dict[str, Any]] = []
         self.sources: list[dict[str, str]] = []
+        self.usage: dict[str, int] = {}  # tokens billed for this question (Claude engine)
 
     def period(self, year: int | None, month: int | None) -> tuple[int, int]:
         context = self.request.context
@@ -1676,6 +1677,7 @@ How to work
 - "current" or null in a place argument means the territory on the user's screen; null year or month means the period on screen.
 - Show, do not only tell: when a series, a comparison across years or departments, or a validation table helps the reader, call show_visual (one or two per answer). The reader sees it under your answer; mention it in one sentence ("the chart below shows...") instead of listing all its values.
 - When the reader asks to see, open, go to, print or download something, call propose_action: they get a button under the answer. You cannot operate the interface yourself; never claim that you did.
+- Call show_visual and propose_action before you write the answer, and write the complete answer in your last message (the chart or button is a complement, never the whole answer).
 - Official reports and news: when the reader asks whether a fire, an emergency or a declaration was reported, or asks to corroborate NINA's reading with official sources, you may use web_search (restricted to official and scientific domains). Never use it for figures NINA's tools provide. A figure taken from the web must appear in the passage you cite. Keep the two apart: "NINA's record shows..." versus "the decree published in El Peruano states...".
 
 What the data mean
@@ -1774,6 +1776,42 @@ def record_searches(content: list[Any], session: Session) -> None:
             session.calls.append({"name": "web_search", "input": dict(block.input or {}), "ok": True, "output": {}})
 
 
+# USD per million tokens (platform.claude.com pricing as of 2026-11-15); used only to report the cost of a question.
+PRICES = {"claude-sonnet-5-5": {"input": 2.0, "output": 10.0, "cache_read": 0.10},
+          "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "cache_read": 0.01}}
+
+
+def add_usage(session: Session, usage: Any) -> None:
+    if usage is None:
+        return
+    for field in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+        session.usage[field] = session.usage.get(field, 0) + int(getattr(usage, field, 0) or 0)
+    searches = getattr(getattr(usage, "server_tool_use", None), "web_search_requests", 0) or 0
+    session.usage["web_search_requests"] = session.usage.get("web_search_requests", 0) + int(searches)
+
+
+def question_cost(usage: dict[str, int], model: str) -> float | None:
+    """Estimated USD of one question: tokens at list price (cache writes at 1.25x input) plus web searches."""
+    price = next((p for name, p in PRICES.items() if model.startswith(name)), None)
+    if price is None:
+        return None
+    million = 1_000_000
+    return (usage.get("input_tokens", 0) * price["input"] + usage.get("output_tokens", 0) * price["output"]
+            + usage.get("cache_read_input_tokens", 0) * price["cache_read"]
+            + usage.get("cache_creation_input_tokens", 0) * price["input"] * 1.25) / million \
+        + usage.get("web_search_requests", 0) * 0.01
+
+
+def fallback_options(model: str) -> dict[str, Any]:
+    """Server-side refusal fallback where the model offers it (Claude Haiku 5.5 does not)."""
+    if "haiku" in model:
+        return {}
+    return {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+
+
+INTERFACE_TOOLS = {"show_visual", "propose_action"}
+
+
 def claude_answer(session: Session) -> tuple[str, str, int]:
     """(answer, model, figures checked); raises ModelUnavailable when no verified answer is obtained."""
     import anthropic
@@ -1786,6 +1824,9 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
     tools = ([TOOLS["method_notes"].schema()] if classify(session.request.question)[0] == "scope"
              else TOOL_SCHEMAS + web_tool())
     rewrites = 0
+    # Text written in the same turn as a chart or button request is part of the answer: the model sometimes
+    # writes the whole answer first and closes with a short sentence after the interface tool returns.
+    drafts: list[str] = []
     try:
         for _ in range(MAX_MODEL_STEPS):
             response = client.beta.messages.create(
@@ -1796,9 +1837,9 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
                 messages=messages,
                 output_config={"effort": os.getenv("NINA_ANALYST_EFFORT") or "medium"},
                 cache_control={"type": "ephemeral"},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
+                **fallback_options(model_name()),
             )
+            add_usage(session, getattr(response, "usage", None))
             if response.stop_reason in {"refusal", "max_tokens"}:
                 raise ModelUnavailable(response.stop_reason)
             messages.append({"role": "assistant", "content": response.content})
@@ -1806,6 +1847,10 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
             if response.stop_reason == "pause_turn":
                 continue
             uses = [block for block in response.content if block.type == "tool_use"]
+            if uses and all(block.name in INTERFACE_TOOLS for block in uses):
+                written = "\n".join(block.text for block in response.content if block.type == "text").strip()
+                if written:
+                    drafts.append(written)
             if uses:
                 results = []
                 for block in uses:
@@ -1815,13 +1860,14 @@ def claude_answer(session: Session) -> tuple[str, str, int]:
                                     **({"is_error": True} if "error" in output else {})})
                 messages.append({"role": "user", "content": results})
                 continue
-            text = final_text(response.content, session)
+            text = "\n\n".join([*drafts, final_text(response.content, session)]).strip()
             checked, unverified = session.verify(text)
             if text and not unverified:
                 return text, response.model, checked
             if rewrites:
                 raise ModelUnavailable("unverified", unverified)
             rewrites += 1
+            drafts = []  # the rewrite is a complete answer
             messages.append({"role": "user", "content": REWRITE.format(figures=", ".join(unverified) or "(empty answer)")})
         raise ModelUnavailable("steps")
     except anthropic.AuthenticationError:
