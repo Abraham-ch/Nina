@@ -49,7 +49,7 @@ export default function Account({ open, onOpen, user, onUser, onNotice, onError 
     setAuditoria(null)
   }, [user?.id, open])
   useEffect(() => {
-    if (vista !== 'descargas' || !user) return
+    if ((vista !== 'descargas' && vista !== 'perfil') || !user) return
     setHistorial(null)
     setDenegado('')
     api<Descarga[]>('/downloads')
@@ -162,7 +162,7 @@ export default function Account({ open, onOpen, user, onUser, onNotice, onError 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
+              placeholder={tr('name@example.com', 'nombre@correo.pe')}
             />
           </label>
           <label>
@@ -248,7 +248,7 @@ export default function Account({ open, onOpen, user, onUser, onNotice, onError 
               </dd>
             </div>
             <div>
-              <dt>{tr('Downloads in the last hour', 'Descargas en la última hora')}</dt>
+              <dt>{tr('Downloads in your history', 'Descargas en tu historial')}</dt>
               <dd>{historial?.length ?? '—'}</dd>
             </div>
           </dl>
