@@ -133,6 +133,7 @@ function readLink() {
 }
 const linked = readLink()
 const GUIDE_SEEN = 'nina-guide-hint-seen'
+const TIPS_SEEN = 'nina-calendar-tips-seen'
 
 export default function App() {
   const [selection, setSelection] = useState<Selection>(linked.selection),
@@ -162,6 +163,14 @@ export default function App() {
     [guideHint, setGuideHint] = useState(() => {
       try {
         return !localStorage.getItem(GUIDE_SEEN)
+      } catch {
+        return false
+      }
+    }),
+    // Calendar suggestions: shown until closed once, then never again in this browser.
+    [calendarTips, setCalendarTips] = useState(() => {
+      try {
+        return !localStorage.getItem(TIPS_SEEN)
       } catch {
         return false
       }
@@ -637,6 +646,35 @@ export default function App() {
     }
   }
   // The guide button is highlighted until it is used or for one minute, then never again in this browser.
+  function closeCalendarTips() {
+    setCalendarTips(false)
+    try {
+      localStorage.setItem(TIPS_SEEN, '1')
+    } catch {
+      // Storage blocked: the card comes back on the next visit.
+    }
+  }
+  // A harmonized month of Peru (or one of its regions) with a clear record, good for the calendar and the report.
+  function suggestPeru(regionName?: string) {
+    const region = regionName
+      ? regions?.geojson.features.find((f) => f.properties.name === regionName)
+      : undefined
+    setPlaceId(region ? `region:${region.properties.id}` : 'PER')
+    setError('')
+    setIntro(false)
+    change({
+      scope: 'PER',
+      department: region ? region.properties.id : 'all',
+      geometry: null,
+      area_label: '',
+      metric: 'observed',
+      ...(readiness?.available ? { source: HARMONIZED, platform: 'all' } : {}),
+      year_start: 2002,
+      year_end: 2025,
+      selected_year: 2024,
+      selected_month: 9,
+    })
+  }
   function dismissGuideHint() {
     setGuideHint(false)
     try {
@@ -1541,6 +1579,51 @@ export default function App() {
               </>
             }
           />
+        )}
+        {tab === 'calendar' && calendarTips && (
+          <aside
+            className="calendar-tips"
+            aria-label={tr('Suggested selections', 'Selecciones sugeridas')}
+          >
+            <button
+              className="calendar-tips-close"
+              onClick={closeCalendarTips}
+              aria-label={tr('Close suggestions', 'Cerrar sugerencias')}
+            >
+              <X size={16} />
+            </button>
+            <strong>{tr('Try these selections', 'Prueba estas selecciones')}</strong>
+            <p>
+              {tr(
+                'They have rich data: the calendar shows the record clearly and the technical report has plenty to say.',
+                'Tienen datos abundantes: el calendario muestra el récord con claridad y el reporte técnico tiene mucho que contar.',
+              )}
+            </p>
+            <button onClick={() => suggestPeru()}>
+              <span>{tr('Peru · harmonized', 'Perú · armonizado')}</span>
+              <small>
+                {tr('September 2024, the record month', 'Septiembre 2024, el mes récord')}
+              </small>
+            </button>
+            <button onClick={() => suggestPeru('Amazonas')}>
+              <span>{tr('Amazonas, Peru · harmonized', 'Amazonas, Perú · armonizado')}</span>
+              <small>
+                {tr(
+                  'One of the hardest-hit regions in 2024',
+                  'Una de las regiones más golpeadas en 2024',
+                )}
+              </small>
+            </button>
+            <button onClick={() => choosePlace('case:chilecito')}>
+              <span>{tr('Chilecito, Argentina', 'Chilecito, Argentina')}</span>
+              <small>
+                {tr(
+                  "July 2026, the challenge's own example",
+                  'Julio 2026, el ejemplo del propio reto',
+                )}
+              </small>
+            </button>
+          </aside>
         )}
         {tab === 'priority' && (
           <Priority
