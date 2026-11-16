@@ -1595,8 +1595,8 @@ export default function App() {
             <strong>{tr('Try these selections', 'Prueba estas selecciones')}</strong>
             <p>
               {tr(
-                'They have rich data: the calendar shows the record clearly and the technical report has plenty to say.',
-                'Tienen datos abundantes: el calendario muestra el récord con claridad y el reporte técnico tiene mucho que contar.',
+                'Why these? Most of the planet only has recent data, from November 2025 to November 2026, so there is no history to compare with. Peru, Argentina and the other countries of the harmonized record go back to 2002: the calendar can set each month against its past years and the technical report has a full history to work with.',
+                '¿Por qué estas? La mayor parte del planeta solo tiene datos recientes, de noviembre de 2025 a noviembre de 2026, así que no hay historia con qué comparar. Perú, Argentina y los demás países del registro armonizado llegan hasta 2002: el calendario puede comparar cada mes con sus años anteriores y el reporte técnico cuenta con toda esa historia.',
               )}
             </p>
             <button onClick={() => suggestPeru()}>
