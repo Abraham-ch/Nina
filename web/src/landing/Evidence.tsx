@@ -1,4 +1,3 @@
-import ExperimentalTag from '../ExperimentalTag'
 import { locale, tr } from '../i18n'
 
 // Static summary built by scripts/evidence/peru_case.py (docs/PROBLEM.md); only the fields shown here.
@@ -246,7 +245,6 @@ export default function Evidence({ e, w }: { e: PeruEvidence | null; w?: WorldEv
     <section className="landing-evidence" aria-labelledby="landing-evidence-title">
       <p className="landing-kicker">
         {tr('5 · Why trust it', '5 · Por qué confiar')}
-        <ExperimentalTag />
       </p>
       <h2 id="landing-evidence-title">
         {tr('Checked against what really happened.', 'Contrastado con lo que de verdad pasó.')}

@@ -48,8 +48,6 @@ import Calendar from './Calendar'
 import DataPanel from './DataPanel'
 import { DAY_COLORS, DAY_RANGES } from './dayColors'
 import Dialog from './Dialog'
-import Experiment from './Experiment'
-import ExperimentalTag from './ExperimentalTag'
 import { tr, locale, getLang } from './i18n'
 import LangSwitch from './LangSwitch'
 import Priority from './Priority'
@@ -1057,7 +1055,6 @@ export default function App() {
                   <div className="map-brief">
                     <span className="map-kicker">
                       {sourceName(selection.source, selection.platform)}
-                      {isHarmonized && <ExperimentalTag />}
                     </span>
                     <h1>{label}</h1>
                     <div className="observed-number">
@@ -1483,7 +1480,6 @@ export default function App() {
                         )}
                   </p>
                 </div>
-                <Experiment regions={regions} />
               </>
             )}
             {tab === 'atlas' && (
